@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from contextlib import suppress
 import logging
 import os
 from PyQt5 import QtCore, QtWidgets, uic
@@ -90,7 +91,7 @@ class StabilizerError(Exception):
     pass
 
 
-async def stabilizer_task(ui: UI, host: str, port: int = 1235):
+async def update_stabilizer(ui: UI, host: str, port: int = 1235):
     try:
         reader, writer = await asyncio.open_connection(host, port)
 
@@ -256,8 +257,8 @@ def main():
 
         ui.comm_status_label.setText(
             f"Connecting to Stabilizer at {args.stabilizer_host}…")
-        asyncio.create_task(stabilizer_task(ui, args.stabilizer_host))
-        # TODO: Handle cancellation.
+        stabilizer_task = asyncio.create_task(
+            update_stabilizer(ui, args.stabilizer_host))
 
         gpio_dongle = None
         try:
@@ -278,6 +279,9 @@ def main():
         finally:
             if gpio_dongle is not None:
                 gpio_dongle.reset()
+            with suppress(asyncio.CancelledError):
+                stabilizer_task.cancel()
+                loop.run_until_complete(stabilizer_task)
 
 
 if __name__ == "__main__":
