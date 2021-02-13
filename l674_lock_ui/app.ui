@@ -31,6 +31,9 @@
      <layout class="QHBoxLayout" name="horizontalLayout_3">
       <item>
        <widget class="QGroupBox" name="aomLockGroup">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
         <property name="sizePolicy">
          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
           <horstretch>0</horstretch>
@@ -55,6 +58,9 @@
     </item>
     <item>
      <widget class="QGroupBox" name="pztLockGroup">
+      <property name="enabled">
+       <bool>true</bool>
+      </property>
       <property name="sizePolicy">
        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
         <horstretch>0</horstretch>
@@ -80,7 +86,7 @@
          <item>
           <widget class="QRadioButton" name="rampPztButton">
            <property name="text">
-            <string>Amplify ramp</string>
+            <string>Pass through (ramp)</string>
            </property>
           </widget>
          </item>
@@ -246,7 +252,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QGroupBox" name="groupBox_5">
+          <widget class="QGroupBox" name="slowPIDGroup">
            <property name="title">
             <string>Slow PZT lock</string>
            </property>
