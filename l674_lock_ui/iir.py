@@ -24,8 +24,8 @@ def iir_config(biquad_coeffs: List[float], x_offset: float = 0.0):
 
 
 def notch_coeffs(freq: float, q: float) -> List[float]:
-    b, a = iirnotch(freq, q, fs=(1 / T_CYCLE))
-    return np.concatenate((b, a[1:]))
+    b, a = iirnotch(freq, q, fs=(np.pi / T_CYCLE / 2))
+    return np.concatenate((b, -a[1:]))
 
 
 def pi_coeffs(kp: float, ki: float, gain_limit: float = 0.0) -> List[float]:
