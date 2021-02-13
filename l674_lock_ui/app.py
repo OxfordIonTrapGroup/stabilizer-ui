@@ -102,7 +102,7 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
             writer.write((s + "\n").encode("ascii"))
             logger.info("[stabilizer] Sent: %s", s)
 
-            r = (await reader.readline()).decode()
+            r = (await asyncio.wait_for(reader.readline(), timeout=1.0)).decode()
             logger.info("[stabilizer] Recv: %s", r)
 
             ret = json.loads(r)
