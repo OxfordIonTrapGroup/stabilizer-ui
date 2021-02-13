@@ -16,7 +16,7 @@ def iir_config(biquad_coeffs: List[float], x_offset: float = 0.0):
     ba = np.array(biquad_coeffs, dtype=np.float)
     dc_gain = ba[:3].sum()
     return {
-        "ba": ba,
+        "ba": ba.tolist(),
         "y_min": -FULL_SCALE - 1,
         "y_max": FULL_SCALE,
         "y_offset": dc_gain * FULL_SCALE * x_offset
@@ -25,7 +25,7 @@ def iir_config(biquad_coeffs: List[float], x_offset: float = 0.0):
 
 def notch_coeffs(freq: float, q: float) -> List[float]:
     b, a = iirnotch(freq, q, fs=(1 / T_CYCLE))
-    return np.concatenate(b, a[1:])
+    return np.concatenate((b, a[1:]))
 
 
 def pi_coeffs(kp: float, ki: float, gain_limit: float = 0.0) -> List[float]:

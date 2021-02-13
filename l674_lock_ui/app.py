@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 from contextlib import suppress
+import json
 import logging
 import os
 from PyQt5 import QtCore, QtWidgets, uic
@@ -96,27 +97,31 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
         reader, writer = await asyncio.open_connection(host, port)
 
         async def query(msg):
-            s = json.dumps(msg, separators=[",", ":"]).replace('"', "'")
+            s = json.dumps(msg, separators=[",", ":"])
             assert "\n" not in s
-            self.writer.write((s + "\n").encode("ascii"))
-            logger.debug("[stabilizer] Sent: %s", s)
+            writer.write((s + "\n").encode("ascii"))
+            logger.info("[stabilizer] Sent: %s", s)
 
-            r = (await self.reader.readline()).decode()
-            logger.debug("[stabilizer] Recv: %s", r)
+            r = (await reader.readline()).decode()
+            logger.info("[stabilizer] Recv: %s", r)
 
             ret = json.loads(r)
             if ret["code"] != 200:
                 raise StabilizerError(ret)
             return ret
 
-        async def update_biquad(name, coeffs):
+        async def write(attr, value):
+            val_json = json.dumps(value, separators=[",", ":"]).replace('"', "'")
             await query({
                 "req": "Write",
-                "attribute": f"stabilizer/iir{name}/state",
-                "value": {
-                    "channel": 0,  # TODO: Meaning unclear; currently not intepreted…
-                    "iir": iir_config(coeffs)
-                }
+                "attribute": attr,
+                "value": val_json,
+            })
+
+        async def update_biquad(name, channel, coeffs):
+            await write(f"stabilizer/iir{name}/state", {
+                "channel": channel,
+                "iir": iir_config(coeffs)
             })
 
         async def update_fast_iir():
@@ -130,7 +135,7 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
                 ki = ui.fastIGainBox.value() * 1e3
             else:
                 assert False
-            await update_biquad("0", pi_coeffs(kp=kp, ki=ki))
+            await update_biquad("0", 0, pi_coeffs(kp=kp, ki=ki))
 
         async def update_notch():
             if ui.notchGroup.isChecked():
@@ -139,30 +144,26 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
             else:
                 # Pass through.
                 coeffs = pi_coeffs(kp=1.0, ki=0.0)
-            await update_biquad("0_b", coeffs)
+            await update_biquad("_b0", 0, coeffs)
 
         async def update_slow_iir():
-            if ui.enablePztButton.isChecked() and self.slowPIDGroup.isChecked():
+            if ui.enablePztButton.isChecked() and ui.slowPIDGroup.isChecked():
                 kp = ui.slowPGainBox.value()
                 ki = ui.slowIGainBox.value() * 1e3
             else:
                 kp = ki = 0
-            await update_biquad("1", pi_coeffs(kp=kp, ki=ki))
+            await update_biquad("1", 1, pi_coeffs(kp=kp, ki=ki))
 
         async def update_adc1_mode():
-            if self.adc1IgnoreButton.isChecked():
+            if ui.adc1IgnoreButton.isChecked():
                 value = "ignore"
-            elif self.adc1FastInputButton.isChecked():
+            elif ui.adc1FastInputButton.isChecked():
                 value = "iir0_input"
-            elif self.adc1FastOutputButton.isChecked():
-                value = "iir0_b_input"
+            elif ui.adc1FastOutputButton.isChecked():
+                value = "iir_b0_input"
             else:
                 assert False
-            await query({
-                "req": "Write",
-                "attribute": "stabilizer/route_adc1",
-                "value": value
-            })
+            await write(f"stabilizer/route_adc1", value)
 
         # Query in most glitchless order.
         await update_adc1_mode()
@@ -182,7 +183,7 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
                 ui.fastIGainBox,
             ] + pid_state_widgets,
             notch_changed: [
-                ui.notchBox,
+                ui.notchGroup,
                 ui.notchFreqBox,
                 ui.notchQBox,
             ],
@@ -197,11 +198,9 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
                 ui.adc1FastOutputButton,
             ]
         }
-        for event, widgets in links:
+        for event, widgets in links.items():
             # Capture loop variable.
-            def set_ev():
-                event.set()
-
+            set_ev = (lambda ev: lambda *args: ev.set())(event)
             for widget in widgets:
                 if hasattr(widget, "valueChanged"):
                     widget.valueChanged.connect(set_ev)
@@ -213,17 +212,21 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
         ui.pztLockGroup.setEnabled(True)
 
         while True:
-            done_tasks, _ = asyncio.wait([event.wait() for event in links.keys()],
-                                         timeout=1.0,
-                                         return_when=asyncio.FIRST_COMPLETED)
+            done_tasks, _ = await asyncio.wait([event.wait() for event in links.keys()],
+                                               timeout=1.0,
+                                               return_when=asyncio.FIRST_COMPLETED)
             if adc1_changed.is_set():
                 await update_adc1_mode()
+                adc1_changed.clear()
             if notch_changed.is_set():
                 await update_notch()
+                notch_changed.clear()
             if fast_iir_changed.is_set():
                 await update_fast_iir()
+                fast_iir_changed.clear()
             if slow_iir_changed.is_set():
                 await update_slow_iir()
+                slow_iir_changed.clear()
             if not done_tasks:
                 # TODO: Ping.
                 pass
@@ -238,6 +241,8 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO)
+
     parser = argparse.ArgumentParser(
         description="Interface for the Vescent + Stabilizer 674 laser lock setup")
     parser.add_argument("-s", "--stabilizer-host", default="10.34.16.103")
@@ -267,9 +272,9 @@ def main():
 
             def update_gpio():
                 gpio_dongle.set_gpio(AOM_LOCK_GPIO_IDX,
-                                     1 if self.ui.enableAOMLockBox.isChecked() else 0)
+                                     1 if ui.enableAOMLockBox.isChecked() else 0)
 
-            self.ui.enableAOMLockBox.toggled.connect(update_gpio)
+            ui.enableAOMLockBox.toggled.connect(update_gpio)
             update_gpio()
         except Exception as e:
             ui.comm_status_label.setText(f"GPIO dongle intialisation failed: {e}")
