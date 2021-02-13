@@ -158,9 +158,9 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
             if ui.adc1IgnoreButton.isChecked():
                 value = "ignore"
             elif ui.adc1FastInputButton.isChecked():
-                value = "iir0_input"
+                value = "sum_with_adc0"
             elif ui.adc1FastOutputButton.isChecked():
-                value = "iir_b0_input"
+                value = "sum_with_iir0_output"
             else:
                 assert False
             await write(f"stabilizer/route_adc1", value)
