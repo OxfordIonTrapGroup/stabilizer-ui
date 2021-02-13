@@ -37,6 +37,9 @@ class UI(QtWidgets.QMainWindow):
             "adc1/fast_output": self.adc1FastOutputButton,
         }
 
+        self.comm_status_label = QtWidgets.QLabel()
+        self.statusbar.addPermanentWidget(self.comm_status_label)
+
     def _link_paired_widgets(self):
         for s, b in [(self.fastPGainSlider, self.fastPGainBox),
                      (self.fastIGainSlider, self.fastIGainBox),
@@ -85,9 +88,12 @@ class StabilizerError(Exception):
     pass
 
 
-async def stabilizer_task(ui: UI, stabilizer_host, stabilizer_port=1235):
+async def stabilizer_task(ui: UI, host, port=1235):
     try:
-        reader, writer = await asyncio.open_connection(stabilizer_host, stabilizer_port)
+        target = f"Stabilizer at {host}:{port}"
+        ui.comm_status_label.setText(f"Connecting to {target}…")
+        reader, writer = await asyncio.open_connection(host, port)
+        ui.comm_status_label.setText(f"Conncected to {target}.")
 
         async def query(msg):
             s = json.dumps(msg, separators=[",", ":"]).replace('"', "'")
@@ -227,7 +233,7 @@ async def stabilizer_task(ui: UI, stabilizer_host, stabilizer_port=1235):
             return
         logger.exception("Failure in Stabilizer communication task")
         ui.pztLockGroup.setEnabled(False)
-        # Set main window status line?
+        ui.comm_status_label.setText(f"Stabilizer connection error: {e}")
         raise
 
 
