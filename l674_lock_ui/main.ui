@@ -129,6 +129,9 @@
             </item>
             <item row="1" column="1">
              <widget class="QSlider" name="fastPGainSlider">
+              <property name="maximum">
+               <number>100</number>
+              </property>
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
               </property>
@@ -153,6 +156,9 @@
             </item>
             <item row="3" column="1">
              <widget class="QSlider" name="fastIGainSlider">
+              <property name="maximum">
+               <number>100</number>
+              </property>
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
               </property>
@@ -197,7 +203,10 @@
              </widget>
             </item>
             <item row="2" column="1">
-             <widget class="QSlider" name="horizontalSlider_3">
+             <widget class="QSlider" name="notchFreqSlider">
+              <property name="maximum">
+               <number>100</number>
+              </property>
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
               </property>
@@ -224,7 +233,10 @@
              </widget>
             </item>
             <item row="4" column="1">
-             <widget class="QSlider" name="horizontalSlider_4">
+             <widget class="QSlider" name="notchQSlider">
+              <property name="maximum">
+               <number>100</number>
+              </property>
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
               </property>
@@ -247,6 +259,9 @@
             </item>
             <item row="1" column="1">
              <widget class="QSlider" name="slowPGainSlider">
+              <property name="maximum">
+               <number>100</number>
+              </property>
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
               </property>
@@ -264,6 +279,9 @@
             </item>
             <item row="3" column="1">
              <widget class="QSlider" name="slowIGainSlider">
+              <property name="maximum">
+               <number>100</number>
+              </property>
               <property name="orientation">
                <enum>Qt::Horizontal</enum>
               </property>
