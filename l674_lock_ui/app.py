@@ -236,7 +236,12 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
             return
         logger.exception("Failure in Stabilizer communication task")
         ui.pztLockGroup.setEnabled(False)
-        ui.comm_status_label.setText(f"Stabilizer connection error: {e}")
+
+        text = str(e)
+        if not text:
+            # Show message for things like timeout errors.
+            text = repr(e)
+        ui.comm_status_label.setText(f"Stabilizer connection error: {text}")
         raise
 
 
