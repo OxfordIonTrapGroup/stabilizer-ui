@@ -11,6 +11,8 @@ from .ui_utils import link_slider_to_spinbox
 
 logger = logging.getLogger(__name__)
 
+AOM_LOCK_GPIO_IDX = 1
+
 
 class UI(QtWidgets.QMainWindow):
     def __init__(self):
@@ -88,12 +90,9 @@ class StabilizerError(Exception):
     pass
 
 
-async def stabilizer_task(ui: UI, host, port=1235):
+async def stabilizer_task(ui: UI, host: str, port: int = 1235):
     try:
-        target = f"Stabilizer at {host}:{port}"
-        ui.comm_status_label.setText(f"Connecting to {target}…")
         reader, writer = await asyncio.open_connection(host, port)
-        ui.comm_status_label.setText(f"Conncected to {target}.")
 
         async def query(msg):
             s = json.dumps(msg, separators=[",", ":"]).replace('"', "'")
@@ -247,6 +246,7 @@ def main():
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")
     app.setOrganizationDomain("photonic.link")
     app.setApplicationName("674 lock UI")
+
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
 
@@ -254,10 +254,30 @@ def main():
         ui.load_state()
         ui.show()
 
+        ui.comm_status_label.setText(
+            f"Connecting to Stabilizer at {args.stabilizer_host}…")
         asyncio.create_task(stabilizer_task(ui, args.stabilizer_host))
         # TODO: Handle cancellation.
 
-        sys.exit(loop.run_forever())
+        gpio_dongle = None
+        try:
+            from .cp2102n_usb_to_uart_driver import CP2102N
+            gpio_dongle = CP2102N()
+
+            def update_gpio():
+                gpio_dongle.set_gpio(AOM_LOCK_GPIO_IDX,
+                                     1 if self.ui.enableAOMLockBox.isChecked() else 0)
+
+            self.ui.enableAOMLockBox.toggled.connect(update_gpio)
+            update_gpio()
+        except Exception as e:
+            ui.comm_status_label.setText(f"GPIO dongle intialisation failed: {e}")
+
+        try:
+            sys.exit(loop.run_forever())
+        finally:
+            if gpio_dongle is not None:
+                gpio_dongle.reset()
 
 
 if __name__ == "__main__":

@@ -41,11 +41,11 @@
          </sizepolicy>
         </property>
         <property name="title">
-         <string>AOM lock</string>
+         <string>AOM lock (Vescent controller)</string>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_3">
          <item>
-          <widget class="QCheckBox" name="enableAOMBox">
+          <widget class="QCheckBox" name="enableAOMLockBox">
            <property name="text">
             <string>Enable (release hold)</string>
            </property>
@@ -68,7 +68,7 @@
        </sizepolicy>
       </property>
       <property name="title">
-       <string>SolsTiS PZT lock</string>
+       <string>SolsTiS PZT lock (Stabilizer)</string>
       </property>
       <layout class="QVBoxLayout" name="verticalLayout_2" stretch="0,1,0">
        <item>
