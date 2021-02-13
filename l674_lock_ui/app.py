@@ -11,7 +11,7 @@ class UI(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
-        ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "main.ui")
+        ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "app.ui")
         uic.loadUi(ui_path, self)
 
         self._link_paired_widgets()
