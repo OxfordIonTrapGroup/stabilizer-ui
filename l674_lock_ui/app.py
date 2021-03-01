@@ -131,7 +131,7 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
                 kp = 5
                 ki = 0
             elif ui.enablePztButton.isChecked():
-                kp = ui.fastPGainBox.value()
+                kp = -ui.fastPGainBox.value()
                 ki = ui.fastIGainBox.value() * 1e3
             else:
                 assert False
