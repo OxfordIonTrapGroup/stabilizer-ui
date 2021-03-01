@@ -8,7 +8,7 @@ from typing import List
 from scipy.signal.filter_design import iirnotch
 import numpy as np
 
-T_CYCLE = 2e-6
+T_CYCLE = 128 / 100e6
 FULL_SCALE = float((1 << 15) - 1)
 
 
