@@ -250,7 +250,7 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Interface for the Vescent + Stabilizer 674 laser lock setup")
-    parser.add_argument("-s", "--stabilizer-host", default="10.34.16.103")
+    parser.add_argument("-s", "--stabilizer-host", default="10.255.6.113")
     args = parser.parse_args()
 
     app = QtWidgets.QApplication(sys.argv)
