@@ -149,7 +149,7 @@ async def update_stabilizer(ui: UI, host: str, port: int = 1235):
         async def update_slow_iir():
             if ui.enablePztButton.isChecked() and ui.slowPIDGroup.isChecked():
                 kp = ui.slowPGainBox.value()
-                ki = ui.slowIGainBox.value() * 1e3
+                ki = ui.slowIGainBox.value()
             else:
                 kp = ki = 0
             await update_biquad("1", 1, pi_coeffs(kp=kp, ki=ki))
