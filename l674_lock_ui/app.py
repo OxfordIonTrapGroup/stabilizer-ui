@@ -101,6 +101,8 @@ async def update_stabilizer(ui: UI,
         "slow_enable": (ui.slowPIDGroup, ),
         "lock_mode": ([ui.disablePztButton, ui.rampPztButton, ui.enablePztButton],
                       radio_group(["Disabled", "RampPassThrough", "Enabled"])),
+        "lock_detect/adc1_threshold": (ui.lockDetectThresholdBox, ),
+        "lock_detect/reset_time": (ui.lockDetectDelayBox, ),
         "adc1_routing":
         ([ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
          radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"]))
@@ -166,6 +168,7 @@ async def update_stabilizer(ui: UI,
                 def queue(*args):
                     keys_to_write.add(key)
                     updated.set()
+
                 return queue
 
             queue = make_queue(key)
