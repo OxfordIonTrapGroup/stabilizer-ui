@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 from contextlib import suppress
+from gmqtt import Client as MqttClient
 import json
 import logging
 import os
@@ -8,7 +9,6 @@ from PyQt5 import QtCore, QtWidgets, uic
 from qasync import QEventLoop
 import sys
 
-from .iir import *
 from .ui_utils import link_slider_to_spinbox
 
 logger = logging.getLogger(__name__)
@@ -25,22 +25,6 @@ class UI(QtWidgets.QMainWindow):
 
         self._link_paired_widgets()
 
-        # Always boot into locks disabled. For simplicity, we never read back hardware
-        # state. This could be added in the future.
-        self._saved_widgets = {
-            "fast_pid/p_gain": self.fastPGainBox,
-            "fast_pid/i_gain": self.fastIGainBox,
-            "fast_notch/enabled": self.notchGroup,
-            "fast_notch/freq": self.notchFreqBox,
-            "fast_notch/q": self.notchQBox,
-            "slow_pid/enabled": self.slowPIDGroup,
-            "slow_pid/p_gain": self.slowPGainBox,
-            "slow_pid/i_gain": self.slowIGainBox,
-            "adc1/ignore": self.adc1IgnoreButton,
-            "adc1/fast_input": self.adc1FastInputButton,
-            "adc1/fast_output": self.adc1FastOutputButton,
-        }
-
         self.comm_status_label = QtWidgets.QLabel()
         self.statusbar.addPermanentWidget(self.comm_status_label)
 
@@ -53,184 +37,160 @@ class UI(QtWidgets.QMainWindow):
                      (self.slowIGainSlider, self.slowIGainBox)]:
             link_slider_to_spinbox(s, b)
 
-    def load_state(self):
-        settings = QtCore.QSettings()
-        for path, widget in self._saved_widgets.items():
-            val = settings.value(path)
-            if val is None:
-                continue
-            if isinstance(
-                    widget,
-                (QtWidgets.QCheckBox, QtWidgets.QRadioButton, QtWidgets.QGroupBox)):
-                widget.setChecked(val == "true")
-            elif isinstance(widget, QtWidgets.QDoubleSpinBox):
-                widget.setValue(float(val))
-        geom = settings.value("window_geometry")
-        if geom is not None:
-            self.restoreGeometry(geom)
-
-    def save_state(self):
-        settings = QtCore.QSettings()
-        settings.setValue("window_geometry", self.saveGeometry())
-        for path, widget in self._saved_widgets.items():
-            val = None
-            if isinstance(
-                    widget,
-                (QtWidgets.QCheckBox, QtWidgets.QRadioButton, QtWidgets.QGroupBox)):
-                val = widget.isChecked()
-            elif isinstance(widget, QtWidgets.QDoubleSpinBox):
-                val = widget.value()
-            assert val is not None
-            settings.setValue(path, val)
-
-    def closeEvent(self, event):
-        self.save_state()
-        super().closeEvent(event)
-
 
 class StabilizerError(Exception):
     pass
 
 
-async def update_stabilizer(ui: UI, host: str, port: int = 1235):
+async def update_stabilizer(ui: UI,
+                            root_topic: str,
+                            broker_host: str,
+                            broker_port: int = 1883):
+    def read(widget):
+        if isinstance(
+                widget,
+            (QtWidgets.QCheckBox, QtWidgets.QRadioButton, QtWidgets.QGroupBox)):
+            return widget.isChecked()
+
+        if isinstance(widget, QtWidgets.QDoubleSpinBox):
+            return widget.value()
+
+        assert f"Widget type not handled: {widget}"
+
+    def write(widget, value):
+        if isinstance(
+                widget,
+            (QtWidgets.QCheckBox, QtWidgets.QRadioButton, QtWidgets.QGroupBox)):
+            widget.setChecked(value)
+        elif isinstance(widget, QtWidgets.QDoubleSpinBox):
+            widget.setValue(value)
+        else:
+            assert f"Widget type not handled: {widget}"
+
+    kilo = (lambda w: read(w) * 1e3, lambda w, v: write(w, v / 1e3))
+
+    def radio_group(choices):
+        def read(widgets):
+            for i in range(1, len(widgets)):
+                if widgets[i].isChecked():
+                    return choices[i]
+            # Default to first value, as Qt can sometimes transiently have all buttons
+            # of a radio group disabled (apparently so when clicking an already-selected
+            # button).
+            return choices[0]
+
+        def write(widgets, value):
+            one_checked = False
+            for widget, choice in zip(widgets, choices):
+                c = choice == value
+                widget.setChecked(c)
+                one_checked |= c
+            if not one_checked:
+                logger.warn("Unexpected value: '%s' (choices: '%s')", value, choices)
+
+        return read, write
+
+    settings_map = {
+        "fast_gains/proportional": (ui.fastPGainBox, ),
+        "fast_gains/integral": (ui.fastIGainBox, kilo),
+        "fast_notch_enable": (ui.notchGroup, ),
+        "fast_notch/frequency": (ui.notchFreqBox, kilo),
+        "fast_notch/quality_factor": (ui.notchQBox, ),
+        "slow_gains/proportional": (ui.slowPGainBox, ),
+        "slow_gains/integral": (ui.slowIGainBox, ),
+        "slow_enable": (ui.slowPIDGroup, ),
+        "lock_mode": ([ui.disablePztButton, ui.rampPztButton, ui.enablePztButton],
+                      radio_group(["Disabled", "RampPassThrough", "Enabled"])),
+        "adc1_routing":
+        ([ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
+         radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"]))
+    }
+
+    # TODO: Lock detect settings.
+
+    def read_ui(key):
+        cfg = settings_map[key]
+        read_handler = cfg[1][0] if len(cfg) == 2 else read
+        return read_handler(cfg[0])
+
+    def write_ui(key, value):
+        cfg = settings_map[key]
+        write_handler = cfg[1][1] if len(cfg) == 2 else write
+        return write_handler(cfg[0], value)
+
     try:
-        reader, writer = await asyncio.open_connection(host, port)
+        client = MqttClient(client_id="")
+        await client.connect(broker_host, port=broker_port)
 
-        async def query(msg):
-            s = json.dumps(msg, separators=[",", ":"])
-            assert "\n" not in s
-            writer.write((s + "\n").encode("ascii"))
-            logger.info("[stabilizer] Sent: %s", s)
+        settings_prefix = f"{root_topic}/settings/"
+        retained_settings = {}
 
-            r = (await asyncio.wait_for(reader.readline(), timeout=1.0)).decode()
-            logger.info("[stabilizer] Recv: %s", r)
+        def collect_settings(_client, topic, value, _qos, _properties):
+            if len(topic) < len(settings_prefix) or topic[:(
+                    len(settings_prefix))] != settings_prefix:
+                logger.warn("Unexpected message topic: '%s'", topic)
+            key = topic[len(settings_prefix):]
+            retained_settings[key] = json.loads(value)
+            return 0
 
-            ret = json.loads(r)
-            if ret["code"] != 200:
-                raise StabilizerError(ret)
-            return ret
+        client.on_message = collect_settings
+        all_settings = f"{settings_prefix}#"
+        client.subscribe(all_settings)
+        # Based on testing, all the retained messages are sent immediately after
+        # subscribing, but add some delay in case this is actually a race condition.
+        await asyncio.sleep(0.1)
+        client.unsubscribe(all_settings)
+        client.on_message = lambda *a: 0
 
-        async def write(attr, value):
-            val_json = json.dumps(value, separators=[",", ":"]).replace('"', "'")
-            await query({
-                "req": "Write",
-                "attribute": attr,
-                "value": val_json,
-            })
-
-        async def update_biquad(name, channel, coeffs):
-            await write(f"stabilizer/iir{name}/state", {
-                "channel": channel,
-                "iir": iir_config(coeffs)
-            })
-
-        async def update_fast_iir():
-            if ui.disablePztButton.isChecked():
-                kp = ki = 0
-            elif ui.rampPztButton.isChecked():
-                kp = 5
-                ki = 0
-            elif ui.enablePztButton.isChecked():
-                kp = -ui.fastPGainBox.value()
-                ki = ui.fastIGainBox.value() * 1e3
+        unexpected_settings = {}
+        for retained_key, retained_value in retained_settings.items():
+            if retained_key in settings_map:
+                write_ui(retained_key, retained_value)
             else:
-                assert False
-            await update_biquad("0", 0, pi_coeffs(kp=kp, ki=ki))
+                unexpected_settings[retained_key] = retained_value
 
-        async def update_notch():
-            if ui.notchGroup.isChecked():
-                coeffs = notch_coeffs(ui.notchFreqBox.value() * 1e3,
-                                      ui.notchQBox.value())
-            else:
-                # Pass through.
-                coeffs = pi_coeffs(kp=1.0, ki=0.0)
-            await update_biquad("_b0", 0, coeffs)
+        if unexpected_settings:
+            # FIXME: Not on the UI task, so shouldn't create message box here.
+            QtWidgets.QMessageBox.warning(
+                ui, "Unexpected settings retained in MQTT",
+                "Found the following unexpected settings stored on the MQTT broker; "
+                f"will delete (un-retain): {unexpected_settings}")
+            for key in unexpected_settings.keys():
+                client.publish(settings_prefix + key, payload=b'', qos=0, retain=True)
 
-        async def update_slow_iir():
-            if ui.enablePztButton.isChecked() and ui.slowPIDGroup.isChecked():
-                kp = ui.slowPGainBox.value()
-                ki = ui.slowIGainBox.value()
-            else:
-                kp = ki = 0
-            await update_biquad("1", 1, pi_coeffs(kp=kp, ki=ki))
-
-        async def update_adc1_mode():
-            if ui.adc1IgnoreButton.isChecked():
-                value = "ignore"
-            elif ui.adc1FastInputButton.isChecked():
-                value = "sum_with_adc0"
-            elif ui.adc1FastOutputButton.isChecked():
-                value = "sum_with_iir0_output"
-            else:
-                assert False
-            await write(f"stabilizer/route_adc1", value)
-
-        # Query in most glitchless order.
-        await update_adc1_mode()
-        await update_notch()
-        await update_fast_iir()
-        await update_slow_iir()
-
-        fast_iir_changed = asyncio.Event()
-        notch_changed = asyncio.Event()
-        slow_iir_changed = asyncio.Event()
-        adc1_changed = asyncio.Event()
-
-        pid_state_widgets = [ui.disablePztButton, ui.rampPztButton, ui.enablePztButton]
-        links = {
-            fast_iir_changed: [
-                ui.fastPGainBox,
-                ui.fastIGainBox,
-            ] + pid_state_widgets,
-            notch_changed: [
-                ui.notchGroup,
-                ui.notchFreqBox,
-                ui.notchQBox,
-            ],
-            slow_iir_changed: [
-                ui.slowPGainBox,
-                ui.slowIGainBox,
-                ui.slowPIDGroup,
-            ] + pid_state_widgets,
-            adc1_changed: [
-                ui.adc1IgnoreButton,
-                ui.adc1FastInputButton,
-                ui.adc1FastOutputButton,
-            ]
-        }
-        for event, widgets in links.items():
+        keys_to_write = set()
+        updated = asyncio.Event()
+        for key, cfg in settings_map.items():
             # Capture loop variable.
-            set_ev = (lambda ev: lambda *args: ev.set())(event)
+            def make_queue(key):
+                def queue(*args):
+                    keys_to_write.add(key)
+                    updated.set()
+                return queue
+
+            queue = make_queue(key)
+
+            widgets = cfg[0]
+            if not isinstance(widgets, list):
+                widgets = [widgets]
             for widget in widgets:
                 if hasattr(widget, "valueChanged"):
-                    widget.valueChanged.connect(set_ev)
+                    widget.valueChanged.connect(queue)
                 elif hasattr(widget, "toggled"):
-                    widget.toggled.connect(set_ev)
+                    widget.toggled.connect(queue)
                 else:
                     assert False
 
         ui.pztLockGroup.setEnabled(True)
 
         while True:
-            done_tasks, _ = await asyncio.wait([event.wait() for event in links.keys()],
-                                               timeout=1.0,
-                                               return_when=asyncio.FIRST_COMPLETED)
-            if adc1_changed.is_set():
-                await update_adc1_mode()
-                adc1_changed.clear()
-            if notch_changed.is_set():
-                await update_notch()
-                notch_changed.clear()
-            if fast_iir_changed.is_set():
-                await update_fast_iir()
-                fast_iir_changed.clear()
-            if slow_iir_changed.is_set():
-                await update_slow_iir()
-                slow_iir_changed.clear()
-            if not done_tasks:
-                # TODO: Ping.
-                pass
-
+            await updated.wait()
+            for key in keys_to_write:
+                topic = settings_prefix + key
+                payload = json.dumps(read_ui(key)).encode("utf-8")
+                client.publish(topic, payload, qos=0, retain=True)
+            # FIXME: Add response topic; wait for responses here.
+            updated.clear()
     except Exception as e:
         if isinstance(e, asyncio.CancelledError):
             return
@@ -250,7 +210,8 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Interface for the Vescent + Stabilizer 674 laser lock setup")
-    parser.add_argument("-s", "--stabilizer-host", default="10.255.6.113")
+    parser.add_argument("-b", "--broker", default="10.255.6.4")
+    parser.add_argument("-t", "--topic", default="dt/sinara/stabilizer/l674")
     args = parser.parse_args()
 
     app = QtWidgets.QApplication(sys.argv)
@@ -262,13 +223,11 @@ def main():
         asyncio.set_event_loop(loop)
 
         ui = UI()
-        ui.load_state()
         ui.show()
 
-        ui.comm_status_label.setText(
-            f"Connecting to Stabilizer at {args.stabilizer_host}…")
+        ui.comm_status_label.setText(f"Connecting to MQTT broker at {args.broker}…")
         stabilizer_task = asyncio.create_task(
-            update_stabilizer(ui, args.stabilizer_host))
+            update_stabilizer(ui, args.topic, args.broker))
 
         gpio_dongle = None
         try:
