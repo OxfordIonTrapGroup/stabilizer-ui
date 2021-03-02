@@ -211,6 +211,7 @@ async def update_stabilizer(ui: UI,
                 payload = json.dumps(read_ui(key)).encode("utf-8")
                 client.publish(topic, payload, qos=0, retain=True)
             # FIXME: Add response topic; wait for responses here.
+            keys_to_write.clear()
             updated.clear()
     except Exception as e:
         if isinstance(e, asyncio.CancelledError):
