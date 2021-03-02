@@ -105,7 +105,8 @@ async def update_stabilizer(ui: UI,
         "lock_detect/reset_time": (ui.lockDetectDelayBox, ),
         "adc1_routing":
         ([ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
-         radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"]))
+         radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"])),
+        "aux_ttl_out": (ui.enableAOMLockBox, ),
     }
 
     # TODO: Lock detect settings.
@@ -123,6 +124,10 @@ async def update_stabilizer(ui: UI,
     try:
         client = MqttClient(client_id="")
         await client.connect(broker_host, port=broker_port)
+
+        #
+        # Load current settings from MQTT.
+        #
 
         settings_prefix = f"{root_topic}/settings/"
         retained_settings = {}
@@ -160,6 +165,10 @@ async def update_stabilizer(ui: UI,
             for key in unexpected_settings.keys():
                 client.publish(settings_prefix + key, payload=b'', qos=0, retain=True)
 
+        #
+        # Set up UI signals.
+        #
+
         keys_to_write = set()
         updated = asyncio.Event()
         for key, cfg in settings_map.items():
@@ -184,7 +193,16 @@ async def update_stabilizer(ui: UI,
                 else:
                     assert False
 
+        #
+        # Visually enable UI.
+        #
+
+        ui.aomLockGroup.setEnabled(True)
         ui.pztLockGroup.setEnabled(True)
+
+        #
+        # Relay user input to MQTT.
+        #
 
         while True:
             await updated.wait()
@@ -198,6 +216,7 @@ async def update_stabilizer(ui: UI,
         if isinstance(e, asyncio.CancelledError):
             return
         logger.exception("Failure in Stabilizer communication task")
+        ui.aomLockGroup.setEnabled(False)
         ui.pztLockGroup.setEnabled(False)
 
         text = str(e)
@@ -232,25 +251,9 @@ def main():
         stabilizer_task = asyncio.create_task(
             update_stabilizer(ui, args.topic, args.broker))
 
-        gpio_dongle = None
-        try:
-            from .cp2102n_usb_to_uart_driver import CP2102N
-            gpio_dongle = CP2102N()
-
-            def update_gpio():
-                gpio_dongle.set_gpio(AOM_LOCK_GPIO_IDX,
-                                     1 if ui.enableAOMLockBox.isChecked() else 0)
-
-            ui.enableAOMLockBox.toggled.connect(update_gpio)
-            update_gpio()
-        except Exception as e:
-            ui.comm_status_label.setText(f"GPIO dongle intialisation failed: {e}")
-
         try:
             sys.exit(loop.run_forever())
         finally:
-            if gpio_dongle is not None:
-                gpio_dongle.reset()
             with suppress(asyncio.CancelledError):
                 stabilizer_task.cancel()
                 loop.run_until_complete(stabilizer_task)
