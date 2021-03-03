@@ -105,6 +105,7 @@ async def update_stabilizer(ui: UI,
         "slow_enable": (ui.slowPIDGroup, ),
         "lock_mode": ([ui.disablePztButton, ui.rampPztButton, ui.enablePztButton],
                       radio_group(["Disabled", "RampPassThrough", "Enabled"])),
+        "gain_ramp_time": (ui.gainRampTimeBox, ),
         "lock_detect/adc1_threshold": (ui.lockDetectThresholdBox, ),
         "lock_detect/reset_time": (ui.lockDetectDelayBox, ),
         "adc1_routing":
