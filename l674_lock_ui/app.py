@@ -28,6 +28,14 @@ class UI(QtWidgets.QMainWindow):
         self.comm_status_label = QtWidgets.QLabel()
         self.statusbar.addPermanentWidget(self.comm_status_label)
 
+        # Explicitly create button group to prevent shortcuts from un-selecting buttons.
+        # (It's not clear to me whether this is a Qt bug or not, as the buttons are set
+        # as autoExclusive (the default) in the UI file).
+        self.mode_group = QtWidgets.QButtonGroup(self)
+        self.mode_group.addButton(self.disablePztButton)
+        self.mode_group.addButton(self.rampPztButton)
+        self.mode_group.addButton(self.enablePztButton)
+
     def _link_paired_widgets(self):
         for s, b in [(self.fastPGainSlider, self.fastPGainBox),
                      (self.fastIGainSlider, self.fastIGainBox),
