@@ -5,7 +5,7 @@ from gmqtt import Client as MqttClient
 import json
 import logging
 import os
-from PyQt5 import QtCore, QtWidgets, uic
+from PyQt5 import QtWidgets, uic
 from qasync import QEventLoop
 import sys
 
@@ -47,9 +47,11 @@ async def update_stabilizer(ui: UI,
                             broker_host: str,
                             broker_port: int = 1883):
     def read(widget):
-        if isinstance(
-                widget,
-            (QtWidgets.QCheckBox, QtWidgets.QRadioButton, QtWidgets.QGroupBox)):
+        if isinstance(widget, (
+                QtWidgets.QCheckBox,
+                QtWidgets.QRadioButton,
+                QtWidgets.QGroupBox,
+        )):
             return widget.isChecked()
 
         if isinstance(widget, QtWidgets.QDoubleSpinBox):
@@ -58,9 +60,11 @@ async def update_stabilizer(ui: UI,
         assert f"Widget type not handled: {widget}"
 
     def write(widget, value):
-        if isinstance(
-                widget,
-            (QtWidgets.QCheckBox, QtWidgets.QRadioButton, QtWidgets.QGroupBox)):
+        if isinstance(widget, (
+                QtWidgets.QCheckBox,
+                QtWidgets.QRadioButton,
+                QtWidgets.QGroupBox,
+        )):
             widget.setChecked(value)
         elif isinstance(widget, QtWidgets.QDoubleSpinBox):
             widget.setValue(value)
