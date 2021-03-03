@@ -122,8 +122,6 @@ async def update_stabilizer(ui: UI,
         "aux_ttl_out": (ui.enableAOMLockBox, ),
     }
 
-    # TODO: Lock detect settings.
-
     def read_ui(key):
         cfg = settings_map[key]
         read_handler = cfg[1][0] if len(cfg) == 2 else read
