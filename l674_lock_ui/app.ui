@@ -64,6 +64,9 @@
            <property name="text">
             <string>Enable (release hold)</string>
            </property>
+           <property name="shortcut">
+            <string>F5</string>
+           </property>
           </widget>
          </item>
         </layout>
@@ -93,6 +96,9 @@
            <property name="text">
             <string>Disable (zero output)</string>
            </property>
+           <property name="shortcut">
+            <string>F6</string>
+           </property>
            <property name="checked">
             <bool>true</bool>
            </property>
@@ -103,12 +109,18 @@
            <property name="text">
             <string>Pass through (ramp)</string>
            </property>
+           <property name="shortcut">
+            <string>F7</string>
+           </property>
           </widget>
          </item>
          <item>
           <widget class="QRadioButton" name="enablePztButton">
            <property name="text">
             <string>Enable (feed back)</string>
+           </property>
+           <property name="shortcut">
+            <string>F8</string>
            </property>
           </widget>
          </item>
