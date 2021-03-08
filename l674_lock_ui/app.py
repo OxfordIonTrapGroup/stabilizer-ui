@@ -16,6 +16,19 @@ logger = logging.getLogger(__name__)
 AOM_LOCK_GPIO_IDX = 1
 
 
+class TextEditLogHandler(logging.Handler):
+    def __init__(self, text_edit: QtWidgets.QTextEdit):
+        super().__init__(level=logging.INFO)
+        self.text_edit = text_edit
+        self._text = ""
+        self.formatter = logging.Formatter("<em>%(asctime)s %(levelname)s</em> %(message)s",
+                                           "%Y-%m-%d %H:%M:%S")
+
+    def emit(self, record: logging.LogRecord):
+        self._text += self.format(record) + "<br/>"
+        self.text_edit.setText(self._text)
+
+
 class UI(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -35,6 +48,9 @@ class UI(QtWidgets.QMainWindow):
         self.mode_group.addButton(self.disablePztButton)
         self.mode_group.addButton(self.rampPztButton)
         self.mode_group.addButton(self.enablePztButton)
+
+        self.log_handler = TextEditLogHandler(self.logOutputText)
+        logging.getLogger().addHandler(self.log_handler)
 
     def _link_paired_widgets(self):
         for s, b in [(self.fastPGainSlider, self.fastPGainBox),
@@ -158,7 +174,7 @@ async def update_stabilizer(ui: UI,
         client.subscribe(all_settings)
         # Based on testing, all the retained messages are sent immediately after
         # subscribing, but add some delay in case this is actually a race condition.
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(1)
         client.unsubscribe(all_settings)
         client.on_message = lambda *a: 0
 
