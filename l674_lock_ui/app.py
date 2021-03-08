@@ -135,6 +135,7 @@ async def update_stabilizer(ui: UI,
     try:
         client = MqttClient(client_id="")
         await client.connect(broker_host, port=broker_port)
+        ui.comm_status_label.setText(f"Connected to MQTT broker at {broker_host}.")
 
         #
         # Load current settings from MQTT.
