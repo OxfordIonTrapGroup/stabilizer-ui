@@ -79,6 +79,7 @@ async def update_stabilizer(ui: UI,
         else:
             assert f"Widget type not handled: {widget}"
 
+    invert = (lambda w: not read(w), lambda w, v: write(w, not v))
     kilo = (lambda w: read(w) * 1e3, lambda w, v: write(w, v / 1e3))
 
     def radio_group(choices):
@@ -119,7 +120,7 @@ async def update_stabilizer(ui: UI,
         "adc1_routing":
         ([ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
          radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"])),
-        "aux_ttl_out": (ui.enableAOMLockBox, ),
+        "aux_ttl_out": (ui.enableAOMLockBox, invert),
     }
 
     def read_ui(key):
