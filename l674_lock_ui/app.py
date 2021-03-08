@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from enum import Enum, unique
 from contextlib import suppress
 from gmqtt import Client as MqttClient
 import json
@@ -8,6 +9,7 @@ import os
 from PyQt5 import QtWidgets, uic
 from qasync import QEventLoop
 import sys
+from typing import List
 
 from .ui_utils import link_slider_to_spinbox
 
@@ -16,12 +18,19 @@ logger = logging.getLogger(__name__)
 AOM_LOCK_GPIO_IDX = 1
 
 
+@unique
+class RelockStatus(Enum):
+    out_of_lock = "Out of lock"
+    relocking = "Relocking"
+    locked = "Locked"
+
+
 class TextEditLogHandler(logging.Handler):
     def __init__(self, text_edit: QtWidgets.QTextEdit):
         super().__init__(level=logging.INFO)
         self.text_edit = text_edit
         self._text = ""
-        self.formatter = logging.Formatter("<em>%(asctime)s %(levelname)s</em> %(message)s",
+        self.formatter = logging.Formatter("<em>%(asctime)s</em> %(message)s",
                                            "%Y-%m-%d %H:%M:%S")
 
     def emit(self, record: logging.LogRecord):
@@ -61,12 +70,42 @@ class UI(QtWidgets.QMainWindow):
                      (self.slowIGainSlider, self.slowIGainBox)]:
             link_slider_to_spinbox(s, b)
 
+    def set_relock_status(self, status: RelockStatus):
+        color = {
+            RelockStatus.out_of_lock: "red",
+            RelockStatus.relocking: "yellow",
+            RelockStatus.locked: "green"
+        }[status]
+        self.adc1ReadingEdit.setStyleSheet(f"QLineEdit {{ background-color: {color} }}")
+
 
 class StabilizerError(Exception):
     pass
 
 
+class ADC1ReadingQueue:
+    def __init__(self):
+        self._new = asyncio.Event()
+        self._queue: List[asyncio.Future] = []
+
+    async def read_adc(self) -> float:
+        task = asyncio.Future()
+        self._queue.append(task)
+        self._new.set()
+        return await task
+
+    async def wait_for_new(self):
+        await self._new.wait()
+        self._new.clear()
+
+    def pop_requests(self) -> List[asyncio.Future]:
+        queue = self._queue
+        self._queue = []
+        return queue
+
+
 async def update_stabilizer(ui: UI,
+                            adc1_requests: ADC1ReadingQueue,
                             root_topic: str,
                             broker_host: str,
                             broker_port: int = 1883):
@@ -230,18 +269,55 @@ async def update_stabilizer(ui: UI,
         ui.pztLockGroup.setEnabled(True)
 
         #
+        # Set up auto-reloading ADC1 querying.
+        #
+
+        adc1_request_topic = "dt/sinara/stabilizer/l674/read_adc1_filtered"
+        adc1_response_topic = "dt/sinara/stabilizer/l674/response/adc1_filtered"
+        client.subscribe(adc1_response_topic)
+
+        pending_adc1_requests = []
+
+        def handle_message(_client, topic, value, _qos, _properties):
+            if topic == adc1_response_topic:
+                voltage = float(value)
+                ui.adc1ReadingEdit.setText(f"{voltage * 1e3:0.0f} mV")
+                req = pending_adc1_requests.pop(0)
+                req.set_result(voltage)
+            else:
+                logger.warning("Unexpected MQTT message topic: %s", topic)
+
+        client.on_message = handle_message
+
+        def request_adc1_reading():
+            client.publish(adc1_request_topic,
+                           b'',
+                           qos=0,
+                           retain=False,
+                           response_topic=adc1_response_topic)
+
+        #
         # Relay user input to MQTT.
         #
 
         while True:
-            await updated.wait()
+            await asyncio.wait([
+                asyncio.create_task(t)
+                for t in [updated.wait(), adc1_requests.wait_for_new()]
+            ],
+                               return_when=asyncio.FIRST_COMPLETED)
             for key in keys_to_write:
                 topic = settings_prefix + key
                 payload = json.dumps(read_ui(key)).encode("utf-8")
                 client.publish(topic, payload, qos=0, retain=True)
-            # FIXME: Add response topic; wait for responses here.
+            # FIXME: Add response topic; complain if nothing/error returned.
             keys_to_write.clear()
             updated.clear()
+
+            for req in adc1_requests.pop_requests():
+                pending_adc1_requests.append(req)
+                request_adc1_reading()
+
     except Exception as e:
         if isinstance(e, asyncio.CancelledError):
             return
@@ -255,6 +331,16 @@ async def update_stabilizer(ui: UI,
             text = repr(e)
         ui.comm_status_label.setText(f"Stabilizer connection error: {text}")
         raise
+
+
+async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue):
+    while True:
+        await asyncio.sleep(0.5)
+        reading = await adc1_request_queue.read_adc()
+        if reading >= ui.lockDetectThresholdBox.value():
+            ui.set_relock_status(RelockStatus.locked)
+        else:
+            ui.set_relock_status(RelockStatus.out_of_lock)
 
 
 def main():
@@ -277,14 +363,20 @@ def main():
         ui = UI()
         ui.show()
 
+        adc1_request_queue = ADC1ReadingQueue()
+
         ui.comm_status_label.setText(f"Connecting to MQTT broker at {args.broker}…")
         stabilizer_task = asyncio.create_task(
-            update_stabilizer(ui, args.topic, args.broker))
+            update_stabilizer(ui, adc1_request_queue, args.topic, args.broker))
+
+        relock_task = asyncio.create_task(relock_laser(ui, adc1_request_queue))
 
         try:
             sys.exit(loop.run_forever())
         finally:
             with suppress(asyncio.CancelledError):
+                relock_task.cancel()
+                loop.run_until_complete(relock_task)
                 stabilizer_task.cancel()
                 loop.run_until_complete(stabilizer_task)
 
