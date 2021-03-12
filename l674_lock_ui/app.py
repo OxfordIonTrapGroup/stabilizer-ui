@@ -6,6 +6,7 @@ from gmqtt import Client as MqttClient
 import json
 import logging
 import os
+import uuid
 from PyQt5 import QtWidgets, uic
 from qasync import QEventLoop
 import sys
@@ -279,7 +280,8 @@ async def update_stabilizer(ui: UI,
         #
 
         adc1_request_topic = "dt/sinara/stabilizer/l674/read_adc1_filtered"
-        adc1_response_topic = "dt/sinara/stabilizer/l674/response/adc1_filtered"
+        client_id = str(uuid.uuid4()).split("-")[0]
+        adc1_response_topic = f"dt/sinara/stabilizer/l674/response_{client_id}/adc1_filtered"
         client.subscribe(adc1_response_topic)
 
         pending_adc1_requests = []
