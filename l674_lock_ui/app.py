@@ -10,9 +10,11 @@ import uuid
 from PyQt5 import QtWidgets, uic
 from qasync import QEventLoop
 import sys
-from typing import List
+import time
+from typing import Awaitable, Callable, List
 from sipyco import common_args, pc_rpc
 
+from .solstis import Solstis
 from .ui_utils import link_slider_to_spinbox
 
 logger = logging.getLogger(__name__)
@@ -341,14 +343,251 @@ async def update_stabilizer(ui: UI,
         raise
 
 
-async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue):
+STABLE_READING_TOLERANCE = 5e6
+ETALON_TUNE_READING_TOLERANCE = 20e6
+RELOCK_FREQ_TOLERANCE = 3e6
+ETALON_FREQ_TOLERANCE = 500e6
+ETALON_TUNE_SLOPE = -4.68e9  # Hz per "tune percent"
+ETALON_TUNE_DAMPING = 0.95
+RESONATOR_TUNE_SLOPE = 269e6  # Hz per "tune percent"
+RESONATOR_TUNE_DAMPING = 0.95
+
+
+@unique
+class RelockStep(Enum):
+    reset_lock = "reset_lock"
+    decide_next = "decide_next"
+    tune_etalon = "tune_etalon"
+    tune_resonator = "tune_resonator"
+    try_lock = "try_lock"
+
+
+async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
+                       get_freq: Callable[[], Awaitable[float]], target_freq: float,
+                       solstis_host: str):
+    async def get_freq_delta():
+        while True:
+            status, freq, _osa = await get_freq()
+            if status != 0:
+                # TODO: Probably downgrade to debug, as Low will be common following
+                # lock loss.
+                logger.info("Wavemeter returned non-zero channel status: %s", status)
+                continue
+            return freq - target_freq
+
+    async def get_stable_freq_delta(tolerance=STABLE_READING_TOLERANCE):
+        previous_delta = None
+        while True:
+            delta = await get_freq_delta()
+            if previous_delta is not None:
+                if abs(delta - previous_delta) < tolerance:
+                    return delta
+            previous_delta = delta
+
+    solstis = None
+
+    async def ensure_solstis():
+        nonlocal solstis
+        if solstis is None:
+            solstis = await Solstis.new(solstis_host)
+        return solstis
+
+    # Finite state machine, exiting only through try_lock success, or cancellation.
+    step = RelockStep.reset_lock
     while True:
-        await asyncio.sleep(0.5)
-        reading = await adc1_request_queue.read_adc()
-        if reading >= ui.lockDetectThresholdBox.value():
-            ui.update_relock_state(RelockState.locked)
-        else:
-            ui.update_relock_state(RelockState.out_of_lock)
+        logger.info("Current step: %s", step)
+        if step == RelockStep.reset_lock:
+            ui.enableAOMLockBox.setChecked(False)
+            ui.disablePztButton.setChecked(True)
+            step = RelockStep.decide_next
+            continue
+        if step == RelockStep.decide_next:
+            delta = await get_stable_freq_delta()
+            logger.info("Laser frequency delta: %s MHz", delta / 1e6)
+            if abs(delta) < RELOCK_FREQ_TOLERANCE:
+                step = RelockStep.try_lock
+                continue
+            if abs(delta) < ETALON_FREQ_TOLERANCE:
+                step = RelockStep.tune_resonator
+                continue
+            step = RelockStep.tune_etalon
+            continue
+        if step == RelockStep.tune_etalon:
+            await ensure_solstis()
+            if solstis.etalon_locked:
+                await solstis.set_etalon_locked(False)
+            while True:
+                delta = await get_stable_freq_delta(ETALON_TUNE_READING_TOLERANCE)
+                if abs(delta) < ETALON_FREQ_TOLERANCE:
+                    break
+                diff = -ETALON_TUNE_DAMPING * delta / ETALON_TUNE_SLOPE
+                new_tune = solstis.etalon_tune + diff
+                logger.info("Setting etalon tune to %s", new_tune)
+                await solstis.set_etalon_tune(new_tune)
+            await solstis.set_etalon_locked(True)
+            # Currently don't have resonator tune readback after lock is engaged, so re-open connection completely.
+            await solstis.close()
+            solstis = None
+            step = RelockStep.decide_next
+            continue
+        if step == RelockStep.tune_resonator:
+            await ensure_solstis()
+            if not solstis.etalon_locked:
+                # User unlocked etalon, frequency just happened to be right.
+                step = RelockStep.tune_etalon
+                continue
+
+            while True:
+                delta = await get_stable_freq_delta()
+                if abs(delta) < RELOCK_FREQ_TOLERANCE:
+                    step = RelockStep.decide_next
+                    break
+                if abs(delta) > ETALON_FREQ_TOLERANCE:
+                    # Etalon lock jumped/…
+                    logger.info(
+                        "Large frequency delta encountered during "
+                        "resonator tuning: %s MHz", delta / 1e6)
+                    step = RelockStep.tune_etalon
+                    break
+                step = -RESONATOR_TUNE_DAMPING * delta / RESONATOR_TUNE_SLOPE
+                new_tune = solstis.resonator_tune + step
+                logger.info("Setting resonator tune to %s", new_tune)
+                await solstis.set_resonator_tune(new_tune)
+            continue
+        if step == RelockStep.try_lock:
+            # Enable fast lock, and see if we got some transmission (allow considerably
+            # lower transmision than fully locked threshold, though).
+            ui.enableAOMLockBox.setChecked(True)
+            await asyncio.sleep(0.1)
+            transmission = await adc1_request_queue.read_adc()
+            if transmission < 0.2 * ui.lockDetectThresholdBox.value():
+                logger.info("Transmission immediately low; aborting lock attempt")
+                step = RelockStep.reset_lock
+                continue
+
+            # Enable PZT lock, monitor for a second during gain ramping to see if lock
+            # keeps.
+            ui.enablePztButton.setChecked(True)
+            start = time.monotonic()
+            while True:
+                dt = time.monotonic() - start
+                if dt > 1.0:
+                    break
+                transmission = await adc1_request_queue.read_adc()
+                if transmission < 0.2 * ui.lockDetectThresholdBox.value():
+                    logger.info(
+                        "Transmission low after enable PZT lock (%s s); "
+                        "aborting lock attempt", dt)
+                    step = RelockStep.reset_lock
+                    continue
+
+            # Finally, check against original criterion.
+            transmission = await adc1_request_queue.read_adc()
+            if transmission < ui.lockDetectThresholdBox.value():
+                logger.info("Transmission not above threshold in the end")
+                step = RelockStep.reset_lock
+                continue
+
+            logger.info("Laser relocked")
+            return
+
+
+async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
+                             wand_host: str, wand_port: int, wand_channel: str,
+                             solstis_host: str):
+    last_freq_reading = None
+    last_locked_freq_reading = None
+    wand = None
+    try:
+        wand = pc_rpc.AsyncioClient()
+        await asyncio.wait_for(wand.connect_rpc(wand_host, wand_port, "control"),
+                               timeout=10.0)
+    except Exception:
+        logger.exception("Failed to connect to WAnD server")
+        wand = None
+
+    if wand is None:
+        logger.warning("Wavemeter connection not established; "
+                       "automatic relocking not available")
+        ui.enableRelockingBox.setChecked(False)
+        ui.enableRelockingBox.setEnabled(False)
+    else:
+        ui.enableRelockingBox.setChecked(True)
+        ui.enableRelockingBox.setEnabled(True)
+
+        async def get_freq(age=0):
+            return await wand.get_freq(laser=wand_channel,
+                                       age=age,
+                                       priority=10,
+                                       offset_mode=True)
+
+        async def wavemeter_loop():
+            nonlocal last_freq_reading
+            while True:
+                await asyncio.sleep(5.0)
+                try:
+                    status, freq, _osa = await get_freq(age=1.0)
+                except Exception as e:
+                    logger.warning("Failed to get wavemeter reading: %s", repr(e))
+                    continue
+                if status == 0:
+                    last_freq_reading = freq
+
+        # TODO: Cancle this task on shutdown too.
+        asyncio.create_task(wavemeter_loop())
+
+    relock_task = None
+
+    we_cancelled = False
+
+    def relock_enable_changed(enabled):
+        if not enabled and relock_task is not None:
+            logger.info("Automatic relocking disabled; cancelling active relock task")
+            nonlocal we_cancelled
+            we_cancelled = True
+            relock_task.cancel()
+
+    ui.enableRelockingBox.toggled.connect(relock_enable_changed)
+
+    try:
+        while True:
+            await asyncio.sleep(0.1)
+            reading = await adc1_request_queue.read_adc()
+            is_locked = reading >= ui.lockDetectThresholdBox.value()
+            if is_locked:
+                if last_freq_reading is not None:
+                    last_locked_freq_reading = last_freq_reading
+            else:
+                # Make sure a new frequency reading is fetched later, not one from whatever
+                # might have been going on during relocking.
+                last_freq_reading = None
+
+                if ui.enableRelockingBox.isChecked():
+                    assert relock_task is None
+                    if last_locked_freq_reading is None:
+                        last_locked_freq_reading = 140e6
+                        logger.warning(
+                            "No good frequency reference reading available, "
+                            "defaulting to %s MHz", last_locked_freq_reading / 1e6)
+                    relock_task = asyncio.create_task(
+                        relock_laser(ui, adc1_request_queue, get_freq,
+                                     last_locked_freq_reading, solstis_host))
+                    ui.update_relock_state(RelockState.relocking)
+                    try:
+                        await relock_task
+                    except asyncio.CancelledError:
+                        if not we_cancelled:
+                            raise
+                        we_cancelled = False
+                    relock_task = None
+                    logger.info("Relock task finished.")
+                    continue
+
+            ui.update_relock_state(
+                RelockState.locked if is_locked else RelockState.out_of_lock)
+    except Exception:
+        logger.exception("Unexpected relocking failure")
+        ui.update_relock_state(RelockState.uninitialised)
 
 
 class UIStatePublisher:
@@ -364,8 +603,12 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Interface for the Vescent + Stabilizer 674 laser lock setup")
-    parser.add_argument("-b", "--broker", default="10.255.6.4")
-    parser.add_argument("-t", "--topic", default="dt/sinara/stabilizer/l674")
+    parser.add_argument("-b", "--stabilizer-broker", default="10.255.6.4")
+    parser.add_argument("--stabilizer-topic", default="dt/sinara/stabilizer/l674")
+    parser.add_argument("--wand-host", default="10.255.6.61")
+    parser.add_argument("--wand-port", default=3251, type=int)
+    parser.add_argument("--wand-channel", default="lab1_674", type=str)
+    parser.add_argument("--solstis-host", default="10.179.22.23", type=str)
     common_args.simple_network_args(parser, 4110)
     args = parser.parse_args()
 
@@ -382,26 +625,31 @@ def main():
 
         adc1_request_queue = ADC1ReadingQueue()
 
-        ui.comm_status_label.setText(f"Connecting to MQTT broker at {args.broker}…")
+        ui.comm_status_label.setText(
+            f"Connecting to MQTT broker at {args.stabilizer_broker}…")
         stabilizer_task = asyncio.create_task(
-            update_stabilizer(ui, adc1_request_queue, args.topic, args.broker))
+            update_stabilizer(ui, adc1_request_queue, args.stabilizer_topic,
+                              args.stabilizer_broker))
 
-        relock_task = asyncio.create_task(relock_laser(ui, adc1_request_queue))
+        monitor_lock_task = asyncio.create_task(
+            monitor_lock_state(ui, adc1_request_queue, args.wand_host, args.wand_port,
+                               args.wand_channel, args.solstis_host))
 
         server = pc_rpc.Server({'674LockUIState': UIStatePublisher(ui)},
-            "Publishes the state of the l674-lock-ui")
-        loop.run_until_complete(server.start(
-            common_args.bind_address_from_args(args), args.port))
+                               "Publishes the state of the l674-lock-ui")
+        loop.run_until_complete(
+            server.start(common_args.bind_address_from_args(args), args.port))
 
         try:
             sys.exit(loop.run_forever())
         finally:
             with suppress(asyncio.CancelledError):
-                relock_task.cancel()
-                loop.run_until_complete(relock_task)
+                monitor_lock_task.cancel()
+                loop.run_until_complete(monitor_lock_task)
+            with suppress(asyncio.CancelledError):
                 stabilizer_task.cancel()
                 loop.run_until_complete(stabilizer_task)
-                loop.run_until_complete(server.stop())
+            loop.run_until_complete(server.stop())
 
 
 if __name__ == "__main__":
