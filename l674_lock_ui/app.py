@@ -5,6 +5,7 @@ from contextlib import suppress
 from gmqtt import Client as MqttClient
 import json
 import logging
+import numpy as np
 import os
 import uuid
 from PyQt5 import QtWidgets, uic
@@ -346,11 +347,14 @@ async def update_stabilizer(ui: UI,
 STABLE_READING_TOLERANCE = 5e6
 ETALON_TUNE_READING_TOLERANCE = 20e6
 RELOCK_FREQ_TOLERANCE = 3e6
-ETALON_FREQ_TOLERANCE = 500e6
+ETALON_FREQ_TOLERANCE = 1e9
 ETALON_TUNE_SLOPE = -4.68e9  # Hz per "tune percent"
-ETALON_TUNE_DAMPING = 0.95
+ETALON_TUNE_DAMPING = 1.0
 RESONATOR_TUNE_SLOPE = 269e6  # Hz per "tune percent"
-RESONATOR_TUNE_DAMPING = 0.95
+RESONATOR_TUNE_DAMPING = 1.0
+RESONANCE_SEARCH_RADIUS = 20e6
+RESONANCE_SEARCH_NUM_POINTS = 500
+DEFAULT_FREQ_TARGET = 145e6
 
 
 @unique
@@ -359,12 +363,13 @@ class RelockStep(Enum):
     decide_next = "decide_next"
     tune_etalon = "tune_etalon"
     tune_resonator = "tune_resonator"
+    determine_resonance = "determine_resonance"
     try_lock = "try_lock"
 
 
 async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
-                       get_freq: Callable[[], Awaitable[float]], target_freq: float,
-                       solstis_host: str):
+                       get_freq: Callable[[], Awaitable[float]],
+                       approximate_target_freq: float, solstis_host: str):
     async def get_freq_delta():
         while True:
             status, freq, _osa = await get_freq()
@@ -373,7 +378,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 # lock loss.
                 logger.info("Wavemeter returned non-zero channel status: %s", status)
                 continue
-            return freq - target_freq
+            return freq - approximate_target_freq
 
     async def get_stable_freq_delta(tolerance=STABLE_READING_TOLERANCE):
         previous_delta = None
@@ -394,6 +399,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
 
     # Finite state machine, exiting only through try_lock success, or cancellation.
     step = RelockStep.reset_lock
+    try_approximate = True
     while True:
         logger.info("Current step: %s", step)
         if step == RelockStep.reset_lock:
@@ -405,7 +411,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
             delta = await get_stable_freq_delta()
             logger.info("Laser frequency delta: %s MHz", delta / 1e6)
             if abs(delta) < RELOCK_FREQ_TOLERANCE:
-                step = RelockStep.try_lock
+                step = RelockStep.try_lock if try_approximate else RelockStep.determine_resonance
                 continue
             if abs(delta) < ETALON_FREQ_TOLERANCE:
                 step = RelockStep.tune_resonator
@@ -425,7 +431,8 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 logger.info("Setting etalon tune to %s", new_tune)
                 await solstis.set_etalon_tune(new_tune)
             await solstis.set_etalon_locked(True)
-            # Currently don't have resonator tune readback after lock is engaged, so re-open connection completely.
+            # Currently don't have resonator tune readback after lock is engaged, so
+            # reopen connection completely.
             await solstis.close()
             solstis = None
             step = RelockStep.decide_next
@@ -454,6 +461,25 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 logger.info("Setting resonator tune to %s", new_tune)
                 await solstis.set_resonator_tune(new_tune)
             continue
+        if step == RelockStep.determine_resonance:
+            await ensure_solstis()
+            if not solstis.etalon_locked:
+                # User unlocked etalon, frequency just happened to be right.
+                step = RelockStep.tune_etalon
+                continue
+
+            tune_centre = solstis.resonator_tune
+            radius = RESONANCE_SEARCH_RADIUS / RESONATOR_TUNE_SLOPE
+            tunes = np.linspace(tune_centre - radius, tune_centre + radius,
+                                RESONANCE_SEARCH_NUM_POINTS)[::-1]
+            adc1s = []
+            for tune in tunes:
+                await solstis.set_resonator_tune(tune, blind=True)
+                await asyncio.sleep(0.01)
+                adc1s.append(await adc1_request_queue.read_adc())
+            await solstis.set_resonator_tune(tunes[np.argmax(adc1s)])
+            step = RelockStep.try_lock
+            continue
         if step == RelockStep.try_lock:
             # Enable fast lock, and see if we got some transmission (allow considerably
             # lower transmision than fully locked threshold, though).
@@ -462,6 +488,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
             transmission = await adc1_request_queue.read_adc()
             if transmission < 0.2 * ui.lockDetectThresholdBox.value():
                 logger.info("Transmission immediately low; aborting lock attempt")
+                try_approximate = False
                 step = RelockStep.reset_lock
                 continue
 
@@ -469,6 +496,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
             # keeps.
             ui.enablePztButton.setChecked(True)
             start = time.monotonic()
+            reset = False
             while True:
                 dt = time.monotonic() - start
                 if dt > 1.0:
@@ -478,8 +506,11 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                     logger.info(
                         "Transmission low after enable PZT lock (%s s); "
                         "aborting lock attempt", dt)
-                    step = RelockStep.reset_lock
-                    continue
+                    reset = True
+                    break
+            if reset:
+                step = RelockStep.reset_lock
+                continue
 
             # Finally, check against original criterion.
             transmission = await adc1_request_queue.read_adc()
@@ -490,6 +521,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
 
             logger.info("Laser relocked")
             return
+        assert False, f"Unhandled step {step}"
 
 
 async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
@@ -565,7 +597,7 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 if ui.enableRelockingBox.isChecked():
                     assert relock_task is None
                     if last_locked_freq_reading is None:
-                        last_locked_freq_reading = 140e6
+                        last_locked_freq_reading = DEFAULT_FREQ_TARGET
                         logger.warning(
                             "No good frequency reference reading available, "
                             "defaulting to %s MHz", last_locked_freq_reading / 1e6)

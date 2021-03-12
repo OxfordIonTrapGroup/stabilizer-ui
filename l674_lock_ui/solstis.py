@@ -82,13 +82,15 @@ class Solstis:
 
         return False
 
-    async def _send(self, msg):
+    async def _send(self, msg, blind=False):
         try:
             while True:
                 self._receive_queue.get_nowait()
         except asyncio.QueueEmpty:
             pass
         await self._socket.send(json.dumps(msg, separators=(",", ":")))
+        if blind:
+            return
         while (not await self._process_next()):
             pass
 
@@ -124,7 +126,7 @@ class Solstis:
         assert self._initialised, "Connection closed"
         return self._resonator_tune
 
-    async def set_resonator_tune(self, tune):
+    async def set_resonator_tune(self, tune, blind=False):
         if tune < 0 or tune > 100:
             raise ValueError(f"Invalid resonator tuning value: {tune}")
         self._resonator_tune = tune
@@ -132,7 +134,7 @@ class Solstis:
             "task": ["job_set_resonator_tuning"],
             "resonator_tune": tune,
             "message_type": "page_update"
-        })
+        }, blind=blind)
 
 
 async def main():
