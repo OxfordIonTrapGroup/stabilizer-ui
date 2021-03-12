@@ -19,10 +19,11 @@ AOM_LOCK_GPIO_IDX = 1
 
 
 @unique
-class RelockStatus(Enum):
+class RelockState(Enum):
     out_of_lock = "Out of lock"
     relocking = "Relocking"
     locked = "Locked"
+    uninitialised = "Uninitialised"
 
 
 class TextEditLogHandler(logging.Handler):
@@ -61,6 +62,8 @@ class UI(QtWidgets.QMainWindow):
         self.log_handler = TextEditLogHandler(self.logOutputText)
         logging.getLogger().addHandler(self.log_handler)
 
+        self.relock_state = RelockState.uninitialised
+
     def _link_paired_widgets(self):
         for s, b in [(self.fastPGainSlider, self.fastPGainBox),
                      (self.fastIGainSlider, self.fastIGainBox),
@@ -70,11 +73,13 @@ class UI(QtWidgets.QMainWindow):
                      (self.slowIGainSlider, self.slowIGainBox)]:
             link_slider_to_spinbox(s, b)
 
-    def set_relock_status(self, status: RelockStatus):
+    def update_relock_state(self, status: RelockState):
+        self.relock_state = status
         color = {
-            RelockStatus.out_of_lock: "red",
-            RelockStatus.relocking: "yellow",
-            RelockStatus.locked: "green"
+            RelockState.out_of_lock: "red",
+            RelockState.relocking: "yellow",
+            RelockState.locked: "green",
+            RelockState.uninitialised: "grey"
         }[status]
         self.adc1ReadingEdit.setStyleSheet(f"QLineEdit {{ background-color: {color} }}")
 
@@ -338,9 +343,9 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue):
         await asyncio.sleep(0.5)
         reading = await adc1_request_queue.read_adc()
         if reading >= ui.lockDetectThresholdBox.value():
-            ui.set_relock_status(RelockStatus.locked)
+            ui.update_relock_state(RelockState.locked)
         else:
-            ui.set_relock_status(RelockStatus.out_of_lock)
+            ui.update_relock_state(RelockState.out_of_lock)
 
 
 def main():
