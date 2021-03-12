@@ -36,7 +36,7 @@ class TextEditLogHandler(logging.Handler):
         super().__init__(level=logging.INFO)
         self.text_edit = text_edit
         self._text = ""
-        self.formatter = logging.Formatter("<em>%(asctime)s</em> %(message)s",
+        self.formatter = logging.Formatter("<em>%(asctime)s</em>&nbsp; %(message)s",
                                            "%Y-%m-%d %H:%M:%S")
 
     def emit(self, record: logging.LogRecord):
