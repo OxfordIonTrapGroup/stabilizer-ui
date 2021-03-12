@@ -559,7 +559,7 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
             while True:
                 await asyncio.sleep(5.0)
                 try:
-                    status, freq, _osa = await get_freq(age=1.0)
+                    status, freq, _osa = await get_freq(age=0)
                 except Exception as e:
                     logger.warning("Failed to get wavemeter reading: %s", repr(e))
                     continue
