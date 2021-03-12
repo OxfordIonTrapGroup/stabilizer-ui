@@ -10,6 +10,7 @@ from PyQt5 import QtWidgets, uic
 from qasync import QEventLoop
 import sys
 from typing import List
+from sipyco import common_args, pc_rpc
 
 from .ui_utils import link_slider_to_spinbox
 
@@ -348,6 +349,14 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue):
             ui.update_relock_state(RelockState.out_of_lock)
 
 
+class UIStatePublisher:
+    def __init__(self, ui: UI):
+        self.ui = ui
+
+    async def get_relock_state(self):
+        return self.ui.relock_state.name
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
 
@@ -355,6 +364,7 @@ def main():
         description="Interface for the Vescent + Stabilizer 674 laser lock setup")
     parser.add_argument("-b", "--broker", default="10.255.6.4")
     parser.add_argument("-t", "--topic", default="dt/sinara/stabilizer/l674")
+    common_args.simple_network_args(parser, 4110)
     args = parser.parse_args()
 
     app = QtWidgets.QApplication(sys.argv)
@@ -376,6 +386,11 @@ def main():
 
         relock_task = asyncio.create_task(relock_laser(ui, adc1_request_queue))
 
+        server = pc_rpc.Server({'674LockUIState': UIStatePublisher(ui)},
+            "Publishes the state of the l674-lock-ui")
+        loop.run_until_complete(server.start(
+            common_args.bind_address_from_args(args), args.port))
+
         try:
             sys.exit(loop.run_forever())
         finally:
@@ -384,6 +399,7 @@ def main():
                 loop.run_until_complete(relock_task)
                 stabilizer_task.cancel()
                 loop.run_until_complete(stabilizer_task)
+                loop.run_until_complete(server.stop())
 
 
 if __name__ == "__main__":
