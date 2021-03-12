@@ -64,7 +64,7 @@ class UI(QtWidgets.QMainWindow):
         self.mode_group.addButton(self.enablePztButton)
 
         self.log_handler = TextEditLogHandler(self.logOutputText)
-        logging.getLogger().addHandler(self.log_handler)
+        logger.addHandler(self.log_handler)
 
         self.relock_state = RelockState.uninitialised
 
