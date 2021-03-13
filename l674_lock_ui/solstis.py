@@ -1,8 +1,8 @@
 import asyncio
+import json
 import logging
 from typing import Type
 import websockets
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -130,11 +130,14 @@ class Solstis:
         if tune < 0 or tune > 100:
             raise ValueError(f"Invalid resonator tuning value: {tune}")
         self._resonator_tune = tune
-        await self._send({
-            "task": ["job_set_resonator_tuning"],
-            "resonator_tune": tune,
-            "message_type": "page_update"
-        }, blind=blind)
+        await self._send(
+            {
+                "task": ["job_set_resonator_tuning"],
+                "resonator_tune": tune,
+                "message_type": "page_update"
+            },
+            blind=blind,
+        )
 
 
 async def main():
