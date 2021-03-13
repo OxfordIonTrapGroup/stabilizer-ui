@@ -1,7 +1,9 @@
+# Self-references just work with new string-stored annotations.
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
-from typing import Type
 import websockets
 
 logger = logging.getLogger(__name__)
@@ -9,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class Solstis:
     @classmethod
-    async def new(cls, server, port=8088, timeout=10) -> Type["Solstis"]:
+    async def new(cls, server, port=8088, timeout=10) -> Solstis:
         """
         Intended to be short-lived.
         """
