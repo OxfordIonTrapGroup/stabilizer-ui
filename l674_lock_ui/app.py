@@ -370,7 +370,9 @@ class RelockStep(Enum):
 async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                        get_freq: Callable[[], Awaitable[float]],
                        approximate_target_freq: float, solstis_host: str):
-    logger.info(f"Relocking; target frequency: {(approximate_target_freq / 1e6):0.1f} MHz",)
+    logger.info(
+        f"Relocking; target frequency: {(approximate_target_freq / 1e6):0.1f} MHz")
+
     async def get_freq_delta():
         while True:
             status, freq, _osa = await get_freq()
@@ -591,8 +593,8 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 if last_freq_reading is not None:
                     last_locked_freq_reading = last_freq_reading
             else:
-                # Make sure a new frequency reading is fetched later, not one from whatever
-                # might have been going on during relocking.
+                # Make sure a new frequency reading is fetched later, not one from
+                # whatever might have been going on during relocking.
                 last_freq_reading = None
 
                 if ui.enableRelockingBox.isChecked():
