@@ -1,25 +1,24 @@
 import argparse
 import asyncio
-from enum import Enum, unique
 from contextlib import suppress
+from enum import Enum, unique
 from gmqtt import Client as MqttClient
 import json
 import logging
 import numpy as np
 import os
-import uuid
 from PyQt5 import QtWidgets, uic
 from qasync import QEventLoop
+from sipyco import common_args, pc_rpc
 import sys
 import time
+import uuid
 from typing import Awaitable, Callable, List
-from sipyco import common_args, pc_rpc
 
 from .solstis import Solstis
 from .ui_utils import link_slider_to_spinbox
 
 logger = logging.getLogger(__name__)
-
 
 #
 # Parameters for auto-relocking algorithm.
