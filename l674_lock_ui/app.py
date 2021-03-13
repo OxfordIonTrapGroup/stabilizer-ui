@@ -138,10 +138,6 @@ class UI(QtWidgets.QMainWindow):
         self.adc1ReadingEdit.setStyleSheet(f"QLineEdit {{ background-color: {color} }}")
 
 
-class StabilizerError(Exception):
-    pass
-
-
 class ADC1ReadingQueue:
     def __init__(self):
         self._new = asyncio.Event()
