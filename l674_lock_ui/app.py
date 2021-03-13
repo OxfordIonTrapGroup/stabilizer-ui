@@ -21,6 +21,58 @@ from .ui_utils import link_slider_to_spinbox
 logger = logging.getLogger(__name__)
 
 
+#
+# Parameters for auto-relocking algorithm.
+#
+
+#: When waiting for wavemeter readings to stabilise, wait until two consecutive readings
+#: within the given number of Hz.
+STABLE_READING_TOLERANCE = 5e6
+
+#: Coarser version of STABLE_READING_TOLERANCE to use for etalon tune search, where
+#: anything <100 MHz or so is completely irrelevant anyway.
+ETALON_TUNE_READING_TOLERANCE = 20e6
+
+#: Maximum laser offset from last known-good value for which to attempt reestablishing
+#: the lock (rather than tuning the laser closer to the value).
+MAX_RELOCK_ATTEMPT_DELTA = 3e6
+
+#: Maximum laser offset from last known-good value for which to tune using the resonator
+#: tuning control, rather than disabling the etalon lock and selecting a mode closer to
+#; the target. (Must be larger than etalon step size, plus some "hysteresis".)
+MAX_RESONATOR_TUNE_DELTA = 1e9
+
+#: Response of the laser frequency to changes in the etalon tuning parameter (as per the
+#: ICE-Bloc web UI), in Hz per "tune percent". Since the frequency is not continuous in
+#: the parameter but rather displays steps (note aside: what are those actually – some
+#: aliasing between etalon and resonator modes?), this is .
+ETALON_TUNE_SLOPE = -4.68e9  # Hz per "tune percent"
+ETALON_TUNE_DAMPING = 1.0
+
+#: Response of the laser frequency to changes in the resonator tuning (as per the
+#: ICE-Bloc web UI), in Hz per "tune percent".
+RESONATOR_TUNE_SLOPE = 269e6
+
+#: An extra damping factor to apply to each resonator tuning step for stability (can be
+#: decreased from 1.0 if the resonator tuning search oscillating becomes an issue).
+RESONATOR_TUNE_DAMPING = 1.0
+
+#: Approximate resonator scan range (in frequency, converted using RESONATOR_TUNE_SLOPE)
+#: to use for determining point at which to attempt locking. Depends on the wavemeter
+#: accuracy, plus some extra slack to deal with resonator drifts during the currently
+#: trivial scan algorithm.
+RESONANCE_SEARCH_RADIUS = 20e6
+
+#: Number of scan points to use when determining resonator lock point. Values too small
+#: would risk missing the peak, values too large would make laser drifts affect the scan
+#: too much.
+RESONANCE_SEARCH_NUM_POINTS = 300
+
+#: Fallback frequency target when a wavemeter reading with the laser in lock has not
+#: been observed yet.
+DEFAULT_FREQ_TARGET = 145e6
+
+
 @unique
 class RelockState(Enum):
     out_of_lock = "Out of lock"
@@ -342,19 +394,6 @@ async def update_stabilizer(ui: UI,
         raise
 
 
-STABLE_READING_TOLERANCE = 5e6
-ETALON_TUNE_READING_TOLERANCE = 20e6
-RELOCK_FREQ_TOLERANCE = 3e6
-ETALON_FREQ_TOLERANCE = 1e9
-ETALON_TUNE_SLOPE = -4.68e9  # Hz per "tune percent"
-ETALON_TUNE_DAMPING = 1.0
-RESONATOR_TUNE_SLOPE = 269e6  # Hz per "tune percent"
-RESONATOR_TUNE_DAMPING = 1.0
-RESONANCE_SEARCH_RADIUS = 20e6
-RESONANCE_SEARCH_NUM_POINTS = 300
-DEFAULT_FREQ_TARGET = 145e6
-
-
 @unique
 class RelockStep(Enum):
     reset_lock = "reset_lock"
@@ -411,10 +450,10 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
         if step == RelockStep.decide_next:
             delta = await get_stable_freq_delta()
             logger.info("Laser frequency delta: %s MHz", delta / 1e6)
-            if abs(delta) < RELOCK_FREQ_TOLERANCE:
+            if abs(delta) < MAX_RELOCK_ATTEMPT_DELTA:
                 step = RelockStep.try_lock if try_approximate else RelockStep.determine_resonance
                 continue
-            if abs(delta) < ETALON_FREQ_TOLERANCE:
+            if abs(delta) < MAX_RESONATOR_TUNE_DELTA:
                 step = RelockStep.tune_resonator
                 continue
             step = RelockStep.tune_etalon
@@ -425,7 +464,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 await solstis.set_etalon_locked(False)
             while True:
                 delta = await get_stable_freq_delta(ETALON_TUNE_READING_TOLERANCE)
-                if abs(delta) < ETALON_FREQ_TOLERANCE:
+                if abs(delta) < MAX_RESONATOR_TUNE_DELTA:
                     break
                 diff = -ETALON_TUNE_DAMPING * delta / ETALON_TUNE_SLOPE
                 new_tune = solstis.etalon_tune + diff
@@ -447,10 +486,10 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
 
             while True:
                 delta = await get_stable_freq_delta()
-                if abs(delta) < RELOCK_FREQ_TOLERANCE:
+                if abs(delta) < MAX_RELOCK_ATTEMPT_DELTA:
                     step = RelockStep.decide_next
                     break
-                if abs(delta) > ETALON_FREQ_TOLERANCE:
+                if abs(delta) > MAX_RESONATOR_TUNE_DELTA:
                     # Etalon lock jumped/…
                     logger.info(
                         "Large frequency delta encountered during "
