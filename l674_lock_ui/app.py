@@ -73,7 +73,7 @@ DEFAULT_FREQ_TARGET = 145e6
 
 
 @unique
-class RelockState(Enum):
+class LockState(Enum):
     out_of_lock = "Out of lock"
     relocking = "Relocking"
     locked = "Locked"
@@ -116,7 +116,7 @@ class UI(QtWidgets.QMainWindow):
         self.log_handler = TextEditLogHandler(self.logOutputText)
         logger.addHandler(self.log_handler)
 
-        self.relock_state = RelockState.uninitialised
+        self.lock_state = LockState.uninitialised
 
     def _link_paired_widgets(self):
         for s, b in [(self.fastPGainSlider, self.fastPGainBox),
@@ -127,13 +127,13 @@ class UI(QtWidgets.QMainWindow):
                      (self.slowIGainSlider, self.slowIGainBox)]:
             link_slider_to_spinbox(s, b)
 
-    def update_relock_state(self, status: RelockState):
-        self.relock_state = status
+    def update_lock_state(self, status: LockState):
+        self.lock_state = status
         color = {
-            RelockState.out_of_lock: "red",
-            RelockState.relocking: "yellow",
-            RelockState.locked: "green",
-            RelockState.uninitialised: "grey"
+            LockState.out_of_lock: "red",
+            LockState.relocking: "yellow",
+            LockState.locked: "green",
+            LockState.uninitialised: "grey"
         }[status]
         self.adc1ReadingEdit.setStyleSheet(f"QLineEdit {{ background-color: {color} }}")
 
@@ -639,7 +639,7 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                     relock_task = asyncio.create_task(
                         relock_laser(ui, adc1_request_queue, get_freq,
                                      last_locked_freq_reading, solstis_host))
-                    ui.update_relock_state(RelockState.relocking)
+                    ui.update_lock_state(LockState.relocking)
                     try:
                         await relock_task
                     except asyncio.CancelledError:
@@ -649,19 +649,19 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                     relock_task = None
                     continue
 
-            ui.update_relock_state(
-                RelockState.locked if is_locked else RelockState.out_of_lock)
+            ui.update_lock_state(
+                LockState.locked if is_locked else LockState.out_of_lock)
     except Exception:
         logger.exception("Unexpected relocking failure")
-        ui.update_relock_state(RelockState.uninitialised)
+        ui.update_lock_state(LockState.uninitialised)
 
 
 class UIStatePublisher:
     def __init__(self, ui: UI):
         self.ui = ui
 
-    async def get_relock_state(self):
-        return self.ui.relock_state.name
+    async def get_lock_state(self):
+        return self.ui.lock_state.name
 
 
 def main():
