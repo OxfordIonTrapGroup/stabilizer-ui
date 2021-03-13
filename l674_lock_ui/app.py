@@ -20,8 +20,6 @@ from .ui_utils import link_slider_to_spinbox
 
 logger = logging.getLogger(__name__)
 
-AOM_LOCK_GPIO_IDX = 1
-
 
 @unique
 class RelockState(Enum):
