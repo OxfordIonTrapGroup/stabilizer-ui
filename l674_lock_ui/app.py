@@ -669,7 +669,7 @@ def main():
             monitor_lock_state(ui, adc1_request_queue, args.wand_host, args.wand_port,
                                args.wand_channel, args.solstis_host))
 
-        server = pc_rpc.Server({'674LockUIState': UIStatePublisher(ui)},
+        server = pc_rpc.Server({"l674_lock_ui": UIStatePublisher(ui)},
                                "Publishes the state of the l674-lock-ui")
         loop.run_until_complete(
             server.start(common_args.bind_address_from_args(args), args.port))
