@@ -615,7 +615,6 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                             raise
                         we_cancelled = False
                     relock_task = None
-                    logger.info("Relock task finished.")
                     continue
 
             ui.update_relock_state(
