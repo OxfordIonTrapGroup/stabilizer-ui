@@ -38,7 +38,7 @@ MAX_RELOCK_ATTEMPT_DELTA = 3e6
 
 #: Maximum laser offset from last known-good value for which to tune using the resonator
 #: tuning control, rather than disabling the etalon lock and selecting a mode closer to
-#; the target. (Must be larger than etalon step size, plus some "hysteresis".)
+#: the target. (Must be larger than etalon step size, plus some "hysteresis".)
 MAX_RESONATOR_TUNE_DELTA = 1e9
 
 #: Response of the laser frequency to changes in the etalon tuning parameter (as per the
@@ -70,6 +70,15 @@ RESONANCE_SEARCH_NUM_POINTS = 300
 #: Fallback frequency target when a wavemeter reading with the laser in lock has not
 #: been observed yet.
 DEFAULT_FREQ_TARGET = 145e6
+
+#: Interval to request wavemeter frequency readings with while not relocking.
+#: Should be small enough to track (thermal) drifts in the wavemeter calibration.
+IDLE_WAVEMETER_POLL_INTERVAL = 5.0
+
+#: Interval between ADC1 reading requests while the relock task is not running.
+#: Effectively lower-bounds the average re-lock response time, so should be set fairly
+#: low (but not too low, as each request generates two MQTT messages).
+IDLE_ADC1_POLL_INTERVAL = 0.2
 
 
 @unique
@@ -466,7 +475,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 logger.info("Setting etalon tune to %s", new_tune)
                 await solstis.set_etalon_tune(new_tune)
             await solstis.set_etalon_locked(True)
-            # Currently don't have resonator tune readback after lock is engaged, so
+            # Currently don't have resonator tune read-back after lock is engaged, so
             # reopen connection completely.
             await solstis.close()
             solstis = None
@@ -517,7 +526,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
             continue
         if step == RelockStep.try_lock:
             # Enable fast lock, and see if we got some transmission (allow considerably
-            # lower transmision than fully locked threshold, though).
+            # lower transmission than fully locked threshold, though).
             ui.enableAOMLockBox.setChecked(True)
             await asyncio.sleep(0.1)
             transmission = await adc1_request_queue.read_adc()
@@ -562,8 +571,14 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
 async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                              wand_host: str, wand_port: int, wand_channel: str,
                              solstis_host: str):
+    # While not relocking, we regularly poll the wavemeter and save the last reading,
+    # to be "graduated" to last_locked_freq_reading once we know that the laser was
+    # in lock for it.
     last_freq_reading = None
     last_locked_freq_reading = None
+
+    # Connect to wavemeter server (but gracefully fail to allow using the UI for manual
+    # operation even if the wavemeter is offline).
     wand = None
     try:
         wand = pc_rpc.AsyncioClient()
@@ -591,7 +606,7 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
         async def wavemeter_loop():
             nonlocal last_freq_reading
             while True:
-                await asyncio.sleep(5.0)
+                await asyncio.sleep(IDLE_WAVEMETER_POLL_INTERVAL)
                 try:
                     status, freq, _osa = await get_freq(age=0)
                 except Exception as e:
@@ -600,25 +615,30 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 if status == 0:
                     last_freq_reading = freq
 
-        # TODO: Cancle this task on shutdown too.
+        # TODO: Cancel this task on shutdown too.
         asyncio.create_task(wavemeter_loop())
 
     relock_task = None
 
-    we_cancelled = False
+    # KLUDGE: To cleanly shutdown the program, we want to be able to cancel() this task,
+    # which might result in a CancelledError while we are waiting for the relock task
+    # to finish – which is also what happens if the user unticks the relock enable check
+    # box. To be able to disambiguate between these cases, record whether the
+    # cancellation was triggered from the UI signal handler.
+    we_cancelled_relock_task = False
 
     def relock_enable_changed(enabled):
         if not enabled and relock_task is not None:
             logger.info("Automatic relocking disabled; cancelling active relock task")
-            nonlocal we_cancelled
-            we_cancelled = True
+            nonlocal we_cancelled_relock_task
+            we_cancelled_relock_task = True
             relock_task.cancel()
 
     ui.enableRelockingBox.toggled.connect(relock_enable_changed)
 
     try:
         while True:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(IDLE_ADC1_POLL_INTERVAL)
             reading = await adc1_request_queue.read_adc()
             is_locked = reading >= ui.lockDetectThresholdBox.value()
             if is_locked:
@@ -643,9 +663,9 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                     try:
                         await relock_task
                     except asyncio.CancelledError:
-                        if not we_cancelled:
+                        if not we_cancelled_relock_task:
                             raise
-                        we_cancelled = False
+                        we_cancelled_relock_task = False
                     relock_task = None
                     continue
 
