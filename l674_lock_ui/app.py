@@ -573,6 +573,52 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
         assert False, f"Unhandled step {step}"
 
 
+class WavemeterInterface:
+    """Wraps a connection to the WAnD wavemeter server, offering an interface to query
+    a single channel while automatically reconnecting on failure/timeout.
+    """
+    def __init__(self, host: str, port: int, channel: str, timeout: float):
+        self._client = None
+        self._host = host
+        self._port = port
+        self._channel = channel
+        self._timeout = timeout
+
+    async def try_connect(self) -> None:
+        try:
+            self._client = pc_rpc.AsyncioClient()
+            await asyncio.wait_for(self._client.connect_rpc(self._host, self._port,
+                                                            "control"),
+                                   timeout=self._timeout)
+        except Exception:
+            logger.exception("Failed to connect to WAnD server")
+            self._client = None
+
+    def is_connected(self) -> bool:
+        return self._client is not None
+
+    async def get_freq_offset(self, age=0) -> float:
+        while True:
+            while not self.is_connected():
+                logger.info("Reconnecting to WAnD server")
+                await self.try_connect()
+
+            try:
+                return await asyncio.wait_for(self._client.get_freq(laser=self._channel,
+                                                                    age=age,
+                                                                    priority=10,
+                                                                    offset_mode=True),
+                                              timeout=self._timeout)
+            except Exception:
+                logger.exception(f"Error getting {self._channel} wavemeter reading")
+                # Drop connection (to later reconnect). In regular operation, about the
+                # only reason this should happen is due to timeouts after server
+                # restarts/network weirdness, so don't bother distinguishing between
+                # error types.
+                self._client.close_rpc()
+                self._client = None
+
+
 async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                              wand_host: str, wand_port: int, wand_channel: str,
                              solstis_host: str):
@@ -584,21 +630,9 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
 
     # Connect to wavemeter server (but gracefully fail to allow using the UI for manual
     # operation even if the wavemeter is offline).
-    wand = None
-
-    async def connect_wand():
-        nonlocal wand
-        try:
-            wand = pc_rpc.AsyncioClient()
-            await asyncio.wait_for(wand.connect_rpc(wand_host, wand_port, "control"),
-                                   timeout=WAVEMETER_TIMEOUT)
-        except Exception:
-            logger.exception("Failed to connect to WAnD server")
-            wand = None
-
-    await connect_wand()
-
-    if wand is None:
+    wand = WavemeterInterface(wand_host, wand_port, wand_channel, WAVEMETER_TIMEOUT)
+    await wand.try_connect()
+    if not wand.is_connected():
         logger.warning("Wavemeter connection not established; "
                        "automatic relocking not available")
         ui.enableRelockingBox.setChecked(False)
@@ -607,33 +641,11 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
         ui.enableRelockingBox.setChecked(True)
         ui.enableRelockingBox.setEnabled(True)
 
-        async def get_freq(age=0):
-            nonlocal wand
-            while True:
-                while wand is None:
-                    logger.info("Reconnecting to WAnD server")
-                    await connect_wand()
-                try:
-                    return await asyncio.wait_for(wand.get_freq(laser=wand_channel,
-                                                                age=age,
-                                                                priority=10,
-                                                                offset_mode=True),
-                                                  timeout=WAVEMETER_TIMEOUT)
-                except Exception:
-                    logger.exception(f"Error getting {wand_channel} wavemeter reading")
-                    # Drop connection (to later reconnect).
-                    wand.close_rpc()
-                    wand = None
-
         async def wavemeter_loop():
             nonlocal last_freq_reading
             while True:
                 await asyncio.sleep(IDLE_WAVEMETER_POLL_INTERVAL)
-                try:
-                    status, freq, _osa = await get_freq(age=0)
-                except Exception as e:
-                    logger.warning("Failed to get wavemeter reading: %s", repr(e))
-                    continue
+                status, freq, _osa = await wand.get_freq_offset(age=0)
                 if status == 0:
                     last_freq_reading = freq
 
@@ -679,7 +691,7 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                             "No good frequency reference reading available, "
                             "defaulting to %s MHz", last_locked_freq_reading / 1e6)
                     relock_task = asyncio.create_task(
-                        relock_laser(ui, adc1_request_queue, get_freq,
+                        relock_laser(ui, adc1_request_queue, wand.get_freq_offset,
                                      last_locked_freq_reading, solstis_host))
                     ui.update_lock_state(LockState.relocking)
                     try:
