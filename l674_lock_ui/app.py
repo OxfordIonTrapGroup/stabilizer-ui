@@ -257,6 +257,10 @@ async def update_stabilizer(ui: UI,
         write_handler = cfg[1][1] if len(cfg) == 2 else write
         return write_handler(cfg[0], value)
 
+    # Keep track of newly spawned, pending tasks, just to avoid leaking tasks during
+    # shutdown.
+    pending_tasks = []
+
     try:
         client = MqttClient(client_id="")
         await client.connect(broker_host, port=broker_port)
@@ -346,14 +350,15 @@ async def update_stabilizer(ui: UI,
         adc1_response_topic = f"dt/sinara/stabilizer/l674/response_{client_id}/adc1_filtered"
         client.subscribe(adc1_response_topic)
 
-        pending_adc1_requests = []
+        pending_adc1_requests: List[asyncio.Future] = []
 
         def handle_message(_client, topic, value, _qos, _properties):
             if topic == adc1_response_topic:
                 voltage = float(value)
                 ui.adc1ReadingEdit.setText(f"{voltage * 1e3:0.0f} mV")
                 req = pending_adc1_requests.pop(0)
-                req.set_result(voltage)
+                if not req.cancelled():
+                    req.set_result(voltage)
             else:
                 logger.warning("Unexpected MQTT message topic: %s", topic)
 
@@ -371,11 +376,12 @@ async def update_stabilizer(ui: UI,
         #
 
         while True:
-            await asyncio.wait([
+            pending_tasks = [
                 asyncio.create_task(t)
                 for t in [updated.wait(), adc1_requests.wait_for_new()]
-            ],
-                               return_when=asyncio.FIRST_COMPLETED)
+            ]
+
+            await asyncio.wait(pending_tasks, return_when=asyncio.FIRST_COMPLETED)
             for key in keys_to_write:
                 topic = settings_prefix + key
                 payload = json.dumps(read_ui(key)).encode("utf-8")
@@ -387,10 +393,15 @@ async def update_stabilizer(ui: UI,
             for req in adc1_requests.pop_requests():
                 pending_adc1_requests.append(req)
                 request_adc1_reading()
-
-    except Exception as e:
+    except BaseException as e:
         if isinstance(e, asyncio.CancelledError):
+            for t in pending_tasks:
+                t.cancel()
+            for t in pending_tasks:
+                with suppress(asyncio.CancelledError):
+                    await t
             return
+
         logger.exception("Failure in Stabilizer communication task")
         ui.aomLockGroup.setEnabled(False)
         ui.pztLockGroup.setEnabled(False)
