@@ -471,7 +471,10 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
             delta = await get_stable_freq_delta()
             logger.info("Laser frequency delta: %s MHz", delta / 1e6)
             if abs(delta) < MAX_RELOCK_ATTEMPT_DELTA:
-                step = RelockStep.try_lock if try_approximate else RelockStep.determine_resonance
+                if try_approximate:
+                    step = RelockStep.try_lock
+                else:
+                    step = RelockStep.determine_resonance
                 continue
             if abs(delta) < MAX_RESONATOR_TUNE_DELTA:
                 step = RelockStep.tune_resonator
