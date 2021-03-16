@@ -78,20 +78,21 @@ class MqttInterface:
             logger.debug("Ignoring unrelated topic: %s", topic)
             return 0
 
-        cd = properties.get("correlation_data", None)
-        if cd is None:
+        cd = properties.get("correlation_data", [])
+        if len(cd) != 1:
             logger.warning(
-                "Received response without correlation data (topic '%s', payload %s)",
+                "Received response without (valid) correlation data (topic '%s', payload %s)",
                 topic, payload)
             return 0
+        seq_id = cd[0]
 
-        if cd not in self._pending:
+        if seq_id not in self._pending:
             # This is fine if Stabilizer restarts, though.
             logger.warning("Received unexpected/late response for '%s' (id %s)", topic,
-                           cd)
+                           seq_id)
             return 0
 
-        result = self._pending.pop(cd)
+        result = self._pending.pop(seq_id)
         if not result.cancelled():
             try:
                 # Would like to json.loads() here, but the miniconf responses are
