@@ -435,7 +435,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
             continue
         if step == RelockStep.decide_next:
             delta = await get_stable_freq_delta()
-            logger.info("Laser frequency delta: %s MHz", delta / 1e6)
+            logger.info(f"Laser frequency delta to target: {delta / 1e6:0.1f} MHz")
             if abs(delta) < MAX_RELOCK_ATTEMPT_DELTA:
                 if try_approximate:
                     step = RelockStep.try_lock
@@ -487,7 +487,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                     break
                 step = -RESONATOR_TUNE_DAMPING * delta / RESONATOR_TUNE_SLOPE
                 new_tune = solstis.resonator_tune + step
-                logger.info("Setting resonator tune to %s", new_tune)
+                logger.info("Setting resonator tune to %s", f"{new_tune:0.3f}%")
                 await solstis.set_resonator_tune(new_tune)
             continue
         if step == RelockStep.determine_resonance:
@@ -516,7 +516,8 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
             await asyncio.sleep(0.1)
             transmission = await read_adc()
             if transmission < 0.2 * ui.lockDetectThresholdBox.value():
-                logger.info("Transmission immediately low; aborting lock attempt")
+                logger.info("Transmission immediately low (%s); aborting lock attempt",
+                            f"{transmission*1e3:0.1f} mV")
                 try_approximate = False
                 step = RelockStep.reset_lock
                 continue
@@ -533,8 +534,8 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                 transmission = await read_adc()
                 if transmission < 0.2 * ui.lockDetectThresholdBox.value():
                     logger.info(
-                        "Transmission low after enable PZT lock (%s s); "
-                        "aborting lock attempt", dt)
+                        "Transmission low (%s) %s after enabling PZT lock; aborting lock attempt",
+                        f"{transmission*1e3:0.1f} mV", f"{dt*1e3:0.0f} ms")
                     reset = True
                     break
             if reset:
