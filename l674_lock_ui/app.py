@@ -618,7 +618,7 @@ async def monitor_lock_state(ui: UI, adc1_interface: ADC1Interface, wand_host: s
         ui.enableRelockingBox.setChecked(False)
         ui.enableRelockingBox.setEnabled(False)
     else:
-        ui.enableRelockingBox.setChecked(False)
+        ui.enableRelockingBox.setChecked(True)
         ui.enableRelockingBox.setEnabled(True)
 
         async def wavemeter_loop():
