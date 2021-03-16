@@ -12,9 +12,9 @@ from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
 import sys
 import time
-import uuid
-from typing import Awaitable, Callable, List
+from typing import Awaitable, Callable, Optional
 
+from .mqtt import starts_with, MqttInterface
 from .solstis import Solstis
 from .ui_utils import link_slider_to_spinbox
 
@@ -141,40 +141,44 @@ class UI(QtWidgets.QMainWindow):
                      (self.slowIGainSlider, self.slowIGainBox)]:
             link_slider_to_spinbox(s, b)
 
-    def update_lock_state(self, status: LockState):
-        self.lock_state = status
+    def update_lock_state(self, state: LockState, adc1_voltage: float):
+        self.lock_state = state
         color = {
             LockState.out_of_lock: "red",
             LockState.relocking: "yellow",
             LockState.locked: "green",
             LockState.uninitialised: "grey"
-        }[status]
+        }[state]
         self.adc1ReadingEdit.setStyleSheet(f"QLineEdit {{ background-color: {color} }}")
+        if state == LockState.uninitialised:
+            self.adc1ReadingEdit.setText(f"<pending>")
+        else:
+            self.adc1ReadingEdit.setText(f"{adc1_voltage * 1e3:0.0f} mV")
 
 
-class ADC1ReadingQueue:
+class ADC1Interface:
+    """
+    Shim for getting ADC1 reading over MQTT; for the relock task to have something to
+    hold on to before the Stabilizer write task has finished initial bringup of the
+    MQTT connection. (Could potentially just use two MQTT connections instead, although
+    that seems a bit wasteful.)
+    """
     def __init__(self):
-        self._new = asyncio.Event()
-        self._queue: List[asyncio.Future] = []
+        self._interface_set = asyncio.Event()
+        self._interface: Optional[MqttInterface] = None
+
+    def set_interface(self, interface: MqttInterface) -> None:
+        self._interface = interface
+        self._interface_set.set()
 
     async def read_adc(self) -> float:
-        task = asyncio.Future()
-        self._queue.append(task)
-        self._new.set()
-        return await task
-
-    async def wait_for_new(self):
-        await self._new.wait()
-        self._new.clear()
-
-    def pop_requests(self) -> List[asyncio.Future]:
-        queue = self._queue
-        self._queue = []
-        return queue
+        await self._interface_set.wait()
+        # Argument irrelevant.
+        return float(await self._interface.request("read_adc1_filtered", 0))
 
 
 async def update_stabilizer(ui: UI,
-                            adc1_requests: ADC1ReadingQueue,
+                            adc1_interface: ADC1Interface,
                             root_topic: str,
                             broker_host: str,
                             broker_port: int = 1883):
@@ -223,7 +227,7 @@ async def update_stabilizer(ui: UI,
                 widget.setChecked(c)
                 one_checked |= c
             if not one_checked:
-                logger.warn("Unexpected value: '%s' (choices: '%s')", value, choices)
+                logger.warning("Unexpected value: '%s' (choices: '%s')", value, choices)
 
         return read, write
 
@@ -257,10 +261,6 @@ async def update_stabilizer(ui: UI,
         write_handler = cfg[1][1] if len(cfg) == 2 else write
         return write_handler(cfg[0], value)
 
-    # Keep track of newly spawned, pending tasks, just to avoid leaking tasks during
-    # shutdown.
-    pending_tasks = []
-
     try:
         client = MqttClient(client_id="")
         await client.connect(broker_host, port=broker_port, keepalive=10)
@@ -274,9 +274,9 @@ async def update_stabilizer(ui: UI,
         retained_settings = {}
 
         def collect_settings(_client, topic, value, _qos, _properties):
-            if len(topic) < len(settings_prefix) or topic[:(
-                    len(settings_prefix))] != settings_prefix:
-                logger.warn("Unexpected message topic: '%s'", topic)
+            if not starts_with(topic, settings_prefix):
+                logger.warning("Unexpected message topic: '%s'", topic)
+                return 0
             key = topic[len(settings_prefix):]
             retained_settings[key] = json.loads(value)
             return 0
@@ -311,13 +311,13 @@ async def update_stabilizer(ui: UI,
         #
 
         keys_to_write = set()
-        updated = asyncio.Event()
+        ui_updated = asyncio.Event()
         for key, cfg in settings_map.items():
             # Capture loop variable.
             def make_queue(key):
                 def queue(*args):
                     keys_to_write.add(key)
-                    updated.set()
+                    ui_updated.set()
 
                 return queue
 
@@ -342,66 +342,27 @@ async def update_stabilizer(ui: UI,
         ui.pztLockGroup.setEnabled(True)
 
         #
-        # Set up auto-reloading ADC1 querying.
+        # Relay user input to MQTT (interspersed with ADC1 update queries).
         #
 
-        adc1_request_topic = "dt/sinara/stabilizer/l674/read_adc1_filtered"
-        client_id = str(uuid.uuid4()).split("-")[0]
-        adc1_response_topic = f"dt/sinara/stabilizer/l674/response_{client_id}/adc1_filtered"
-        client.subscribe(adc1_response_topic)
-
-        pending_adc1_requests: List[asyncio.Future] = []
-
-        def handle_message(_client, topic, value, _qos, _properties):
-            if topic == adc1_response_topic:
-                voltage = float(value)
-                ui.adc1ReadingEdit.setText(f"{voltage * 1e3:0.0f} mV")
-                req = pending_adc1_requests.pop(0)
-                if not req.cancelled():
-                    req.set_result(voltage)
-            else:
-                logger.warning("Unexpected MQTT message topic: %s", topic)
-
-        client.on_message = handle_message
-
-        def request_adc1_reading():
-            client.publish(adc1_request_topic,
-                           b'',
-                           qos=0,
-                           retain=False,
-                           response_topic=adc1_response_topic)
-
-        #
-        # Relay user input to MQTT.
-        #
-
+        interface = MqttInterface(client, "dt/sinara/stabilizer/l674", timeout=10.0)
+        adc1_interface.set_interface(interface)
         while True:
-            pending_tasks = [
-                asyncio.create_task(t)
-                for t in [updated.wait(), adc1_requests.wait_for_new()]
-            ]
-
-            await asyncio.wait(pending_tasks, return_when=asyncio.FIRST_COMPLETED)
+            await ui_updated.wait()
             for key in keys_to_write:
-                topic = settings_prefix + key
-                payload = json.dumps(read_ui(key)).encode("utf-8")
-                client.publish(topic, payload, qos=0, retain=True)
-            # FIXME: Add response topic; complain if nothing/error returned.
-            keys_to_write.clear()
-            updated.clear()
-
-            for req in adc1_requests.pop_requests():
-                pending_adc1_requests.append(req)
-                request_adc1_reading()
+                # Write to the miniconf-provided topics, which currently returns a
+                # string message as a reply; should really be JSON/… instead, see
+                # quartiq/miniconf#32.
+                msg = await interface.request(f"settings/{key}",
+                                              read_ui(key),
+                                              retain=True)
+                if starts_with(msg, "Settings fail"):
+                    logger.warning("Stabilizer reported failure to write setting: '%s'",
+                                   msg)
+            ui_updated.clear()
     except BaseException as e:
         if isinstance(e, asyncio.CancelledError):
-            for t in pending_tasks:
-                t.cancel()
-            for t in pending_tasks:
-                with suppress(asyncio.CancelledError):
-                    await t
             return
-
         logger.exception("Failure in Stabilizer communication task")
         ui.aomLockGroup.setEnabled(False)
         ui.pztLockGroup.setEnabled(False)
@@ -424,7 +385,7 @@ class RelockStep(Enum):
     try_lock = "try_lock"
 
 
-async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
+async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                        get_freq: Callable[[], Awaitable[float]],
                        approximate_target_freq: float, solstis_host: str):
     logger.info(
@@ -448,6 +409,11 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 if abs(delta - previous_delta) < tolerance:
                     return delta
             previous_delta = delta
+
+    async def read_adc():
+        voltage = await adc1_interface.read_adc()
+        ui.update_lock_state(LockState.relocking, voltage)
+        return voltage
 
     solstis = None
 
@@ -539,7 +505,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
             for tune in tunes:
                 await solstis.set_resonator_tune(tune, blind=True)
                 await asyncio.sleep(0.01)
-                adc1s.append(await adc1_request_queue.read_adc())
+                adc1s.append(await read_adc())
             await solstis.set_resonator_tune(tunes[np.argmax(adc1s)])
             step = RelockStep.try_lock
             continue
@@ -548,7 +514,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
             # lower transmission than fully locked threshold, though).
             ui.enableAOMLockBox.setChecked(True)
             await asyncio.sleep(0.1)
-            transmission = await adc1_request_queue.read_adc()
+            transmission = await read_adc()
             if transmission < 0.2 * ui.lockDetectThresholdBox.value():
                 logger.info("Transmission immediately low; aborting lock attempt")
                 try_approximate = False
@@ -564,7 +530,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 dt = time.monotonic() - start
                 if dt > 1.0:
                     break
-                transmission = await adc1_request_queue.read_adc()
+                transmission = await read_adc()
                 if transmission < 0.2 * ui.lockDetectThresholdBox.value():
                     logger.info(
                         "Transmission low after enable PZT lock (%s s); "
@@ -576,7 +542,7 @@ async def relock_laser(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                 continue
 
             # Finally, check against original criterion.
-            transmission = await adc1_request_queue.read_adc()
+            transmission = await read_adc()
             if transmission < ui.lockDetectThresholdBox.value():
                 logger.info("Transmission not above threshold in the end")
                 step = RelockStep.reset_lock
@@ -633,9 +599,8 @@ class WavemeterInterface:
                 self._client = None
 
 
-async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
-                             wand_host: str, wand_port: int, wand_channel: str,
-                             solstis_host: str):
+async def monitor_lock_state(ui: UI, adc1_interface: ADC1Interface, wand_host: str,
+                             wand_port: int, wand_channel: str, solstis_host: str):
     # While not relocking, we regularly poll the wavemeter and save the last reading,
     # to be "graduated" to last_locked_freq_reading once we know that the laser was
     # in lock for it.
@@ -652,7 +617,7 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
         ui.enableRelockingBox.setChecked(False)
         ui.enableRelockingBox.setEnabled(False)
     else:
-        ui.enableRelockingBox.setChecked(True)
+        ui.enableRelockingBox.setChecked(False)
         ui.enableRelockingBox.setEnabled(True)
 
         async def wavemeter_loop():
@@ -687,7 +652,7 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
     try:
         while True:
             await asyncio.sleep(IDLE_ADC1_POLL_INTERVAL)
-            reading = await adc1_request_queue.read_adc()
+            reading = await adc1_interface.read_adc()
             is_locked = reading >= ui.lockDetectThresholdBox.value()
             if is_locked:
                 if last_freq_reading is not None:
@@ -705,9 +670,9 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                             "No good frequency reference reading available, "
                             "defaulting to %s MHz", last_locked_freq_reading / 1e6)
                     relock_task = asyncio.create_task(
-                        relock_laser(ui, adc1_request_queue, wand.get_freq_offset,
+                        relock_laser(ui, adc1_interface, wand.get_freq_offset,
                                      last_locked_freq_reading, solstis_host))
-                    ui.update_lock_state(LockState.relocking)
+                    ui.update_lock_state(LockState.relocking, reading)
                     try:
                         await relock_task
                     except asyncio.CancelledError:
@@ -718,10 +683,10 @@ async def monitor_lock_state(ui: UI, adc1_request_queue: ADC1ReadingQueue,
                     continue
 
             ui.update_lock_state(
-                LockState.locked if is_locked else LockState.out_of_lock)
+                LockState.locked if is_locked else LockState.out_of_lock, reading)
     except Exception:
         logger.exception("Unexpected relocking failure")
-        ui.update_lock_state(LockState.uninitialised)
+        ui.update_lock_state(LockState.uninitialised, None)
 
 
 class UIStatePublisher:
@@ -757,16 +722,16 @@ def main():
         ui = UI()
         ui.show()
 
-        adc1_request_queue = ADC1ReadingQueue()
+        adc1_interface = ADC1Interface()
 
         ui.comm_status_label.setText(
             f"Connecting to MQTT broker at {args.stabilizer_broker}…")
         stabilizer_task = asyncio.create_task(
-            update_stabilizer(ui, adc1_request_queue, args.stabilizer_topic,
+            update_stabilizer(ui, adc1_interface, args.stabilizer_topic,
                               args.stabilizer_broker))
 
         monitor_lock_task = asyncio.create_task(
-            monitor_lock_state(ui, adc1_request_queue, args.wand_host, args.wand_port,
+            monitor_lock_state(ui, adc1_interface, args.wand_host, args.wand_port,
                                args.wand_channel, args.solstis_host))
 
         server = pc_rpc.Server({"l674_lock_ui": UIStatePublisher(ui)},
