@@ -10,11 +10,24 @@ logger = logging.getLogger(__name__)
 
 
 class Solstis:
+    """
+    Interface to the main control page of the ICE-Bloc controller for a M-Squared
+    SolsTiS laser.
+
+    This is much more convoluted than it should be, as the only interface available to
+    clients by default appears to be the WebSockets interface used by the web UI, which
+    is undocumented, and doesn't appear to offer command acknowledgements.
+
+    The only way to get the etalon/resonator tune status appears to be to re-open the
+    connection, where the ICE-Bloc sends a ``page_start`` message, so instances are
+    expected to be somewhat short-lived.
+
+    Currently, the regular status updates sent by the controller (the left column in
+    the web UI) are just silently ignored; they could be exposed as callbacks in the
+    future.
+    """
     @classmethod
     async def new(cls, server, port=8088, timeout=10) -> Solstis:
-        """
-        Intended to be short-lived.
-        """
         # Connect to control page URL to get the page_start message.
         uri = f"ws://{server}:{port}/control.htm"
 
@@ -85,14 +98,23 @@ class Solstis:
         return False
 
     async def _send(self, msg, blind=False):
+        # Drain all the background updates from the queue so we can wait for the next
+        # below for synchronisation.
         try:
             while True:
                 self._receive_queue.get_nowait()
         except asyncio.QueueEmpty:
             pass
+
+        # The JSON implementation on ICE-Bloc can't handle whitespace in the JSON
+        # messages, so explicitly specify separators without it. Without this, e.g.
+        # job_set_etalon_tuning will be silently ignored.
         await self._socket.send(json.dumps(msg, separators=(",", ":")))
+
         if blind:
             return
+
+        # Wait for next control_page_result as a proxy for signal command completion.
         while (not await self._process_next()):
             pass
 
@@ -143,6 +165,8 @@ class Solstis:
 
 
 async def main():
+    # Small usage example.
+
     async def connect():
         solstis = await Solstis.new("localhost")
         print("Current etalon tune:", solstis.etalon_tune)
