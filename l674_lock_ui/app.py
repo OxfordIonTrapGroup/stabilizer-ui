@@ -60,7 +60,7 @@ RESONATOR_TUNE_DAMPING = 1.0
 #: to use for determining point at which to attempt locking. Depends on the wavemeter
 #: accuracy, plus some extra slack to deal with resonator drifts during the currently
 #: trivial scan algorithm.
-RESONANCE_SEARCH_RADIUS = 20e6
+RESONANCE_SEARCH_RADIUS = 25e6
 
 #: Number of scan points to use when determining resonator lock point. Values too small
 #: would risk missing the peak, values too large would make laser drifts affect the scan
