@@ -494,7 +494,13 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                 step = -RESONATOR_TUNE_DAMPING * delta / RESONATOR_TUNE_SLOPE
                 new_tune = solstis.resonator_tune + step
                 logger.info("Setting resonator tune to %s", f"{new_tune:0.3f}%")
-                await solstis.set_resonator_tune(new_tune)
+                try:
+                    await solstis.set_resonator_tune(new_tune)
+                except ValueError as e:
+                    logger.info(
+                        "Reached invalid resonator tune; restarting from etalon search")
+                    step = RelockStep.tune_etalon
+                    break
             continue
         if step == RelockStep.determine_resonance:
             await ensure_solstis()
