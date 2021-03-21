@@ -85,6 +85,10 @@ IDLE_ADC1_POLL_INTERVAL = 0.2
 #: lost connections while auto-relocking in a timely fashion.
 WAVEMETER_TIMEOUT = 10.0
 
+#: Number of attempts to lock at target wavemeter reading before engaging resonance
+#: search.
+LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH = 5
+
 
 @unique
 class LockState(Enum):
@@ -425,7 +429,8 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
 
     # Finite state machine, exiting only through try_lock success, or cancellation.
     step = RelockStep.reset_lock
-    try_approximate = True
+
+    lock_attempts_left = LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH
     while True:
         logger.info("Current step: %s", step)
         if step == RelockStep.reset_lock:
@@ -437,7 +442,8 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
             delta = await get_stable_freq_delta()
             logger.info(f"Laser frequency delta to target: {delta / 1e6:0.1f} MHz")
             if abs(delta) < MAX_RELOCK_ATTEMPT_DELTA:
-                if try_approximate:
+                if lock_attempts_left > 0:
+                    lock_attempts_left -= 1
                     step = RelockStep.try_lock
                 else:
                     step = RelockStep.determine_resonance
@@ -507,6 +513,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                 await asyncio.sleep(0.01)
                 adc1s.append(await read_adc())
             await solstis.set_resonator_tune(tunes[np.argmax(adc1s)])
+            lock_attempts_left = LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH
             step = RelockStep.try_lock
             continue
         if step == RelockStep.try_lock:
