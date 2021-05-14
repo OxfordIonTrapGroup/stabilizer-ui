@@ -65,7 +65,7 @@ RESONANCE_SEARCH_RADIUS = 25e6
 #: Number of scan points to use when determining resonator lock point. Values too small
 #: would risk missing the peak, values too large would make laser drifts affect the scan
 #: too much.
-RESONANCE_SEARCH_NUM_POINTS = 300
+RESONANCE_SEARCH_NUM_POINTS = 100
 
 #: Fallback frequency target when a wavemeter reading with the laser in lock has not
 #: been observed yet.
@@ -436,6 +436,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
         if step == RelockStep.reset_lock:
             ui.enableAOMLockBox.setChecked(False)
             ui.disablePztButton.setChecked(True)
+            await asyncio.sleep(0.1)
             step = RelockStep.decide_next
             continue
         if step == RelockStep.decide_next:
@@ -516,7 +517,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
             adc1s = []
             for tune in tunes:
                 await solstis.set_resonator_tune(tune, blind=True)
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.005)
                 adc1s.append(await read_adc())
             await solstis.set_resonator_tune(tunes[np.argmax(adc1s)])
             lock_attempts_left = LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH
@@ -526,7 +527,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
             # Enable fast lock, and see if we got some transmission (allow considerably
             # lower transmission than fully locked threshold, though).
             ui.enableAOMLockBox.setChecked(True)
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.2)
             transmission = await read_adc()
             if transmission < 0.2 * ui.lockDetectThresholdBox.value():
                 logger.info("Transmission immediately low (%s); aborting lock attempt",
@@ -678,6 +679,7 @@ async def monitor_lock_state(ui: UI, adc1_interface: ADC1Interface, wand_host: s
 
                 if ui.enableRelockingBox.isChecked():
                     assert relock_task is None
+                    logger.info("Cavity transmission low (%s mV), starting relocking task.", reading * 1e3)
                     if last_locked_freq_reading is None:
                         last_locked_freq_reading = DEFAULT_FREQ_TARGET
                         logger.warning(
