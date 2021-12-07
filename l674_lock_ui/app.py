@@ -473,7 +473,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                     break
                 diff = -ETALON_TUNE_DAMPING * delta / ETALON_TUNE_SLOPE
                 new_tune = solstis.etalon_tune + diff
-                logger.info("Setting etalon tune to %s", new_tune)
+                logger.info("Setting etalon tune to %s", f"{new_tune:0.3f}%")
                 await solstis.set_etalon_tune(new_tune)
             await solstis.set_etalon_locked(True)
             # Currently don't have resonator tune read-back after lock is engaged, so
