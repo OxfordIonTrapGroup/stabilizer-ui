@@ -69,7 +69,7 @@ RESONANCE_SEARCH_NUM_POINTS = 100
 
 #: Fallback frequency target when a wavemeter reading with the laser in lock has not
 #: been observed yet.
-DEFAULT_FREQ_TARGET = 145e6
+DEFAULT_FREQ_TARGET = 150e6
 
 #: Interval to request wavemeter frequency readings with while not relocking.
 #: Should be small enough to track (thermal) drifts in the wavemeter calibration.
