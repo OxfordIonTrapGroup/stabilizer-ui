@@ -84,7 +84,10 @@ class Solstis:
             # control_page_result has a different set of data.
             self._etalon_tune = msg["etalon_tune"]
             self._resonator_tune = msg["resonator_tune"]
-            self._etalon_locked = msg["etalon_lock_status"] == 1
+            # Etalon status values seem to be 0 for unlocked, 1 for locked, and 2 for
+            # lock failed. The latter still requires the lock to be explicitly disabled
+            # before changes to the etalon tune, so consider it locked for our purposes.
+            self._etalon_locked = msg["etalon_lock_status"] != 0
             self._initialised = True
             return False
 
