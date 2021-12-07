@@ -7,7 +7,7 @@ import json
 import logging
 import numpy as np
 import os
-from PyQt5 import QtWidgets, uic
+from PyQt5 import QtGui, QtWidgets, uic
 from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
 import sys
@@ -109,6 +109,7 @@ class TextEditLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord):
         self._text += self.format(record) + "<br/>"
         self.text_edit.setText(self._text)
+        self.text_edit.moveCursor(QtGui.QTextCursor.End)
 
 
 class UI(QtWidgets.QMainWindow):
