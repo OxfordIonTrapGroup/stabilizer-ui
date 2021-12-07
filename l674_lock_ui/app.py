@@ -347,14 +347,22 @@ async def update_stabilizer(ui: UI,
         ui.pztLockGroup.setEnabled(True)
 
         #
-        # Relay user input to MQTT (interspersed with ADC1 update queries).
+        # Relay user input to MQTT.
         #
 
         interface = MqttInterface(client, "dt/sinara/stabilizer/l674", timeout=10.0)
+
+        # Allow relock task to directly request ADC1 updates.
         adc1_interface.set_interface(interface)
+
         while True:
             await ui_updated.wait()
-            for key in keys_to_write:
+            logger.info("Woke for queued UI requests: %s", keys_to_write)
+            while keys_to_write:
+                # Use while/pop instead of for loop, as UI task might push extra
+                # elements while we are executing requests.
+                key = keys_to_write.pop()
+
                 # Write to the miniconf-provided topics, which currently returns a
                 # string message as a reply; should really be JSON/… instead, see
                 # quartiq/miniconf#32.
