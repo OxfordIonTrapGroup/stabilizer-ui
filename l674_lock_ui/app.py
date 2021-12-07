@@ -357,7 +357,6 @@ async def update_stabilizer(ui: UI,
 
         while True:
             await ui_updated.wait()
-            logger.info("Woke for queued UI requests: %s", keys_to_write)
             while keys_to_write:
                 # Use while/pop instead of for loop, as UI task might push extra
                 # elements while we are executing requests.
