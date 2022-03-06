@@ -9,6 +9,10 @@ import websockets
 logger = logging.getLogger(__name__)
 
 
+class SolstisClosedError(Exception):
+    pass
+
+
 class Solstis:
     """
     Interface to the main control page of the ICE-Bloc controller for a M-Squared
@@ -60,6 +64,8 @@ class Solstis:
         self._receive_task = receive_task
 
     async def close(self):
+        if not self._initialised:
+            return
         await self._socket.close()
         try:
             self._receive_task.cancel()
@@ -69,8 +75,13 @@ class Solstis:
         self._initialised = False
 
     async def _process_next(self):
-        raw_msg = await asyncio.wait_for(self._receive_queue.get(),
-                                         timeout=self._timeout)
+        try:
+            raw_msg = await asyncio.wait_for(self._receive_queue.get(),
+                                             timeout=self._timeout)
+        except Exception as e:
+            await self.close()
+            raise SolstisClosedError() from e
+
         try:
             msg = json.loads(raw_msg)
         except json.JSONDecodeError:
