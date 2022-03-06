@@ -479,7 +479,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                 step = RelockStep.decide_next
             except SolstisClosedError:
                 logger.exception("Solstis failed during tune_etalon step", 
-                    exc_info=True, stack_info=True)
+                    exc_info=True)
             # Currently don't have resonator tune read-back after lock is engaged, so
             # reopen connection completely.
             await solstis.close()
@@ -516,7 +516,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                         break
             except SolstisClosedError:
                 logger.exception("Solstis failed during tune_resonator step", 
-                    exc_info=True, stack_info=True)
+                    exc_info=True)
                 await solstis.close()
                 solstis = None
                 step = RelockStep.reset_lock
@@ -543,7 +543,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                 step = RelockStep.try_lock
             except SolstisClosedError:
                 logger.exception("Solstis failed during determine_resonance step", 
-                    exc_info=True, stack_info=True)
+                    exc_info=True)
                 await solstis.close()
                 solstis = None
                 step = RelockStep.reset_lock

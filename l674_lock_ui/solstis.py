@@ -10,6 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 class SolstisClosedError(Exception):
+    """Raised when the socket was closed after a receive timeout
+
+    The ``Solstis`` raising this exception must be reinstantiated
+    in order to try to reconnect.
+    """
     pass
 
 
@@ -41,10 +46,13 @@ class Solstis:
         logger.info("Connected to ICE-Bloc.")
 
         receive_queue = asyncio.Queue()
-
         async def receive_loop():
-            async for message in socket:
-                await receive_queue.put(message)
+            try:
+                async for message in socket:
+                    await receive_queue.put(message)
+            except:
+                # Prevent task from raising. The receive timeout will capture it.
+                logger.exception("Solstis receive_loop stopped", exc_info=True)
 
         receive_task = asyncio.create_task(receive_loop())
 
