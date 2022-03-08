@@ -9,13 +9,35 @@ import websockets
 logger = logging.getLogger(__name__)
 
 
-class SolstisClosedError(Exception):
-    """Raised when the socket was closed after a receive timeout
-
-    The ``Solstis`` raising this exception must be reinstantiated
-    in order to try to reconnect.
+class EnsureSolstis:
     """
-    pass
+    Context manager ensuring a connection to the interface is established and exceptions
+    are logged only.
+    """
+    def __init__(self, *args, **kwargs):
+        self._new_args = args
+        self._new_kwargs = kwargs
+        self.solstis = None
+
+    async def __aenter__(self):
+        while (not self.solstis) or (not self.solstis._initialised):
+            try:
+                self.solstis = await Solstis.new(*self._new_args, **self._new_kwargs)
+            except Exception:
+                logger.exception("Failed to connect to Solstis", exc_info=True)
+                await asyncio.sleep(1)
+        return self.solstis
+
+    async def __aexit__(self, *exc_info):
+        if exc_info[0]:
+            # If an exception occured, log it and close the socket.
+            logger.exception("Solstis failed", exc_info=tuple(exc_info))
+            if self.solstis:
+                await self.solstis.close()
+            self.solstis = None
+            # Suppress re-raising.
+            return True
+        return None
 
 
 class Solstis:
