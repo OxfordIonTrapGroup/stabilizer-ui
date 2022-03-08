@@ -15,7 +15,7 @@ import time
 from typing import Awaitable, Callable, Optional
 
 from .mqtt import starts_with, MqttInterface
-from .solstis import Solstis, SolstisClosedError
+from .solstis import EnsureSolstis
 from .ui_utils import link_slider_to_spinbox
 
 logger = logging.getLogger(__name__)
@@ -427,13 +427,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
         ui.update_lock_state(LockState.relocking, voltage)
         return voltage
 
-    solstis = None
-
-    async def ensure_solstis():
-        nonlocal solstis
-        if solstis is None:
-            solstis = await Solstis.new(solstis_host)
-        return solstis
+    ensure_solstis = EnsureSolstis(solstis_host)
 
     # Finite state machine, exiting only through try_lock success, or cancellation.
     step = RelockStep.reset_lock
@@ -463,8 +457,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
             step = RelockStep.tune_etalon
             continue
         if step == RelockStep.tune_etalon:
-            await ensure_solstis()
-            try:
+            async with ensure_solstis as solstis:
                 if solstis.etalon_locked:
                     await solstis.set_etalon_locked(False)
                 while True:
@@ -477,21 +470,16 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                     await solstis.set_etalon_tune(new_tune)
                 await solstis.set_etalon_locked(True)
                 step = RelockStep.decide_next
-            except SolstisClosedError:
-                logger.exception("Solstis failed during tune_etalon step", 
-                    exc_info=True)
-            # Currently don't have resonator tune read-back after lock is engaged, so
-            # reopen connection completely.
-            await solstis.close()
-            solstis = None
+                # Currently don't have resonator tune read-back after lock is engaged, so
+                # reopen connection completely.
+                await solstis.close()
             continue
         if step == RelockStep.tune_resonator:
-            await ensure_solstis()
-            if not solstis.etalon_locked:
-                # User unlocked etalon, frequency just happened to be right.
-                step = RelockStep.tune_etalon
-                continue
-            try:
+            async with ensure_solstis as solstis:
+                if not solstis.etalon_locked:
+                    # User unlocked etalon, frequency just happened to be right.
+                    step = RelockStep.tune_etalon
+                    continue
                 while True:
                     delta = await get_stable_freq_delta()
                     if abs(delta) < MAX_RELOCK_ATTEMPT_DELTA:
@@ -514,25 +502,18 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                             "Reached invalid resonator tune; restarting from etalon search")
                         step = RelockStep.tune_etalon
                         break
-            except SolstisClosedError:
-                logger.exception("Solstis failed during tune_resonator step", 
-                    exc_info=True)
-                await solstis.close()
-                solstis = None
-                step = RelockStep.reset_lock
             continue
         if step == RelockStep.determine_resonance:
-            await ensure_solstis()
-            if not solstis.etalon_locked:
-                # User unlocked etalon, frequency just happened to be right.
-                step = RelockStep.tune_etalon
-                continue
+            async with ensure_solstis as solstis:
+                if not solstis.etalon_locked:
+                    # User unlocked etalon, frequency just happened to be right.
+                    step = RelockStep.tune_etalon
+                    continue
 
-            tune_centre = solstis.resonator_tune
-            radius = RESONANCE_SEARCH_RADIUS / RESONATOR_TUNE_SLOPE
-            tunes = np.linspace(tune_centre - radius, tune_centre + radius,
-                                RESONANCE_SEARCH_NUM_POINTS)[::-1]
-            try:
+                tune_centre = solstis.resonator_tune
+                radius = RESONANCE_SEARCH_RADIUS / RESONATOR_TUNE_SLOPE
+                tunes = np.linspace(tune_centre - radius, tune_centre + radius,
+                                    RESONANCE_SEARCH_NUM_POINTS)[::-1]
                 adc1s = []
                 for tune in tunes:
                     await solstis.set_resonator_tune(tune, blind=True)
@@ -541,12 +522,6 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
                 await solstis.set_resonator_tune(tunes[np.argmax(adc1s)])
                 lock_attempts_left = LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH
                 step = RelockStep.try_lock
-            except SolstisClosedError:
-                logger.exception("Solstis failed during determine_resonance step", 
-                    exc_info=True)
-                await solstis.close()
-                solstis = None
-                step = RelockStep.reset_lock
             continue
         if step == RelockStep.try_lock:
             # Enable fast lock, and see if we got some transmission (allow considerably
