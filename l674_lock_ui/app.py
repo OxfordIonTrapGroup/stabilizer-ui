@@ -651,6 +651,7 @@ async def monitor_lock_state(ui: UI, adc1_interface: ADC1Interface, wand_host: s
     # operation even if the wavemeter is offline).
     wand = WavemeterInterface(wand_host, wand_port, wand_channel, WAVEMETER_TIMEOUT)
     await wand.try_connect()
+    wavemeter_task = None
     if not wand.is_connected():
         logger.warning("Wavemeter connection not established; "
                        "automatic relocking not available")
@@ -668,8 +669,7 @@ async def monitor_lock_state(ui: UI, adc1_interface: ADC1Interface, wand_host: s
                 if status == 0:
                     last_freq_reading = freq
 
-        # TODO: Cancel this task on shutdown too.
-        asyncio.create_task(wavemeter_loop())
+        wavemeter_task = asyncio.create_task(wavemeter_loop())
 
     relock_task = None
 
@@ -728,6 +728,13 @@ async def monitor_lock_state(ui: UI, adc1_interface: ADC1Interface, wand_host: s
     except Exception:
         logger.exception("Unexpected relocking failure")
         ui.update_lock_state(LockState.uninitialised, None)
+    finally:
+        if relock_task:
+            relock_task.cancel()
+            await relock_task
+        if wavemeter_task:
+            wavemeter_task.cancel()
+            await wavemeter_task
 
 
 class UIStatePublisher:
