@@ -50,6 +50,8 @@ class Solstis:
             try:
                 async for message in socket:
                     await receive_queue.put(message)
+            except asyncio.CancelledError:
+                pass
             except:
                 # Prevent task from raising. The receive timeout will capture it.
                 logger.exception("Solstis receive_loop stopped", exc_info=True)
@@ -72,29 +74,14 @@ class Solstis:
         self._receive_task = receive_task
 
     async def close(self):
-        if not self._initialised:
-            return
+        self._receive_task.cancel()
+        await self._receive_task
         await self._socket.close()
-        try:
-            self._receive_task.cancel()
-            await self._receive_task
-        except (asyncio.CancelledError, websockets.exceptions.ConnectionClosedError):
-            pass
         self._initialised = False
 
     async def _process_next(self):
-        try:
-            raw_msg = await asyncio.wait_for(self._receive_queue.get(),
-                                             timeout=self._timeout)
-        except Exception as e:
-            await self.close()
-            raise SolstisClosedError() from e
-
-        try:
-            msg = json.loads(raw_msg)
-        except json.JSONDecodeError:
-            logger.warning("Error decoding JSON from ICE-Bloc: %s", raw_msg)
-            return False
+        raw = await asyncio.wait_for(self._receive_queue.get(), timeout=self._timeout)
+        msg = json.loads(raw)
 
         typ = msg["message_type"]
         if typ == "page_start":
