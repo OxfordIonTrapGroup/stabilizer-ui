@@ -23,6 +23,8 @@ class EnsureSolstis:
         while (not self.solstis) or (not self.solstis._initialised):
             try:
                 self.solstis = await Solstis.new(*self._new_args, **self._new_kwargs)
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 logger.exception("Failed to connect to Solstis", exc_info=True)
                 await asyncio.sleep(1)
@@ -35,9 +37,9 @@ class EnsureSolstis:
             if self.solstis:
                 await self.solstis.close()
             self.solstis = None
-            # Suppress re-raising.
-            return True
-        return None
+            if exc_info[0] is not asyncio.CancelledError:
+                # Suppress re-raising.
+                return True
 
 
 class Solstis:
