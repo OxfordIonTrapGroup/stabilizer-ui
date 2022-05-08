@@ -69,11 +69,11 @@ class Solstis:
         socket = await websockets.connect(uri, ping_interval=None)
         logger.info("Connected to ICE-Bloc.")
 
-        receive_queue = asyncio.Queue()
+        receive_queue = asyncio.Queue(maxsize=512)
         async def receive_loop():
             try:
                 async for message in socket:
-                    await receive_queue.put(message)
+                    receive_queue.put_nowait(message)
             except asyncio.CancelledError:
                 pass
             except:

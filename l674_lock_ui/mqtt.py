@@ -25,11 +25,12 @@ class MqttInterface:
     A timeout is also applied to every request (which is necessary for robustness, as
     Stabilizer only supports QoS 0 for now).
     """
-    def __init__(self, client: Client, topic_base: str, timeout: float):
+    def __init__(self, client: Client, topic_base: str, timeout: float, maxsize: int = 512):
         self._client = client
         self._topic_base = topic_base
         self._pending = {}
         self._timeout = timeout
+        self._maxsize = maxsize
 
         #: Use incrementing sequence id as correlation data to map responses to requests
         #: (together with client id).
@@ -44,6 +45,11 @@ class MqttInterface:
         self._client.on_message = self._on_message
 
     async def request(self, topic: str, argument: Any, retain: bool = False):
+        if len(self._pending) > self._maxsize:
+            # By construction, `correlation_data` should always be removed from `_pending`
+            # either by `_on_message()` or after `_timeout`. If something goes wrong, however
+            # the dictionary could grow indefinitely.
+            raise RuntimeError("Too many unhandled requests")
         result = asyncio.Future()
         correlation_data = _int_to_bytes(self._next_seq_id)
 
