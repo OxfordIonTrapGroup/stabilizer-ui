@@ -350,7 +350,7 @@ async def update_stabilizer(ui: UI,
         # Relay user input to MQTT.
         #
 
-        interface = MqttInterface(client, "dt/sinara/stabilizer/l674", timeout=10.0)
+        interface = MqttInterface(client, root_topic, timeout=10.0)
 
         # Allow relock task to directly request ADC1 updates.
         adc1_interface.set_interface(interface)
@@ -427,145 +427,150 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
         ui.update_lock_state(LockState.relocking, voltage)
         return voltage
 
-    ensure_solstis = EnsureSolstis(solstis_host)
+    async def finite_state_machine(ensure_solstis):
+        # Finite state machine, exiting only through try_lock success, or cancellation.
+        step = RelockStep.reset_lock
 
-    # Finite state machine, exiting only through try_lock success, or cancellation.
-    step = RelockStep.reset_lock
-
-    lock_attempts_left = LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH
-    while True:
-        logger.info("Current step: %s", step)
-        if step == RelockStep.reset_lock:
-            ui.enableAOMLockBox.setChecked(False)
-            ui.disablePztButton.setChecked(True)
-            await asyncio.sleep(0.1)
-            step = RelockStep.decide_next
-            continue
-        if step == RelockStep.decide_next:
-            delta = await get_stable_freq_delta()
-            logger.info(f"Laser frequency delta to target: {delta / 1e6:0.1f} MHz")
-            if abs(delta) < MAX_RELOCK_ATTEMPT_DELTA:
-                if lock_attempts_left > 0:
-                    lock_attempts_left -= 1
-                    step = RelockStep.try_lock
-                else:
-                    step = RelockStep.determine_resonance
-                continue
-            if abs(delta) < MAX_RESONATOR_TUNE_DELTA:
-                step = RelockStep.tune_resonator
-                continue
-            step = RelockStep.tune_etalon
-            continue
-        if step == RelockStep.tune_etalon:
-            async with ensure_solstis as solstis:
-                if solstis.etalon_locked:
-                    await solstis.set_etalon_locked(False)
-                while True:
-                    delta = await get_stable_freq_delta(ETALON_TUNE_READING_TOLERANCE)
-                    if abs(delta) < MAX_RESONATOR_TUNE_DELTA:
-                        break
-                    diff = -ETALON_TUNE_DAMPING * delta / ETALON_TUNE_SLOPE
-                    new_tune = solstis.etalon_tune + diff
-                    logger.info("Setting etalon tune to %s", f"{new_tune:0.3f}%")
-                    await solstis.set_etalon_tune(new_tune)
-                await solstis.set_etalon_locked(True)
+        lock_attempts_left = LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH
+        while True:
+            logger.info("Current step: %s", step)
+            if step == RelockStep.reset_lock:
+                ui.enableAOMLockBox.setChecked(False)
+                ui.disablePztButton.setChecked(True)
+                await asyncio.sleep(0.1)
                 step = RelockStep.decide_next
-                # Currently don't have resonator tune read-back after lock is engaged, so
-                # reopen connection completely.
-                await solstis.close()
-            continue
-        if step == RelockStep.tune_resonator:
-            async with ensure_solstis as solstis:
-                if not solstis.etalon_locked:
-                    # User unlocked etalon, frequency just happened to be right.
-                    step = RelockStep.tune_etalon
-                    continue
-                while True:
-                    delta = await get_stable_freq_delta()
-                    if abs(delta) < MAX_RELOCK_ATTEMPT_DELTA:
-                        step = RelockStep.decide_next
-                        break
-                    if abs(delta) > MAX_RESONATOR_TUNE_DELTA:
-                        # Etalon lock jumped/…
-                        logger.info(
-                            "Large frequency delta encountered during "
-                            "resonator tuning: %s MHz", delta / 1e6)
-                        step = RelockStep.tune_etalon
-                        break
-                    tune_step = -RESONATOR_TUNE_DAMPING * delta / RESONATOR_TUNE_SLOPE
-                    new_tune = solstis.resonator_tune + tune_step
-                    logger.info("Setting resonator tune to %s", f"{new_tune:0.3f}%")
-                    try:
-                        await solstis.set_resonator_tune(new_tune)
-                    except ValueError as e:
-                        logger.info(
-                            "Reached invalid resonator tune; restarting from etalon search")
-                        step = RelockStep.tune_etalon
-                        break
-            continue
-        if step == RelockStep.determine_resonance:
-            async with ensure_solstis as solstis:
-                if not solstis.etalon_locked:
-                    # User unlocked etalon, frequency just happened to be right.
-                    step = RelockStep.tune_etalon
-                    continue
-
-                tune_centre = solstis.resonator_tune
-                radius = RESONANCE_SEARCH_RADIUS / RESONATOR_TUNE_SLOPE
-                tunes = np.linspace(tune_centre - radius, tune_centre + radius,
-                                    RESONANCE_SEARCH_NUM_POINTS)[::-1]
-                adc1s = []
-                for tune in tunes:
-                    await solstis.set_resonator_tune(tune, blind=True)
-                    await asyncio.sleep(0.005)
-                    adc1s.append(await read_adc())
-                await solstis.set_resonator_tune(tunes[np.argmax(adc1s)])
-                lock_attempts_left = LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH
-                step = RelockStep.try_lock
-            continue
-        if step == RelockStep.try_lock:
-            # Enable fast lock, and see if we got some transmission (allow considerably
-            # lower transmission than fully locked threshold, though).
-            ui.enableAOMLockBox.setChecked(True)
-            await asyncio.sleep(0.2)
-            transmission = await read_adc()
-            if transmission < 0.2 * ui.lockDetectThresholdBox.value():
-                logger.info("Transmission immediately low (%s); aborting lock attempt",
-                            f"{transmission*1e3:0.1f} mV")
-                try_approximate = False
-                step = RelockStep.reset_lock
                 continue
+            if step == RelockStep.decide_next:
+                delta = await get_stable_freq_delta()
+                logger.info(f"Laser frequency delta to target: {delta / 1e6:0.1f} MHz")
+                if abs(delta) < MAX_RELOCK_ATTEMPT_DELTA:
+                    if lock_attempts_left > 0:
+                        lock_attempts_left -= 1
+                        step = RelockStep.try_lock
+                    else:
+                        step = RelockStep.determine_resonance
+                    continue
+                if abs(delta) < MAX_RESONATOR_TUNE_DELTA:
+                    step = RelockStep.tune_resonator
+                    continue
+                step = RelockStep.tune_etalon
+                continue
+            if step == RelockStep.tune_etalon:
+                async with ensure_solstis as solstis:
+                    if solstis.etalon_locked:
+                        await solstis.set_etalon_locked(False)
+                    while True:
+                        delta = await get_stable_freq_delta(ETALON_TUNE_READING_TOLERANCE)
+                        if abs(delta) < MAX_RESONATOR_TUNE_DELTA:
+                            break
+                        diff = -ETALON_TUNE_DAMPING * delta / ETALON_TUNE_SLOPE
+                        new_tune = solstis.etalon_tune + diff
+                        logger.info("Setting etalon tune to %s", f"{new_tune:0.3f}%")
+                        await solstis.set_etalon_tune(new_tune)
+                    await solstis.set_etalon_locked(True)
+                    step = RelockStep.decide_next
+                    # Currently don't have resonator tune read-back after lock is engaged, so
+                    # reopen connection completely.
+                    await solstis.close()
+                continue
+            if step == RelockStep.tune_resonator:
+                async with ensure_solstis as solstis:
+                    if not solstis.etalon_locked:
+                        # User unlocked etalon, frequency just happened to be right.
+                        step = RelockStep.tune_etalon
+                        continue
+                    while True:
+                        delta = await get_stable_freq_delta()
+                        if abs(delta) < MAX_RELOCK_ATTEMPT_DELTA:
+                            step = RelockStep.decide_next
+                            break
+                        if abs(delta) > MAX_RESONATOR_TUNE_DELTA:
+                            # Etalon lock jumped/…
+                            logger.info(
+                                "Large frequency delta encountered during "
+                                "resonator tuning: %s MHz", delta / 1e6)
+                            step = RelockStep.tune_etalon
+                            break
+                        tune_step = -RESONATOR_TUNE_DAMPING * delta / RESONATOR_TUNE_SLOPE
+                        new_tune = solstis.resonator_tune + tune_step
+                        logger.info("Setting resonator tune to %s", f"{new_tune:0.3f}%")
+                        try:
+                            await solstis.set_resonator_tune(new_tune)
+                        except ValueError as e:
+                            logger.info(
+                                "Reached invalid resonator tune; restarting from etalon search")
+                            step = RelockStep.tune_etalon
+                            break
+                continue
+            if step == RelockStep.determine_resonance:
+                async with ensure_solstis as solstis:
+                    if not solstis.etalon_locked:
+                        # User unlocked etalon, frequency just happened to be right.
+                        step = RelockStep.tune_etalon
+                        continue
 
-            # Enable PZT lock, monitor for a second during gain ramping to see if lock
-            # keeps.
-            ui.enablePztButton.setChecked(True)
-            start = time.monotonic()
-            reset = False
-            while True:
-                dt = time.monotonic() - start
-                if dt > 1.0:
-                    break
+                    tune_centre = solstis.resonator_tune
+                    radius = RESONANCE_SEARCH_RADIUS / RESONATOR_TUNE_SLOPE
+                    tunes = np.linspace(tune_centre - radius, tune_centre + radius,
+                                        RESONANCE_SEARCH_NUM_POINTS)[::-1]
+                    adc1s = []
+                    for tune in tunes:
+                        await solstis.set_resonator_tune(tune, blind=True)
+                        await asyncio.sleep(0.005)
+                        adc1s.append(await read_adc())
+                    await solstis.set_resonator_tune(tunes[np.argmax(adc1s)])
+                    lock_attempts_left = LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH
+                    step = RelockStep.try_lock
+                continue
+            if step == RelockStep.try_lock:
+                # Enable fast lock, and see if we got some transmission (allow considerably
+                # lower transmission than fully locked threshold, though).
+                ui.enableAOMLockBox.setChecked(True)
+                await asyncio.sleep(0.2)
                 transmission = await read_adc()
                 if transmission < 0.2 * ui.lockDetectThresholdBox.value():
-                    logger.info(
-                        "Transmission low (%s) %s after enabling PZT lock; aborting lock attempt",
-                        f"{transmission*1e3:0.1f} mV", f"{dt*1e3:0.0f} ms")
-                    reset = True
-                    break
-            if reset:
-                step = RelockStep.reset_lock
-                continue
+                    logger.info("Transmission immediately low (%s); aborting lock attempt",
+                                f"{transmission*1e3:0.1f} mV")
+                    try_approximate = False
+                    step = RelockStep.reset_lock
+                    continue
 
-            # Finally, check against original criterion.
-            transmission = await read_adc()
-            if transmission < ui.lockDetectThresholdBox.value():
-                logger.info("Transmission not above threshold in the end")
-                step = RelockStep.reset_lock
-                continue
+                # Enable PZT lock, monitor for a second during gain ramping to see if lock
+                # keeps.
+                ui.enablePztButton.setChecked(True)
+                start = time.monotonic()
+                reset = False
+                while True:
+                    dt = time.monotonic() - start
+                    if dt > 1.0:
+                        break
+                    transmission = await read_adc()
+                    if transmission < 0.2 * ui.lockDetectThresholdBox.value():
+                        logger.info(
+                            "Transmission low (%s) %s after enabling PZT lock; aborting lock attempt",
+                            f"{transmission*1e3:0.1f} mV", f"{dt*1e3:0.0f} ms")
+                        reset = True
+                        break
+                if reset:
+                    step = RelockStep.reset_lock
+                    continue
 
-            logger.info("Laser relocked")
-            return
-        assert False, f"Unhandled step {step}"
+                # Finally, check against original criterion.
+                transmission = await read_adc()
+                if transmission < ui.lockDetectThresholdBox.value():
+                    logger.info("Transmission not above threshold in the end")
+                    step = RelockStep.reset_lock
+                    continue
+
+                logger.info("Laser relocked")
+                return
+            assert False, f"Unhandled step {step}"
+
+    ensure_solstis = EnsureSolstis(solstis_host)
+    try:
+        await finite_state_machine(ensure_solstis)
+    finally:
+        await ensure_solstis.close()
 
 
 class WavemeterInterface:

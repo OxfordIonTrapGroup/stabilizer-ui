@@ -41,6 +41,10 @@ class EnsureSolstis:
                 # Suppress re-raising.
                 return True
 
+    async def close(self):
+        if self.solstis:
+            await self.solstis.close()
+
 
 class Solstis:
     """
