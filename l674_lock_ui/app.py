@@ -13,6 +13,7 @@ from sipyco import common_args, pc_rpc
 import sys
 import time
 from typing import Awaitable, Callable, Optional
+import textwrap
 
 from .mqtt import starts_with, MqttInterface
 from .solstis import EnsureSolstis
@@ -725,13 +726,18 @@ class UIStatePublisher:
         return self.ui.lock_state.name
 
 
+def fmt_mac(mac: str) -> str:
+    mac_nosep = ''.join(c for c in mac if c.isalnum()).lower()
+    return '-'.join(textwrap.wrap(mac_nosep, 2))
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser(
         description="Interface for the Vescent + Stabilizer 674 laser lock setup")
     parser.add_argument("-b", "--stabilizer-broker", default="10.255.6.4")
-    parser.add_argument("--stabilizer-topic", default="dt/sinara/stabilizer/l674")
+    parser.add_argument("--stabilizer-mac", default="80-1f-12-5d-47-df")
     parser.add_argument("--wand-host", default="10.255.6.61")
     parser.add_argument("--wand-port", default=3251, type=int)
     parser.add_argument("--wand-channel", default="lab1_674", type=str)
@@ -754,8 +760,9 @@ def main():
 
         ui.comm_status_label.setText(
             f"Connecting to MQTT broker at {args.stabilizer_broker}…")
+        stabilizer_topic = f"dt/sinara/l674/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = asyncio.create_task(
-            update_stabilizer(ui, adc1_interface, args.stabilizer_topic,
+            update_stabilizer(ui, adc1_interface, stabilizer_topic,
                               args.stabilizer_broker))
 
         monitor_lock_task = asyncio.create_task(
