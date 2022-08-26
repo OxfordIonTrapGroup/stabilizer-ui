@@ -12,10 +12,10 @@ from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
 import sys
 import time
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable
 import textwrap
 
-from .mqtt import starts_with, MqttInterface
+from .mqtt import MqttInterface, StabilizerInterface, Settings
 from .solstis import EnsureSolstis
 from .ui_utils import link_slider_to_spinbox
 
@@ -162,29 +162,8 @@ class UI(QtWidgets.QMainWindow):
             self.adc1ReadingEdit.setText(f"{adc1_voltage * 1e3:0.0f} mV")
 
 
-class ADC1Interface:
-    """
-    Shim for getting ADC1 reading over MQTT; for the relock task to have something to
-    hold on to before the Stabilizer write task has finished initial bringup of the
-    MQTT connection. (Could potentially just use two MQTT connections instead, although
-    that seems a bit wasteful.)
-    """
-    def __init__(self):
-        self._interface_set = asyncio.Event()
-        self._interface: Optional[MqttInterface] = None
-
-    def set_interface(self, interface: MqttInterface) -> None:
-        self._interface = interface
-        self._interface_set.set()
-
-    async def read_adc(self) -> float:
-        await self._interface_set.wait()
-        # Argument irrelevant.
-        return float(await self._interface.request("read_adc1_filtered", 0))
-
-
 async def update_stabilizer(ui: UI,
-                            adc1_interface: ADC1Interface,
+                            stabilizer_interface: StabilizerInterface,
                             root_topic: str,
                             broker_host: str,
                             broker_port: int = 1883):
@@ -237,30 +216,33 @@ async def update_stabilizer(ui: UI,
 
         return read, write
 
+    # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
-        "fast_gains/proportional": (ui.fastPGainBox, ),
-        "fast_gains/integral": (ui.fastIGainBox, kilo),
-        "fast_notch_enable": (ui.notchGroup, ),
-        "fast_notch/frequency": (ui.notchFreqBox, kilo),
-        "fast_notch/quality_factor": (ui.notchQBox, ),
-        "slow_gains/proportional": (ui.slowPGainBox, ),
-        "slow_gains/integral": (ui.slowIGainBox, ),
-        "slow_enable": (ui.slowPIDGroup, ),
-        "lock_mode": ([ui.disablePztButton, ui.rampPztButton, ui.enablePztButton],
-                      radio_group(["Disabled", "RampPassThrough", "Enabled"])),
-        "gain_ramp_time": (ui.gainRampTimeBox, ),
-        "lock_detect/adc1_threshold": (ui.lockDetectThresholdBox, ),
-        "lock_detect/reset_time": (ui.lockDetectDelayBox, ),
-        "adc1_routing":
+        Settings.fast_p_gain: (ui.fastPGainBox, ),
+        Settings.fast_i_gain: (ui.fastIGainBox, kilo),
+        Settings.fast_notch_enable: (ui.notchGroup, ),
+        Settings.fast_notch_frequency: (ui.notchFreqBox, kilo),
+        Settings.fast_notch_quality_factor: (ui.notchQBox, ),
+        Settings.slow_p_gain: (ui.slowPGainBox, ),
+        Settings.slow_i_gain: (ui.slowIGainBox, ),
+        Settings.slow_enable: (ui.slowPIDGroup, ),
+        Settings.lock_mode: ([ui.disablePztButton, ui.rampPztButton, ui.enablePztButton],
+                             radio_group(["Disabled", "RampPassThrough", "Enabled"])),
+        Settings.gain_ramp_time: (ui.gainRampTimeBox, ),
+        Settings.ld_threshold: (ui.lockDetectThresholdBox, ),
+        Settings.ld_reset_time: (ui.lockDetectDelayBox, ),
+        Settings.adc1_routing:
         ([ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
          radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"])),
-        "aux_ttl_out": (ui.enableAOMLockBox, invert),
+        Settings.aux_ttl_out: (ui.enableAOMLockBox, invert),
     }
 
-    def read_ui(key):
-        cfg = settings_map[key]
-        read_handler = cfg[1][0] if len(cfg) == 2 else read
-        return read_handler(cfg[0])
+    def read_ui():
+        state = {}
+        for key, cfg in settings_map.items():
+            read_handler = cfg[1][0] if len(cfg) == 2 else read
+            state[key] = read_handler(cfg[0])
+        return state
 
     def write_ui(key, value):
         cfg = settings_map[key]
@@ -276,19 +258,18 @@ async def update_stabilizer(ui: UI,
         # Load current settings from MQTT.
         #
 
-        settings_prefix = f"{root_topic}/settings/"
         retained_settings = {}
 
         def collect_settings(_client, topic, value, _qos, _properties):
-            if not starts_with(topic, settings_prefix):
-                logger.warning("Unexpected message topic: '%s'", topic)
-                return 0
-            key = topic[len(settings_prefix):]
-            retained_settings[key] = json.loads(value)
+            try:
+                key = Settings(topic[len(root_topic) + 1:])
+                retained_settings[key] = json.loads(value)
+            except:
+                logger.info("Ignoring message topic '%s'", topic)
             return 0
 
         client.on_message = collect_settings
-        all_settings = f"{settings_prefix}#"
+        all_settings = f"{root_topic}/#"
         client.subscribe(all_settings)
         # Based on testing, all the retained messages are sent immediately after
         # subscribing, but add some delay in case this is actually a race condition.
@@ -296,27 +277,15 @@ async def update_stabilizer(ui: UI,
         client.unsubscribe(all_settings)
         client.on_message = lambda *a: 0
 
-        unexpected_settings = {}
         for retained_key, retained_value in retained_settings.items():
             if retained_key in settings_map:
                 write_ui(retained_key, retained_value)
-            else:
-                unexpected_settings[retained_key] = retained_value
-
-        if unexpected_settings:
-            # FIXME: Not on the UI task, so shouldn't create message box here.
-            QtWidgets.QMessageBox.warning(
-                ui, "Unexpected settings retained in MQTT",
-                "Found the following unexpected settings stored on the MQTT broker; "
-                f"will delete (un-retain): {unexpected_settings}")
-            for key in unexpected_settings.keys():
-                client.publish(settings_prefix + key, payload=b'', qos=0, retain=True)
 
         #
         # Set up UI signals.
         #
 
-        keys_to_write = set()
+        keys_to_write = set(Settings)  # write all setings at startup
         ui_updated = asyncio.Event()
         for key, cfg in settings_map.items():
             # Capture loop variable.
@@ -354,24 +323,16 @@ async def update_stabilizer(ui: UI,
         interface = MqttInterface(client, root_topic, timeout=10.0)
 
         # Allow relock task to directly request ADC1 updates.
-        adc1_interface.set_interface(interface)
+        stabilizer_interface.set_interface(interface)
 
+        # ui_updated.set()  # trigger initial update
         while True:
             await ui_updated.wait()
             while keys_to_write:
                 # Use while/pop instead of for loop, as UI task might push extra
                 # elements while we are executing requests.
                 key = keys_to_write.pop()
-
-                # Write to the miniconf-provided topics, which currently returns a
-                # string message as a reply; should really be JSON/… instead, see
-                # quartiq/miniconf#32.
-                msg = await interface.request(f"settings/{key}",
-                                              read_ui(key),
-                                              retain=True)
-                if starts_with(msg, "Settings fail"):
-                    logger.warning("Stabilizer reported failure to write setting: '%s'",
-                                   msg)
+                await stabilizer_interface.change(key, read_ui())
             ui_updated.clear()
     except BaseException as e:
         if isinstance(e, asyncio.CancelledError):
@@ -398,7 +359,7 @@ class RelockStep(Enum):
     try_lock = "try_lock"
 
 
-async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
+async def relock_laser(ui: UI, stabilizer_interface: StabilizerInterface,
                        get_freq: Callable[[], Awaitable[float]],
                        approximate_target_freq: float, solstis_host: str):
     logger.info(
@@ -424,7 +385,7 @@ async def relock_laser(ui: UI, adc1_interface: ADC1Interface,
             previous_delta = delta
 
     async def read_adc():
-        voltage = await adc1_interface.read_adc()
+        voltage = await stabilizer_interface.read_adc()
         ui.update_lock_state(LockState.relocking, voltage)
         return voltage
 
@@ -620,7 +581,7 @@ class WavemeterInterface:
                 self._client = None
 
 
-async def monitor_lock_state(ui: UI, adc1_interface: ADC1Interface, wand_host: str,
+async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface, wand_host: str,
                              wand_port: int, wand_channel: str, solstis_host: str):
     # While not relocking, we regularly poll the wavemeter and save the last reading,
     # to be "graduated" to last_locked_freq_reading once we know that the laser was
@@ -673,7 +634,7 @@ async def monitor_lock_state(ui: UI, adc1_interface: ADC1Interface, wand_host: s
     try:
         while True:
             await asyncio.sleep(IDLE_ADC1_POLL_INTERVAL)
-            reading = await adc1_interface.read_adc()
+            reading = await stabilizer_interface.read_adc()
             is_locked = reading >= ui.lockDetectThresholdBox.value()
             if is_locked:
                 if last_freq_reading is not None:
@@ -692,7 +653,7 @@ async def monitor_lock_state(ui: UI, adc1_interface: ADC1Interface, wand_host: s
                             "No good frequency reference reading available, "
                             "defaulting to %s MHz", last_locked_freq_reading / 1e6)
                     relock_task = asyncio.create_task(
-                        relock_laser(ui, adc1_interface, wand.get_freq_offset,
+                        relock_laser(ui, stabilizer_interface, wand.get_freq_offset,
                                      last_locked_freq_reading, solstis_host))
                     ui.update_lock_state(LockState.relocking, reading)
                     try:
@@ -756,17 +717,18 @@ def main():
         ui = UI()
         ui.show()
 
-        adc1_interface = ADC1Interface()
+        stabilizer_interface = StabilizerInterface()
 
         ui.comm_status_label.setText(
             f"Connecting to MQTT broker at {args.stabilizer_broker}…")
+
         stabilizer_topic = f"dt/sinara/l674/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = asyncio.create_task(
-            update_stabilizer(ui, adc1_interface, stabilizer_topic,
+            update_stabilizer(ui, stabilizer_interface, stabilizer_topic,
                               args.stabilizer_broker))
 
         monitor_lock_task = asyncio.create_task(
-            monitor_lock_state(ui, adc1_interface, args.wand_host, args.wand_port,
+            monitor_lock_state(ui, stabilizer_interface, args.wand_host, args.wand_port,
                                args.wand_channel, args.solstis_host))
 
         server = pc_rpc.Server({"l674_lock_ui": UIStatePublisher(ui)},
