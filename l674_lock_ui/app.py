@@ -12,7 +12,7 @@ from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
 import sys
 import time
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, List
 import textwrap
 import stabilizer.stream
 import threading
@@ -176,6 +176,8 @@ async def update_stabilizer(ui: UI,
                             stabilizer_interface: StabilizerInterface,
                             root_topic: str,
                             broker_host: str,
+                            local_ip: str,
+                            stream_port: int,
                             broker_port: int = 1883):
     def read(widget):
         if isinstance(widget, (
@@ -252,6 +254,7 @@ async def update_stabilizer(ui: UI,
         for key, cfg in settings_map.items():
             read_handler = cfg[1][0] if len(cfg) == 2 else read
             state[key] = read_handler(cfg[0])
+        state[Settings.stream_target] = {"ip": local_ip, "port": stream_port}
         return state
 
     def write_ui(key, value):
@@ -690,13 +693,13 @@ async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface, 
 
 
 def stream_worker(main_loop: QEventLoop, ui_callback: Callable, terminate: threading.Event,
-                  stabilizer_host: str, stream_port: int = 9293):
+                  local_ip: List[int], stream_port: int):
     """This function doesn't run in the main thread!"""
 
     async def stabilizer_stream():
         """This coroutine doesn't run in the main thread's loop!"""
-        local_ip = '.'.join(map(str, stabilizer.stream.get_local_ip(stabilizer_host)))
-        transport, stream = await stabilizer.stream.StabilizerStream.open((local_ip, stream_port), 1)
+        bind = '.'.join(map(str, local_ip))
+        transport, stream = await stabilizer.stream.StabilizerStream.open((bind, stream_port), 1)
         try:
             expect = None
             received = 0
@@ -761,6 +764,7 @@ def main():
         description="Interface for the Vescent + Stabilizer 674 laser lock setup")
     parser.add_argument("-b", "--stabilizer-broker", default="10.255.6.4")
     parser.add_argument("--stabilizer-mac", default="80-1f-12-5d-47-df")
+    parser.add_argument("--stream-port", default=9293, type=int)
     parser.add_argument("--wand-host", default="10.255.6.61")
     parser.add_argument("--wand-port", default=3251, type=int)
     parser.add_argument("--wand-channel", default="lab1_674", type=str)
@@ -784,10 +788,14 @@ def main():
         ui.comm_status_label.setText(
             f"Connecting to MQTT broker at {args.stabilizer_broker}…")
 
+        # Find out which local IP address we are going to direct the stream to.
+        # Assume the local IP address is the same for the broker and the stabilizer.
+        local_ip = stabilizer.stream.get_local_ip(args.stabilizer_broker)
+
         stabilizer_topic = f"dt/sinara/l674/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = asyncio.create_task(
             update_stabilizer(ui, stabilizer_interface, stabilizer_topic,
-                              args.stabilizer_broker))
+                              args.stabilizer_broker, local_ip, args.stream_port))
 
         monitor_lock_task = asyncio.create_task(
             monitor_lock_state(ui, stabilizer_interface, args.wand_host, args.wand_port,
@@ -803,7 +811,7 @@ def main():
         terminate_stream = threading.Event()
         stream_thread = threading.Thread(
                 target=stream_worker,
-                args=(loop, ui.update_stream, terminate_stream),
+                args=(loop, ui.update_stream, terminate_stream, local_ip, args.stream_port),
         )
         stream_thread.start()
 

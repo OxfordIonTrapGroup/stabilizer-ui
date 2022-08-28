@@ -130,6 +130,7 @@ class Settings(Enum):
     ld_reset_time = "settings/ld_reset_time"
     adc1_routing = "settings/adc1_routing"
     aux_ttl_out = "settings/aux_ttl_out"
+    stream_target = "settings/stream_target"
 
 
 class StabilizerInterface:
@@ -146,6 +147,7 @@ class StabilizerInterface:
         Settings.ld_reset_time,
         Settings.adc1_routing,
         Settings.aux_ttl_out,
+        Settings.stream_target,
     }
     #: IIR[0][0]
     fast_pid_settings = {
