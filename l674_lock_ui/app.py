@@ -6,6 +6,7 @@ from gmqtt import Client as MqttClient
 import json
 import logging
 import numpy as np
+import numpy.fft as fft
 import os
 from PyQt5 import QtGui, QtWidgets, uic
 from qasync import QEventLoop
@@ -151,9 +152,31 @@ class UI(QtWidgets.QMainWindow):
             self.scopeGraphicsView.addPlot(row=1, col=1, title="DAC1"),
         ]
         self.scope_plot_data_items = [plt.plot() for plt in self.scope_plot_items]
-        for plt in self.scope_plot_items:
-            plt.setRange(yRange=[-11, 11])
-            plt.setLabels(left="Voltage / V", bottom="Time / ms")
+
+        def update_axes(val):
+            items = self.scope_plot_items
+
+            if val:
+                ylabel = "PSD / (V/sqrt(Hz))"
+                xlabel = "Frequency / kHz"
+                for plt in items:
+                    plt.setLogMode(True, True)
+                    plt.setRange(xRange=[0.5, np.log10(0.5 / SAMPLE_PERIOD / 1000)],
+                                 yRange=[-7, -1])
+            else:
+                ylabel = "Amplitude / V"
+                xlabel = "Time / ms"
+                for plt in items:
+                    plt.setLogMode(False, False)
+                    plt.setRange(xRange=[-5, 0], yRange=[-11, 11])
+
+            items[0].setLabels(left=ylabel)
+            items[1].setLabels(left=ylabel)
+            items[2].setLabels(left=ylabel, bottom=xlabel)
+            items[3].setLabels(left=ylabel, bottom=xlabel)
+
+        self.enableFftBox.stateChanged.connect(update_axes)
+        update_axes(self.enableFftBox.isChecked())
 
     def _link_paired_widgets(self):
         for s, b in [(self.fastPGainSlider, self.fastPGainBox),
@@ -185,8 +208,13 @@ class UI(QtWidgets.QMainWindow):
             return
         self.streamStatusEdit.setText(message)
         for trace, plot_data in zip(traces, self.scope_plot_data_items):
-            x = np.linspace(-len(trace) * SAMPLE_PERIOD, 0, len(trace)) * 1000
-            plot_data.setData(x, trace)
+            if self.enableFftBox.isChecked():
+                y = np.abs(fft.rfft(trace)) * np.sqrt(2 * SAMPLE_PERIOD / len(trace))
+                x = np.linspace(0, 0.5 / SAMPLE_PERIOD, len(y)) / 1000
+            else:
+                y = trace
+                x = np.linspace(-len(trace) * SAMPLE_PERIOD, 0, len(trace)) * 1000
+            plot_data.setData(x, y)
 
 
 async def update_stabilizer(ui: UI,
