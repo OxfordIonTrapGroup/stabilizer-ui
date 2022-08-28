@@ -157,7 +157,7 @@ class UI(QtWidgets.QMainWindow):
             items = self.scope_plot_items
 
             if val:
-                ylabel = "PSD / (V/sqrt(Hz))"
+                ylabel = "ASD / (V/sqrt(Hz))"
                 xlabel = "Frequency / kHz"
                 for plt in items:
                     plt.setLogMode(True, True)
