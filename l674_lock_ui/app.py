@@ -181,6 +181,8 @@ class UI(QtWidgets.QMainWindow):
     def update_stream(self,
                       traces,
                       message: str = "Waiting for stream"):
+        if self.tabWidget.currentIndex() != 1:
+            return
         self.streamStatusEdit.setText(message)
         for trace, plot_data in zip(traces, self.scope_plot_data_items):
             x = np.linspace(-len(trace) * SAMPLE_PERIOD, 0, len(trace)) * 1000
