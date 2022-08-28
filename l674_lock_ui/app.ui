@@ -640,7 +640,7 @@
           <bool>true</bool>
          </property>
          <property name="currentIndex">
-          <number>1</number>
+          <number>0</number>
          </property>
          <widget class="QWidget" name="tab_log">
           <attribute name="title">
@@ -693,7 +693,7 @@
              <widget class="QGraphicsView" name="scopeGraphicsView"/>
             </item>
             <item>
-             <widget class="QLineEdit" name="lineEdit">
+             <widget class="QLineEdit" name="streamStatusEdit">
               <property name="text">
                <string>&lt;pending&gt;</string>
               </property>
