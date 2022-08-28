@@ -15,7 +15,9 @@ import time
 from typing import Awaitable, Callable, List
 import textwrap
 import stabilizer.stream
+from stabilizer import DAC_VOLTS_PER_LSB, SAMPLE_PERIOD
 import threading
+from collections import deque
 
 from .mqtt import MqttInterface, StabilizerInterface, Settings
 from .solstis import EnsureSolstis
@@ -141,7 +143,17 @@ class UI(QtWidgets.QMainWindow):
 
         self.lock_state = LockState.uninitialised
 
-        # TODO: create stream widget
+        # Order is consistent with `AdcDac.to_mu()``.
+        self.scope_plot_items = [
+            self.scopeGraphicsView.addPlot(row=0, col=0, title="ADC0"),
+            self.scopeGraphicsView.addPlot(row=0, col=1, title="ADC1"),
+            self.scopeGraphicsView.addPlot(row=1, col=0, title="DAC0"),
+            self.scopeGraphicsView.addPlot(row=1, col=1, title="DAC1"),
+        ]
+        self.scope_plot_data_items = [plt.plot() for plt in self.scope_plot_items]
+        for plt in self.scope_plot_items:
+            plt.setRange(yRange=[-11, 11])
+            plt.setLabels(left="Voltage / V", bottom="Time / ms")
 
     def _link_paired_widgets(self):
         for s, b in [(self.fastPGainSlider, self.fastPGainBox),
@@ -167,10 +179,12 @@ class UI(QtWidgets.QMainWindow):
             self.adc1ReadingEdit.setText(f"{adc1_voltage * 1e3:0.0f} mV")
 
     def update_stream(self,
-                      frame: stabilizer.stream.AdcDac,
+                      traces,
                       message: str = "Waiting for stream"):
         self.streamStatusEdit.setText(message)
-        # widget = self.scopeGraphicsView
+        for trace, plot_data in zip(traces, self.scope_plot_data_items):
+            x = np.linspace(-len(trace) * SAMPLE_PERIOD, 0, len(trace)) * 1000
+            plot_data.setData(x, trace)
 
 
 async def update_stabilizer(ui: UI,
@@ -693,25 +707,39 @@ async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface, 
             await wavemeter_task
 
 
-def stream_worker(main_loop: QEventLoop, ui_callback: Callable, terminate: threading.Event,
-                  local_ip: List[int], stream_port: int):
+def stream_worker(main_loop: asyncio.AbstractEventLoop, ui_callback: Callable,
+                  terminate: threading.Event, local_ip: List[int], stream_port: int):
     """This function doesn't run in the main thread!"""
 
-    async def stabilizer_stream():
+    # history and UI update rate chosen near the limits of Qt's drawing speed
+    update_rate = 20  # fps
+    history = 5e-3  # s
+
+    buffer = [deque(maxlen=int(history / SAMPLE_PERIOD)) for _ in range(4)]
+    stat = StreamStats()
+
+    async def handle_stream():
         """This coroutine doesn't run in the main thread's loop!"""
         bind = '.'.join(map(str, local_ip))
         transport, stream = await stabilizer.stream.StabilizerStream.open((bind, stream_port), 1)
-        stat = StreamStats()
         try:
             while not terminate.is_set():
                 frame = await stream.queue.get()
                 stat.update(frame)
-
-                message_stats = "Speed: {:.2f} MB/s ({:.3f} % batches lost)".format(
-                    stat.download / 1e6, 100 * stat.loss)
-                main_loop.call_soon_threadsafe(ui_callback, frame, message_stats)
+                for buf, values in zip(buffer, frame.to_mu()):
+                    buf.extend(values)
         finally:
             transport.close()
+
+    async def handle_callback():
+        """This coroutine doesn't run in the main thread's loop!"""
+        while not terminate.is_set():
+            stats_message = "Speed: {:.2f} MB/s ({:.3f} % batches lost)".format(
+                stat.download / 1e6, 100 * stat.loss)
+            data = [np.array(buf) * DAC_VOLTS_PER_LSB for buf in buffer]
+            main_loop.call_soon_threadsafe(ui_callback, data, stats_message)
+            # Do not overload the main thread!
+            await asyncio.sleep(1 / update_rate)
 
     async def _wait_for_main_loop():
         """Wait until main loop is running (can only return if it is running)
@@ -728,7 +756,10 @@ def stream_worker(main_loop: QEventLoop, ui_callback: Callable, terminate: threa
     new_loop = asyncio.SelectorEventLoop()
     # Setting the event loop here only applies locally to this thread.
     asyncio.set_event_loop(new_loop)
-    new_loop.run_until_complete(stabilizer_stream())
+
+    tasks = asyncio.gather(handle_callback(), handle_stream())
+    new_loop.run_until_complete(tasks)
+    new_loop.close()
 
 
 class UIStatePublisher:
