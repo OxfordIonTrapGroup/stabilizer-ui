@@ -14,6 +14,8 @@ import sys
 import time
 from typing import Awaitable, Callable
 import textwrap
+import stabilizer.stream
+import threading
 
 from .mqtt import MqttInterface, StabilizerInterface, Settings
 from .solstis import EnsureSolstis
@@ -138,6 +140,8 @@ class UI(QtWidgets.QMainWindow):
 
         self.lock_state = LockState.uninitialised
 
+        # TODO: create stream widget
+
     def _link_paired_widgets(self):
         for s, b in [(self.fastPGainSlider, self.fastPGainBox),
                      (self.fastIGainSlider, self.fastIGainBox),
@@ -160,6 +164,12 @@ class UI(QtWidgets.QMainWindow):
             self.adc1ReadingEdit.setText(f"<pending>")
         else:
             self.adc1ReadingEdit.setText(f"{adc1_voltage * 1e3:0.0f} mV")
+
+    def update_stream(self,
+                      frame: stabilizer.stream.AdcDac,
+                      message: str = "Waiting for stream"):
+        self.streamStatusEdit.setText(message)
+        # widget = self.scopeGraphicsView
 
 
 async def update_stabilizer(ui: UI,
@@ -679,6 +689,58 @@ async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface, 
             await wavemeter_task
 
 
+def stream_worker(main_loop: QEventLoop, ui_callback: Callable, terminate: threading.Event,
+                  stabilizer_host: str, stream_port: int = 9293):
+    """This function doesn't run in the main thread!"""
+
+    async def stabilizer_stream():
+        """This coroutine doesn't run in the main thread's loop!"""
+        local_ip = '.'.join(map(str, stabilizer.stream.get_local_ip(stabilizer_host)))
+        transport, stream = await stabilizer.stream.StabilizerStream.open((local_ip, stream_port), 1)
+        try:
+            expect = None
+            received = 0
+            lost = 0
+            bytes = 0
+            start_time = time.monotonic_ns()
+            while not terminate.is_set():
+                frame = await stream.queue.get()
+
+                if expect is not None:
+                    lost += stabilizer.stream.wrap(frame.header.sequence - expect)
+                batch_count = frame.batch_count()
+                received += batch_count
+                expect = stabilizer.stream.wrap(frame.header.sequence + batch_count)
+                bytes += frame.size()
+                duration = time.monotonic_ns() - start_time + 1
+
+                sent = received + lost
+                loss = lost / sent if sent else 1
+
+                message_stats = "Speed: {:.2f} MB/s ({:.3f} % batches lost)".format(
+                    (bytes/1e6)/(duration/1e9), 100 * loss)
+                main_loop.call_soon_threadsafe(ui_callback, frame, message_stats)
+        finally:
+            transport.close()
+
+    async def _wait_for_main_loop():
+        """Wait until main loop is running (can only return if it is running)
+        This coroutine runs in the main thread's loop.
+        """
+        return True
+
+    # Wait for the future to return.
+    asyncio.run_coroutine_threadsafe(_wait_for_main_loop(), main_loop).result()
+
+    # The default loop on Windows doesn't support UDP!
+    # However, it is not possible to change the Qt event loop, so we
+    # have to run the stream in a separate thread.
+    new_loop = asyncio.SelectorEventLoop()
+    # Setting the event loop here only applies locally to this thread.
+    asyncio.set_event_loop(new_loop)
+    new_loop.run_until_complete(stabilizer_stream())
+
+
 class UIStatePublisher:
     def __init__(self, ui: UI):
         self.ui = ui
@@ -733,12 +795,26 @@ def main():
 
         server = pc_rpc.Server({"l674_lock_ui": UIStatePublisher(ui)},
                                "Publishes the state of the l674-lock-ui")
+
+        # Problem with this event loop is that `create_datagram_endpoint()`
+        # used in `stabilizer.stream` is not supported on Windows.
+        # https://docs.python.org/3.6/library/asyncio-eventloops.html#platform-support
+        # We therefore start a new thread with a compatible event loop.
+        terminate_stream = threading.Event()
+        stream_thread = threading.Thread(
+                target=stream_worker,
+                args=(loop, ui.update_stream, terminate_stream),
+        )
+        stream_thread.start()
+
         loop.run_until_complete(
             server.start(common_args.bind_address_from_args(args), args.port))
 
         try:
             sys.exit(loop.run_forever())
         finally:
+            terminate_stream.set()
+            stream_thread.join()
             with suppress(asyncio.CancelledError):
                 monitor_lock_task.cancel()
                 loop.run_until_complete(monitor_lock_task)
