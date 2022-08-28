@@ -133,7 +133,7 @@ class UI(QtWidgets.QMainWindow):
 
         # Explicitly create button group to prevent shortcuts from un-selecting buttons.
         # (It's not clear to me whether this is a Qt bug or not, as the buttons are set
-        # as autoExclusive (the default) in the UI file).
+        # as autoExclusive (the default) in the UI file.)
         self.mode_group = QtWidgets.QButtonGroup(self)
         self.mode_group.addButton(self.disablePztButton)
         self.mode_group.addButton(self.rampPztButton)
@@ -144,7 +144,7 @@ class UI(QtWidgets.QMainWindow):
 
         self.lock_state = LockState.uninitialised
 
-        # Order is consistent with `AdcDac.to_mu()``.
+        # Order is consistent with `AdcDac.to_mu()`.
         self.scope_plot_items = [
             self.scopeGraphicsView.addPlot(row=0, col=0, title="ADC0"),
             self.scopeGraphicsView.addPlot(row=0, col=1, title="ADC1"),
@@ -197,7 +197,7 @@ class UI(QtWidgets.QMainWindow):
         }[state]
         self.adc1ReadingEdit.setStyleSheet(f"QLineEdit {{ background-color: {color} }}")
         if state == LockState.uninitialised:
-            self.adc1ReadingEdit.setText(f"<pending>")
+            self.adc1ReadingEdit.setText("<pending>")
         else:
             self.adc1ReadingEdit.setText(f"{adc1_voltage * 1e3:0.0f} mV")
 
