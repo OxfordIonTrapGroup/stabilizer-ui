@@ -20,6 +20,7 @@ import threading
 from .mqtt import MqttInterface, StabilizerInterface, Settings
 from .solstis import EnsureSolstis
 from .ui_utils import link_slider_to_spinbox
+from .stream_stats import StreamStats
 
 logger = logging.getLogger(__name__)
 
@@ -700,28 +701,14 @@ def stream_worker(main_loop: QEventLoop, ui_callback: Callable, terminate: threa
         """This coroutine doesn't run in the main thread's loop!"""
         bind = '.'.join(map(str, local_ip))
         transport, stream = await stabilizer.stream.StabilizerStream.open((bind, stream_port), 1)
+        stat = StreamStats()
         try:
-            expect = None
-            received = 0
-            lost = 0
-            bytes = 0
-            start_time = time.monotonic_ns()
             while not terminate.is_set():
                 frame = await stream.queue.get()
-
-                if expect is not None:
-                    lost += stabilizer.stream.wrap(frame.header.sequence - expect)
-                batch_count = frame.batch_count()
-                received += batch_count
-                expect = stabilizer.stream.wrap(frame.header.sequence + batch_count)
-                bytes += frame.size()
-                duration = time.monotonic_ns() - start_time + 1
-
-                sent = received + lost
-                loss = lost / sent if sent else 1
+                stat.update(frame)
 
                 message_stats = "Speed: {:.2f} MB/s ({:.3f} % batches lost)".format(
-                    (bytes/1e6)/(duration/1e9), 100 * loss)
+                    stat.download / 1e6, 100 * stat.loss)
                 main_loop.call_soon_threadsafe(ui_callback, frame, message_stats)
         finally:
             transport.close()
