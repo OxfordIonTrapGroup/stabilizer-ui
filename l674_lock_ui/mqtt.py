@@ -198,12 +198,12 @@ class StabilizerInterface:
                 # Ignore gain changes if lock is not enabled.
                 pass
             elif lock_mode == "Disabled":
-                await self._set_pi_gains(channel=0, p_gain=0.0, i_gain=0.0)
-                await self._set_pi_gains(channel=1, p_gain=0.0, i_gain=0.0)
+                await self._set_iir(channel=0, iir_idx=0, ba=[0.0] * 5)
+                await self._set_iir(channel=1, iir_idx=0, ba=[0.0] * 5)
             elif lock_mode == "RampPassThrough":
                 # Gain 5 gives approximately ±10 V when driven using the Vescent servo box ramp.
-                await self._set_pi_gains(channel=0, p_gain=0.5, i_gain=0.0)
-                await self._set_pi_gains(channel=1, p_gain=0.0, i_gain=0.0)
+                await self._set_iir(channel=0, iir_idx=0, ba=[5.0] + [0.0] * 4)
+                await self._set_iir(channel=1, iir_idx=0, ba=[0.0] * 5)
             else:
                 # Negative sign in fast branch to match AOM lock; both PZTs have same sign.
                 await self._set_pi_gains(channel=0,
@@ -229,7 +229,7 @@ class StabilizerInterface:
                 b1 = - (2 * (1 - f0 ** 2)) / denominator
                 await self._set_iir(channel=0, iir_idx=1, ba=[b0, b1, b0, a1, a2])
             else:
-                await self._set_iir(channel=0, iir_idx=1, ba=[1.0, 0.0, 0.0, 0.0, 0.0])
+                await self._set_iir(channel=0, iir_idx=1, ba=[1.0] + [0.0] * 4)
 
         # We rely on the hardware to initialise IIR[1][1] with a simple pass-through response.
 
