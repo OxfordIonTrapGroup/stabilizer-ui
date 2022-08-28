@@ -739,8 +739,12 @@ async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface, 
 
 def stream_worker(main_loop: asyncio.AbstractEventLoop, ui_callback: Callable,
                   terminate: threading.Event, local_ip: List[int], stream_port: int):
-    """This function doesn't run in the main thread!"""
+    """This function doesn't run in the main thread!
 
+    The default loop on Windows doesn't support UDP!
+    Also, it is not possible to change the Qt event loop. Therefore, we
+    have to handle the stream in a separate thread running this function.
+    """
     # history and UI update rate chosen near the limits of Qt's drawing speed
     update_rate = 20  # fps
     history = 5e-3  # s
@@ -780,9 +784,6 @@ def stream_worker(main_loop: asyncio.AbstractEventLoop, ui_callback: Callable,
     # Wait for the future to return.
     asyncio.run_coroutine_threadsafe(_wait_for_main_loop(), main_loop).result()
 
-    # The default loop on Windows doesn't support UDP!
-    # However, it is not possible to change the Qt event loop, so we
-    # have to run the stream in a separate thread.
     new_loop = asyncio.SelectorEventLoop()
     # Setting the event loop here only applies locally to this thread.
     asyncio.set_event_loop(new_loop)
