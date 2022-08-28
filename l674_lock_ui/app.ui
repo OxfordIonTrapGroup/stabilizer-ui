@@ -690,7 +690,7 @@
              <number>9</number>
             </property>
             <item>
-             <widget class="QGraphicsView" name="scopeGraphicsView"/>
+             <widget class="GraphicsLayoutWidget" name="scopeGraphicsView"/>
             </item>
             <item>
              <widget class="QLineEdit" name="streamStatusEdit">
@@ -724,6 +724,13 @@
    </property>
   </widget>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>GraphicsLayoutWidget</class>
+   <extends>QGraphicsView</extends>
+   <header>pyqtgraph</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
