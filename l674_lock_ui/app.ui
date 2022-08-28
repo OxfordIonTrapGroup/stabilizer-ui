@@ -696,6 +696,9 @@
                 <property name="text">
                  <string>&lt;pending&gt;</string>
                 </property>
+                <property name="frame">
+                 <bool>false</bool>
+                </property>
                 <property name="alignment">
                  <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
                 </property>
