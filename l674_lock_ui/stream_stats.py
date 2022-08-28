@@ -15,7 +15,7 @@ class StreamStats:
 
     def __post_init__(self):
         self._start_ns = time.monotonic_ns()
-        self._last_ns = None
+        self._last_ns = -1
 
     def update(self, frame: AdcDac):
         now_ns = time.monotonic_ns()
@@ -37,7 +37,7 @@ class StreamStats:
     @property
     def download(self):
         """Bytes per second"""
-        duration = max(1, (self._last_ns - self._start_ns)) / 1e9
+        duration = (self._last_ns - self._start_ns + 1) / 1e9
         return self.bytes / duration
 
     @property
