@@ -161,38 +161,37 @@ class UI(QtWidgets.QMainWindow):
             afe.addItems(self.afe_options)
 
         # Order is consistent with `AdcDac.to_mu()`.
-        self.scope_plot_items = [
-            self.scopeGraphicsView.addPlot(row=0, col=0, title="ADC0"),
-            self.scopeGraphicsView.addPlot(row=0, col=1, title="ADC1"),
-            self.scopeGraphicsView.addPlot(row=1, col=0, title="DAC0"),
-            self.scopeGraphicsView.addPlot(row=1, col=1, title="DAC1"),
-        ]
-        self.scope_plot_data_items = [plt.plot() for plt in self.scope_plot_items]
+        labels = ["ADC0", "ADC1", "DAC0", "DAC1"]
+        scope_plot_items = [self.scopeGraphicsView.addPlot(row=i, col=j)
+            for i in range(2) for j in range(2)]
+        # Maximise space utilisation.
+        self.scopeGraphicsView.ci.layout.setContentsMargins(0, 0, 0, 0)
+        self.scopeGraphicsView.ci.layout.setSpacing(0)
+        # Use legend instead of title to save space.
+        legends = [plt.addLegend(offset=(-10, 10)) for plt in scope_plot_items]
+        # Create the objects holding the data to plot.
+        self.scope_plot_data_items = [plt.plot() for plt in scope_plot_items]
+        for legend, item, title in zip(legends, self.scope_plot_data_items, labels):
+            legend.addItem(item, title)
 
         def update_axes(val):
-            items = self.scope_plot_items
-
             if val:
                 ylabel = "ASD / (V/sqrt(Hz))"
                 xlabel = "Frequency / kHz"
-                for plt in items:
-                    plt.setLogMode(True, True)
-                    plt.setRange(xRange=[0.5, np.log10(0.5 * SCOPE_TIME_SCALE / SAMPLE_PERIOD)],
-                                 yRange=[-7, -1])
+                logmode = [True, True]
+                xrange = [0.5, np.log10(0.5 * SCOPE_TIME_SCALE / SAMPLE_PERIOD)]
+                yrange = [-7, -1]
             else:
                 ylabel = "Amplitude / V"
                 xlabel = "Time / ms"
-                for plt in items:
-                    plt.setLogMode(False, False)
-                    plt.setRange(
-                        xRange=[-SCOPE_TRACE_DURATION / SCOPE_TIME_SCALE, 0], 
-                        yRange=[-11, 11]
-                    )
+                logmode = [False, False]
+                xrange = [-SCOPE_TRACE_DURATION / SCOPE_TIME_SCALE, 0]
+                yrange = [-11, 11]
 
-            items[0].setLabels(left=ylabel)
-            items[1].setLabels(left=ylabel)
-            items[2].setLabels(left=ylabel, bottom=xlabel)
-            items[3].setLabels(left=ylabel, bottom=xlabel)
+            for plt in scope_plot_items:
+                plt.setLogMode(*logmode)
+                plt.setRange(xRange=xrange, yRange=yrange, update=False)
+                plt.setLabels(left=ylabel, bottom=xlabel)
 
         self.enableFftBox.stateChanged.connect(update_axes)
         update_axes(self.enableFftBox.isChecked())
@@ -227,11 +226,10 @@ class UI(QtWidgets.QMainWindow):
         if self.tabWidget.currentIndex() != 1:
             return
         self.streamStatusEdit.setText(message)
-        for trace, spectrum, plot_data in zip(traces, spectra, self.scope_plot_data_items):
-            if self.enableFftBox.isChecked():
-                plot_data.setData(*spectrum)
-            else:
-                plot_data.setData(*trace)
+
+        data_to_show = spectra if self.enableFftBox.isChecked() else traces
+        for plot, data in zip(self.scope_plot_data_items, data_to_show):
+            plot.setData(*data)
 
 
 async def update_stabilizer(ui: UI,
