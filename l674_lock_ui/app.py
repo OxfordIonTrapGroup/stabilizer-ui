@@ -174,24 +174,28 @@ class UI(QtWidgets.QMainWindow):
         for legend, item, title in zip(legends, self.scope_plot_data_items, labels):
             legend.addItem(item, title)
 
-        def update_axes(val):
-            if val:
-                ylabel = "ASD / (V/sqrt(Hz))"
-                xlabel = "Frequency / kHz"
-                logmode = [True, True]
-                xrange = [0.5, np.log10(0.5 * SCOPE_TIME_SCALE / SAMPLE_PERIOD)]
-                yrange = [-7, -1]
-            else:
-                ylabel = "Amplitude / V"
-                xlabel = "Time / ms"
-                logmode = [False, False]
-                xrange = [-SCOPE_TRACE_DURATION / SCOPE_TIME_SCALE, 0]
-                yrange = [-11, 11]
-
+        self.scope_config = {
+            True: {
+                "ylabel": "ASD / (V/sqrt(Hz))",
+                "xlabel": "Frequency / kHz",
+                "log": [True, True],
+                "xrange": [0.5, np.log10(0.5 * SCOPE_TIME_SCALE / SAMPLE_PERIOD)],
+                "yrange": [-7, -1],
+            },
+            False: {
+                "ylabel": "Amplitude / V",
+                "xlabel": "Time / ms",
+                "log": [False, False],
+                "xrange": [-SCOPE_TRACE_DURATION / SCOPE_TIME_SCALE, 0],
+                "yrange": [-11, 11],
+            },
+        }
+        def update_axes(button_checked):
+            cfg = self.scope_config[bool(button_checked)]
             for plt in scope_plot_items:
-                plt.setLogMode(*logmode)
-                plt.setRange(xRange=xrange, yRange=yrange, update=False)
-                plt.setLabels(left=ylabel, bottom=xlabel)
+                plt.setLogMode(*cfg['log'])
+                plt.setRange(xRange=cfg['xrange'], yRange=cfg['yrange'], update=False)
+                plt.setLabels(left=cfg['ylabel'], bottom=cfg['xlabel'])
 
         self.enableFftBox.stateChanged.connect(update_axes)
         update_axes(self.enableFftBox.isChecked())
