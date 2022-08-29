@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1336</width>
-    <height>493</height>
+    <width>1391</width>
+    <height>497</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -89,6 +89,9 @@
         <layout class="QVBoxLayout" name="verticalLayout_2" stretch="0,1,0">
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout">
+           <property name="spacing">
+            <number>3</number>
+           </property>
            <item>
             <widget class="QRadioButton" name="disablePztButton">
              <property name="text">
@@ -123,6 +126,19 @@
             </widget>
            </item>
            <item>
+            <spacer name="horizontalSpacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>1</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
             <widget class="QLabel" name="label_11">
              <property name="text">
               <string>AFE gain:</string>
@@ -136,7 +152,14 @@
             </widget>
            </item>
            <item>
-            <widget class="QComboBox" name="afe0GainBox"/>
+            <widget class="QComboBox" name="afe0GainBox">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+            </widget>
            </item>
            <item>
             <widget class="QLabel" name="label_9">
@@ -167,7 +190,7 @@
           </layout>
          </item>
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="0,0,0">
+          <layout class="QHBoxLayout" name="horizontalLayout_2">
            <item>
             <widget class="QGroupBox" name="groupBox_3">
              <property name="title">
@@ -440,6 +463,15 @@
                <string>Lock detection</string>
               </property>
               <layout class="QHBoxLayout" name="horizontalLayout_6">
+               <property name="spacing">
+                <number>3</number>
+               </property>
+               <property name="leftMargin">
+                <number>2</number>
+               </property>
+               <property name="rightMargin">
+                <number>2</number>
+               </property>
                <item>
                 <widget class="QLabel" name="label_7">
                  <property name="text">
@@ -476,19 +508,6 @@
                 </widget>
                </item>
                <item>
-                <widget class="QLabel" name="label_10">
-                 <property name="text">
-                  <string>AFE gain:</string>
-                 </property>
-                 <property name="buddy">
-                  <cstring>afe1GainBox</cstring>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QComboBox" name="afe1GainBox"/>
-               </item>
-               <item>
                 <widget class="QLabel" name="label_8">
                  <property name="text">
                   <string>Holdoff:</string>
@@ -520,6 +539,26 @@
                  </property>
                 </widget>
                </item>
+               <item>
+                <widget class="QLabel" name="label_10">
+                 <property name="text">
+                  <string>AFE gain:</string>
+                 </property>
+                 <property name="buddy">
+                  <cstring>afe1GainBox</cstring>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QComboBox" name="afe1GainBox">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                   <horstretch>0</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                </widget>
+               </item>
               </layout>
              </widget>
             </item>
@@ -535,6 +574,15 @@
                <string>Add ADC1 to … (for probing loop dynamics)</string>
               </property>
               <layout class="QHBoxLayout" name="horizontalLayout_5">
+               <property name="spacing">
+                <number>3</number>
+               </property>
+               <property name="leftMargin">
+                <number>2</number>
+               </property>
+               <property name="rightMargin">
+                <number>2</number>
+               </property>
                <item>
                 <widget class="QRadioButton" name="adc1IgnoreButton">
                  <property name="toolTip">
@@ -654,7 +702,7 @@
             <rect>
              <x>0</x>
              <y>0</y>
-             <width>545</width>
+             <width>550</width>
              <height>361</height>
             </rect>
            </property>
@@ -675,22 +723,25 @@
             <rect>
              <x>-1</x>
              <y>-1</y>
-             <width>541</width>
+             <width>551</width>
              <height>361</height>
             </rect>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_5">
+            <property name="spacing">
+             <number>2</number>
+            </property>
             <property name="leftMargin">
-             <number>9</number>
+             <number>2</number>
             </property>
             <property name="topMargin">
-             <number>9</number>
+             <number>2</number>
             </property>
             <property name="rightMargin">
-             <number>9</number>
+             <number>2</number>
             </property>
             <property name="bottomMargin">
-             <number>9</number>
+             <number>2</number>
             </property>
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_8">
