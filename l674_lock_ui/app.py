@@ -96,6 +96,17 @@ WAVEMETER_TIMEOUT = 10.0
 #: search.
 LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH = 5
 
+#: Duration of a single scope trace of streamed ADC, DAC data.
+#: PyQt's drawing speed and the FFT processing step limit this value.
+SCOPE_TRACE_DURATION = 0.02
+
+#: Interval between scope plot updates, in seconds.
+#: PyQt's drawing speed limits value.
+SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
+
+#: Time scale of quantities reported by the stream thread, in seconds.
+SCOPE_TIME_SCALE = 1e-3  # Use ms and kHz as units.
+
 
 @unique
 class LockState(Enum):
@@ -166,14 +177,17 @@ class UI(QtWidgets.QMainWindow):
                 xlabel = "Frequency / kHz"
                 for plt in items:
                     plt.setLogMode(True, True)
-                    plt.setRange(xRange=[0.5, np.log10(0.5 / SAMPLE_PERIOD / 1000)],
+                    plt.setRange(xRange=[0.5, np.log10(0.5 * SCOPE_TIME_SCALE / SAMPLE_PERIOD)],
                                  yRange=[-7, -1])
             else:
                 ylabel = "Amplitude / V"
                 xlabel = "Time / ms"
                 for plt in items:
                     plt.setLogMode(False, False)
-                    plt.setRange(xRange=[-5, 0], yRange=[-11, 11])
+                    plt.setRange(
+                        xRange=[-SCOPE_TRACE_DURATION / SCOPE_TIME_SCALE, 0], 
+                        yRange=[-11, 11]
+                    )
 
             items[0].setLabels(left=ylabel)
             items[1].setLabels(left=ylabel)
@@ -208,18 +222,16 @@ class UI(QtWidgets.QMainWindow):
 
     def update_stream(self,
                       traces,
+                      spectra,
                       message: str = "Waiting for stream"):
         if self.tabWidget.currentIndex() != 1:
             return
         self.streamStatusEdit.setText(message)
-        for trace, plot_data in zip(traces, self.scope_plot_data_items):
+        for trace, spectrum, plot_data in zip(traces, spectra, self.scope_plot_data_items):
             if self.enableFftBox.isChecked():
-                y = np.abs(fft.rfft(trace)) * np.sqrt(2 * SAMPLE_PERIOD / len(trace))
-                x = np.linspace(0, 0.5 / SAMPLE_PERIOD, len(y)) / 1000
+                plot_data.setData(*spectrum)
             else:
-                y = trace
-                x = np.linspace(-len(trace) * SAMPLE_PERIOD, 0, len(trace)) * 1000
-            plot_data.setData(x, y)
+                plot_data.setData(*trace)
 
 
 async def update_stabilizer(ui: UI,
@@ -767,11 +779,7 @@ def stream_worker(main_loop: asyncio.AbstractEventLoop, ui_callback: Callable,
     Also, it is not possible to change the Qt event loop. Therefore, we
     have to handle the stream in a separate thread running this function.
     """
-    # history and UI update rate chosen near the limits of Qt's drawing speed
-    update_rate = 20  # fps
-    history = 5e-3  # s
-
-    buffer = [deque(maxlen=int(history / SAMPLE_PERIOD)) for _ in range(4)]
+    buffer = [deque(maxlen=int(SCOPE_TRACE_DURATION / SAMPLE_PERIOD)) for _ in range(4)]
     stat = StreamStats()
 
     async def handle_stream():
@@ -790,12 +798,27 @@ def stream_worker(main_loop: asyncio.AbstractEventLoop, ui_callback: Callable,
     async def handle_callback():
         """This coroutine doesn't run in the main thread's loop!"""
         while not terminate.is_set():
+            while not all(map(len, buffer)):
+                await asyncio.sleep(SCOPE_UPDATE_PERIOD)
+
             stats_message = "Speed: {:.2f} MB/s ({:.3f} % batches lost)".format(
                 stat.download / 1e6, 100 * stat.loss)
             data = [np.array(buf) * DAC_VOLTS_PER_LSB for buf in buffer]
-            main_loop.call_soon_threadsafe(ui_callback, data, stats_message)
+            traces = [
+                (np.linspace(-len(buf) * SAMPLE_PERIOD, 0, len(buf)) / SCOPE_TIME_SCALE, buf)
+                for buf in data
+            ]
+            transforms = [
+                np.abs(fft.rfft(buf)) * np.sqrt(2 * SAMPLE_PERIOD / len(buf))
+                for buf in data
+            ]
+            spectra = [
+                (np.linspace(0, 0.5 / SAMPLE_PERIOD, len(fbuf)) * SCOPE_TIME_SCALE, fbuf)
+                for fbuf in transforms
+            ]
+            main_loop.call_soon_threadsafe(ui_callback, traces, spectra, stats_message)
             # Do not overload the main thread!
-            await asyncio.sleep(1 / update_rate)
+            await asyncio.sleep(SCOPE_UPDATE_PERIOD)
 
     async def _wait_for_main_loop():
         """Wait until main loop is running (can only return if it is running)
