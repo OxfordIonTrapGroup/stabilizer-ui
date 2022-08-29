@@ -120,6 +120,8 @@ class TextEditLogHandler(logging.Handler):
 
 
 class UI(QtWidgets.QMainWindow):
+    afe_options = ["G1", "G2", "G5", "G10"]
+
     def __init__(self):
         super().__init__()
 
@@ -143,6 +145,9 @@ class UI(QtWidgets.QMainWindow):
         logger.addHandler(self.log_handler)
 
         self.lock_state = LockState.uninitialised
+
+        for afe in [self.afe0GainBox, self.afe1GainBox]:
+            afe.addItems(self.afe_options)
 
         # Order is consistent with `AdcDac.to_mu()`.
         self.scope_plot_items = [
@@ -273,6 +278,16 @@ async def update_stabilizer(ui: UI,
 
         return read, write
 
+    def combo_box():
+        def read(widgets):
+            return [w.currentText() for w in widgets]
+
+        def write(widgets, value):
+            for w, v in zip(widgets, value):
+                w.setCurrentIndex(UI.afe_options.index(v))
+
+        return read, write
+
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
         Settings.fast_p_gain: (ui.fastPGainBox, ),
@@ -292,6 +307,7 @@ async def update_stabilizer(ui: UI,
         ([ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
          radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"])),
         Settings.aux_ttl_out: (ui.enableAOMLockBox, invert),
+        Settings.afe_gains: ([ui.afe0GainBox, ui.afe1GainBox], combo_box()),
     }
 
     def read_ui():
@@ -319,11 +335,15 @@ async def update_stabilizer(ui: UI,
         retained_settings = {}
 
         def collect_settings(_client, topic, value, _qos, _properties):
+            subtopic = topic[len(root_topic) + 1:]
             try:
-                key = Settings(topic[len(root_topic) + 1:])
-                retained_settings[key] = json.loads(value)
+                key = Settings(subtopic)
+                decoded_value = json.loads(value)
+                retained_settings[key] = decoded_value
+                logger.info("Registering message topic '#/%s' with value '%s'", 
+                    subtopic, decoded_value)
             except:
-                logger.info("Ignoring message topic '%s'", topic)
+                logger.info("Ignoring message topic '%s'", subtopic)
             return 0
 
         client.on_message = collect_settings
@@ -364,6 +384,8 @@ async def update_stabilizer(ui: UI,
                     widget.valueChanged.connect(queue)
                 elif hasattr(widget, "toggled"):
                     widget.toggled.connect(queue)
+                elif hasattr(widget, "activated"):
+                    widget.activated.connect(queue)
                 else:
                     assert False
 
@@ -383,7 +405,7 @@ async def update_stabilizer(ui: UI,
         # Allow relock task to directly request ADC1 updates.
         stabilizer_interface.set_interface(interface)
 
-        # ui_updated.set()  # trigger initial update
+        ui_updated.set()  # trigger initial update
         while True:
             await ui_updated.wait()
             while keys_to_write:
