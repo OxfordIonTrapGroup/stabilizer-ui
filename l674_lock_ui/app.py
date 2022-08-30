@@ -254,6 +254,9 @@ async def update_stabilizer(ui: UI,
         if isinstance(widget, QtWidgets.QDoubleSpinBox):
             return widget.value()
 
+        if isinstance(widget, QtWidgets.QComboBox):
+            return widget.currentText()
+
         assert f"Widget type not handled: {widget}"
 
     def write(widget, value):
@@ -265,6 +268,8 @@ async def update_stabilizer(ui: UI,
             widget.setChecked(value)
         elif isinstance(widget, QtWidgets.QDoubleSpinBox):
             widget.setValue(value)
+        elif isinstance(widget, QtWidgets.QComboBox):
+            widget.setCurrentIndex(UI.afe_options.index(value))
         else:
             assert f"Widget type not handled: {widget}"
 
@@ -292,16 +297,6 @@ async def update_stabilizer(ui: UI,
 
         return read, write
 
-    def combo_box():
-        def read(widgets):
-            return [w.currentText() for w in widgets]
-
-        def write(widgets, value):
-            for w, v in zip(widgets, value):
-                w.setCurrentIndex(UI.afe_options.index(v))
-
-        return read, write
-
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
         Settings.fast_p_gain: (ui.fastPGainBox, ),
@@ -321,7 +316,8 @@ async def update_stabilizer(ui: UI,
         ([ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
          radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"])),
         Settings.aux_ttl_out: (ui.enableAOMLockBox, invert),
-        Settings.afe_gains: ([ui.afe0GainBox, ui.afe1GainBox], combo_box()),
+        Settings.afe0_gain: (ui.afe0GainBox, ),
+        Settings.afe1_gain: (ui.afe1GainBox, ),
     }
 
     def read_ui():

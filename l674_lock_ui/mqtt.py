@@ -131,7 +131,8 @@ class Settings(Enum):
     adc1_routing = "settings/adc1_routing"
     aux_ttl_out = "settings/aux_ttl_out"
     stream_target = "settings/stream_target"
-    afe_gains = "settings/afe"
+    afe0_gain = "settings/afe/0"
+    afe1_gain = "settings/afe/1"
 
 
 class StabilizerInterface:
@@ -149,7 +150,8 @@ class StabilizerInterface:
         Settings.adc1_routing,
         Settings.aux_ttl_out,
         Settings.stream_target,
-        Settings.afe_gains,
+        Settings.afe0_gain,
+        Settings.afe1_gain,
     }
     #: IIR[0][0]
     fast_pid_settings = {
