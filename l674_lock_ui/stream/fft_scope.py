@@ -7,18 +7,18 @@ import numpy.fft
 from .stream import CallbackPayload, StreamData
 
 
-class FftScope:
-    def __init__(self, graphics_view: GraphicsLayoutWidget,
-                 en_fft_box: QtWidgets.QCheckBox, status_line: QtWidgets.QLineEdit):
-        self.en_fft_box = en_fft_box
-        self.status_line = status_line
+class FftScope(QtWidgets.Qtwidget):
+    def __init__(self):
+        super().__init__()
+        ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scope.ui")
+        uic.loadUi(ui_path, self)
 
         scope_plot_items = [
-            graphics_view.addPlot(row=i, col=j) for i in range(2) for j in range(2)
+            self.graphics_view.addPlot(row=i, col=j) for i in range(2) for j in range(2)
         ]
         # Maximise space utilisation.
-        graphics_view.ci.layout.setContentsMargins(0, 0, 0, 0)
-        graphics_view.ci.layout.setSpacing(0)
+        self.graphics_view.ci.layout.setContentsMargins(0, 0, 0, 0)
+        self.graphics_view.ci.layout.setSpacing(0)
         # Use legend instead of title to save space.
         legends = [plt.addLegend(offset=(-10, 10)) for plt in scope_plot_items]
         # Create the objects holding the data to plot.
@@ -82,3 +82,11 @@ class FftScope:
         spectra = [(np.linspace(0, 0.5 / SAMPLE_PERIOD, len(fbuf)) * SCOPE_TIME_SCALE,
                     fbuf) for fbuf in transforms]
         return traces, spectra
+
+
+class FFTScope(QtWidgets.QWidget):
+    """Qtwidget for displaying real time streaming of stabilizer adc and dac channels.
+    """
+
+    def __init__(self):
+

@@ -15,6 +15,11 @@ from ...ui_utils import link_slider_to_spinbox
 
 logger = logging.getLogger(__name__)
 
+class ScopeUI(QtWidgets.QtWidget):
+    def __init__(self):
+        ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scope.ui")
+        uic.loadUi(ui_path, self)
+
 class UI(QtWidgets.QMainWindow):
     afe_options = ["G1", "G2", "G5", "G10"]
 
@@ -28,6 +33,8 @@ class UI(QtWidgets.QMainWindow):
 
         for afe in [self.afe0GainBox, self.afe1GainBox]:
             afe.addItems(self.afe_options)
+
+        self.scope = ScopeUI(self)
 
 
     def _link_paired_widgets(self):
