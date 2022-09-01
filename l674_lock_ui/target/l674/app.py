@@ -1,16 +1,14 @@
 import argparse
 import asyncio
-import json
 import logging
 import time
 import os
 import sys
-from typing import Awaitable, Callable, List, Union, Dict
+from typing import Awaitable, Callable
 import textwrap
 from contextlib import suppress
 from enum import Enum, unique
 
-from gmqtt import Client as MqttClient
 import numpy as np
 from PyQt5 import QtGui, QtWidgets, uic
 from qasync import QEventLoop
@@ -22,7 +20,9 @@ from .solstis import EnsureSolstis
 
 from ...mqtt import MqttInterface
 from ...stream.fft_scope import FftScope
-from ...stream.thread import StreamTarget, StreamThread
+from ...stream.thread import StreamThread
+from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
+from ... import ui_mqtt_bridge
 from ...ui_utils import link_slider_to_spinbox
 
 logger = logging.getLogger(__name__)
@@ -188,41 +188,11 @@ class UI(QtWidgets.QMainWindow):
 async def update_stabilizer(ui: UI,
                             stabilizer_interface: StabilizerInterface,
                             root_topic: str,
-                            broker_host: str,
-                            stream_target: StreamTarget,
-                            broker_port: int = 1883):
-    def read(widget):
-        if isinstance(widget, (
-                QtWidgets.QCheckBox,
-                QtWidgets.QRadioButton,
-                QtWidgets.QGroupBox,
-        )):
-            return widget.isChecked()
+                            broker_address: NetworkAddress,
+                            stream_target: NetworkAddress):
 
-        if isinstance(widget, QtWidgets.QDoubleSpinBox):
-            return widget.value()
-
-        if isinstance(widget, QtWidgets.QComboBox):
-            return widget.currentText()
-
-        assert f"Widget type not handled: {widget}"
-
-    def write(widget, value):
-        if isinstance(widget, (
-                QtWidgets.QCheckBox,
-                QtWidgets.QRadioButton,
-                QtWidgets.QGroupBox,
-        )):
-            widget.setChecked(value)
-        elif isinstance(widget, QtWidgets.QDoubleSpinBox):
-            widget.setValue(value)
-        elif isinstance(widget, QtWidgets.QComboBox):
-            widget.setCurrentIndex(UI.afe_options.index(value))
-        else:
-            assert f"Widget type not handled: {widget}"
-
-    invert = (lambda w: not read(w), lambda w, v: write(w, not v))
-    kilo = (lambda w: read(w) * 1e3, lambda w, v: write(w, v / 1e3))
+    invert = (lambda w: not ui_mqtt_bridge.read(w), lambda w, v: ui_mqtt_bridge.write(w, not v))
+    kilo = (lambda w: ui_mqtt_bridge.read(w) * 1e3, lambda w, v: ui_mqtt_bridge.write(w, v / 1e3))
 
     def radio_group(choices):
         def read(widgets):
@@ -247,105 +217,43 @@ async def update_stabilizer(ui: UI,
 
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
-        Settings.fast_p_gain: (ui.fastPGainBox, ),
-        Settings.fast_i_gain: (ui.fastIGainBox, kilo),
-        Settings.fast_notch_enable: (ui.notchGroup, ),
-        Settings.fast_notch_frequency: (ui.notchFreqBox, kilo),
-        Settings.fast_notch_quality_factor: (ui.notchQBox, ),
-        Settings.slow_p_gain: (ui.slowPGainBox, ),
-        Settings.slow_i_gain: (ui.slowIGainBox, ),
-        Settings.slow_enable: (ui.slowPIDGroup, ),
-        Settings.lock_mode: ([ui.disablePztButton, ui.rampPztButton, ui.enablePztButton],
-                             radio_group(["Disabled", "RampPassThrough", "Enabled"])),
-        Settings.gain_ramp_time: (ui.gainRampTimeBox, ),
-        Settings.ld_threshold: (ui.lockDetectThresholdBox, ),
-        Settings.ld_reset_time: (ui.lockDetectDelayBox, ),
-        Settings.adc1_routing:
-        ([ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
-         radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"])),
-        Settings.aux_ttl_out: (ui.enableAOMLockBox, invert),
-        Settings.afe0_gain: (ui.afe0GainBox, ),
-        Settings.afe1_gain: (ui.afe1GainBox, ),
+        Settings.fast_p_gain: UiMqttBridgeConfig(ui.fastPGainBox),
+        Settings.fast_i_gain: UiMqttBridgeConfig(ui.fastIGainBox, *kilo),
+        Settings.fast_notch_enable: UiMqttBridgeConfig(ui.notchGroup),
+        Settings.fast_notch_frequency: UiMqttBridgeConfig(ui.notchFreqBox, *kilo),
+        Settings.fast_notch_quality_factor: UiMqttBridgeConfig(ui.notchQBox),
+        Settings.slow_p_gain: UiMqttBridgeConfig(ui.slowPGainBox),
+        Settings.slow_i_gain: UiMqttBridgeConfig(ui.slowIGainBox),
+        Settings.slow_enable: UiMqttBridgeConfig(ui.slowPIDGroup),
+        Settings.lock_mode: UiMqttBridgeConfig(
+            [ui.disablePztButton, ui.rampPztButton, ui.enablePztButton],
+            *radio_group(["Disabled", "RampPassThrough", "Enabled"])),
+        Settings.gain_ramp_time: UiMqttBridgeConfig(ui.gainRampTimeBox),
+        Settings.ld_threshold: UiMqttBridgeConfig(ui.lockDetectThresholdBox),
+        Settings.ld_reset_time: UiMqttBridgeConfig(ui.lockDetectDelayBox),
+        Settings.adc1_routing: UiMqttBridgeConfig(
+            [ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
+            *radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"])),
+        Settings.aux_ttl_out: UiMqttConfig([ui.enableAOMLockBox], *invert),
+        Settings.afe0_gain: UiMqttConfig([ui.afe0GainBox]),
+        Settings.afe1_gain: UiMqttConfig([ui.afe1GainBox]),
+        Settings.stream_target: UiMqttConfig([],
+                                             lambda _: stream_target._asdict(),
+                                             lambda _w, _v: stream_target._asdict())
     }
 
     def read_ui():
         state = {}
         for key, cfg in settings_map.items():
-            read_handler = cfg[1][0] if len(cfg) == 2 else read
-            state[key] = read_handler(cfg[0])
-        state[Settings.stream_target] = stream_target._asdict()
+            state[key] = cfg.read_handler(cfg.widgets)
         return state
 
-    def write_ui(key, value):
-        cfg = settings_map[key]
-        write_handler = cfg[1][1] if len(cfg) == 2 else write
-        return write_handler(cfg[0], value)
-
     try:
-        client = MqttClient(client_id="")
-        await client.connect(broker_host, port=broker_port, keepalive=10)
-        ui.comm_status_label.setText(f"Connected to MQTT broker at {broker_host}.")
-
-        #
-        # Load current settings from MQTT.
-        #
-
-        retained_settings = {}
-
-        def collect_settings(_client, topic, value, _qos, _properties):
-            subtopic = topic[len(root_topic) + 1:]
-            try:
-                key = Settings(subtopic)
-                decoded_value = json.loads(value)
-                retained_settings[key] = decoded_value
-                logger.info("Registering message topic '#/%s' with value '%s'", 
-                    subtopic, decoded_value)
-            except:
-                logger.info("Ignoring message topic '%s'", subtopic)
-            return 0
-
-        client.on_message = collect_settings
-        all_settings = f"{root_topic}/#"
-        client.subscribe(all_settings)
-        # Based on testing, all the retained messages are sent immediately after
-        # subscribing, but add some delay in case this is actually a race condition.
-        await asyncio.sleep(1)
-        client.unsubscribe(all_settings)
-        client.on_message = lambda *a: 0
-
-        for retained_key, retained_value in retained_settings.items():
-            if retained_key in settings_map:
-                write_ui(retained_key, retained_value)
-
-        #
-        # Set up UI signals.
-        #
-
-        keys_to_write = set(Settings)  # write all setings at startup
-        ui_updated = asyncio.Event()
-        for key, cfg in settings_map.items():
-            # Capture loop variable.
-            def make_queue(key):
-                def queue(*args):
-                    keys_to_write.add(key)
-                    ui_updated.set()
-
-                return queue
-
-            queue = make_queue(key)
-
-            widgets = cfg[0]
-            if not isinstance(widgets, list):
-                widgets = [widgets]
-            for widget in widgets:
-                if hasattr(widget, "valueChanged"):
-                    widget.valueChanged.connect(queue)
-                elif hasattr(widget, "toggled"):
-                    widget.toggled.connect(queue)
-                elif hasattr(widget, "activated"):
-                    widget.activated.connect(queue)
-                else:
-                    assert False
+        bridge = await UiMqttBridge.new(broker_address, settings_map)
+        ui.comm_status_label.setText(
+            f"Connected to MQTT broker at {broker_address.get_ip()}.")
+        await bridge.load_ui(Settings, root_topic)
+        keys_to_write, ui_updated = bridge.connect_ui()
 
         #
         # Visually enable UI.
@@ -358,11 +266,12 @@ async def update_stabilizer(ui: UI,
         # Relay user input to MQTT.
         #
 
-        interface = MqttInterface(client, root_topic, timeout=10.0)
+        interface = MqttInterface(bridge.client, root_topic, timeout=10.0)
 
         # Allow relock task to directly request ADC1 updates.
         stabilizer_interface.set_interface(interface)
 
+        keys_to_write.update(set(Settings))
         ui_updated.set()  # trigger initial update
         while True:
             await ui_updated.wait()
@@ -735,7 +644,8 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Interface for the Vescent + Stabilizer 674 laser lock setup")
-    parser.add_argument("-b", "--stabilizer-broker", default="10.255.6.4")
+    parser.add_argument("-b", "--broker-host", default="10.255.6.4")
+    parser.add_argument("--broker-port", default=1883, type=int)
     parser.add_argument("--stabilizer-mac", default="80-1f-12-5d-47-df")
     parser.add_argument("--stream-port", default=9293, type=int)
     parser.add_argument("--wand-host", default="10.255.6.61")
@@ -759,17 +669,20 @@ def main():
         stabilizer_interface = StabilizerInterface()
 
         ui.comm_status_label.setText(
-            f"Connecting to MQTT broker at {args.stabilizer_broker}…")
+            f"Connecting to MQTT broker at {args.broker_host}…")
 
         # Find out which local IP address we are going to direct the stream to.
         # Assume the local IP address is the same for the broker and the stabilizer.
-        local_ip = get_local_ip(args.stabilizer_broker)
-        stream_target = StreamTarget(local_ip, args.stream_port)
+        local_ip = get_local_ip(args.broker_host)
+        stream_target = NetworkAddress(local_ip, args.stream_port)
+
+        broker_address = NetworkAddress(list(map(int, args.broker_host.split('.'))),
+                                        args.broker_port)
 
         stabilizer_topic = f"dt/sinara/l674/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = asyncio.create_task(
             update_stabilizer(ui, stabilizer_interface, stabilizer_topic,
-                              args.stabilizer_broker, stream_target))
+                              broker_address, stream_target))
 
         monitor_lock_task = asyncio.create_task(
             monitor_lock_state(ui, stabilizer_interface, args.wand_host, args.wand_port,

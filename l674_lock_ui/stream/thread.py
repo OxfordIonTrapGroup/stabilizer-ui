@@ -3,9 +3,10 @@ import time
 import threading
 from collections import deque, namedtuple
 from dataclasses import dataclass
-from typing import Dict, Union, List, Callable, NamedTuple
+from typing import Callable
 
 from . import MAX_BUFFER_PERIOD
+from ..ui_mqtt_bridge import NetworkAddress
 
 from stabilizer.stream import StabilizerStream
 from stabilizer.stream import AdcDac, wrap
@@ -17,20 +18,13 @@ StreamData = namedtuple("StreamData", "ADC0 ADC1 DAC0 DAC1")
 
 CallbackPayload = namedtuple("CallbackPayload", "values download loss")
 
-class StreamTarget(NamedTuple):
-    ip: List[int]
-    port: int = 9293
-
-    def get_ip(self) -> str:
-        return ".".join(map(str, self.ip))
-
 
 class StreamThread:
     def __init__(self,
                  ui_callback: Callable,
                  precondition_data: Callable,
                  callback_interval: float,
-                 stream_target: StreamTarget,
+                 stream_target: NetworkAddress,
                  max_buffer_period: float = MAX_BUFFER_PERIOD):
         main_event_loop = asyncio.get_running_loop()
         self._terminate = threading.Event()
@@ -97,7 +91,7 @@ def stream_worker(
     ui_callback: Callable,
     precondition_data: Callable,
     callback_interval: float,
-    stream_target: StreamTarget,
+    stream_target: NetworkAddress,
     main_loop: asyncio.AbstractEventLoop,
     terminate: threading.Event,
     maxlen: int,
