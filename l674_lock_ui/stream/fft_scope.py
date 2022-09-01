@@ -1,4 +1,5 @@
-from PyQt5 import QtWidgets
+import os
+from PyQt5 import QtWidgets, uic
 from pyqtgraph import GraphicsLayoutWidget
 from stabilizer import SAMPLE_PERIOD
 import numpy as np
@@ -7,7 +8,7 @@ from .thread import CallbackPayload, StreamData
 from . import MAX_BUFFER_PERIOD, SCOPE_TIME_SCALE
 
 
-class FftScope(QtWidgets.Qtwidget):
+class FftScope(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scope.ui")
@@ -82,11 +83,3 @@ class FftScope(QtWidgets.Qtwidget):
         spectra = [(np.linspace(0, 0.5 / SAMPLE_PERIOD, len(fbuf)) * SCOPE_TIME_SCALE,
                     fbuf) for fbuf in transforms]
         return traces, spectra
-
-
-class FFTScope(QtWidgets.QWidget):
-    """Qtwidget for displaying real time streaming of stabilizer adc and dac channels.
-    """
-
-    def __init__(self):
-
