@@ -104,7 +104,7 @@
      <string>AFE Gain: </string>
     </property>
    </widget>
-   <widget class="QComboBox" name="afe0GainBox">
+   <widget class="QComboBox" name="afeGainBox">
     <property name="geometry">
      <rect>
       <x>60</x>
@@ -219,72 +219,318 @@
       </property>
      </widget>
     </widget>
-    <widget class="QWidget" name="layoutWidget_2">
+    <widget class="QStackedWidget" name="stackedWidget">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
      <property name="geometry">
       <rect>
-       <x>11</x>
-       <y>21</y>
+       <x>10</x>
+       <y>10</y>
        <width>181</width>
-       <height>158</height>
+       <height>251</height>
       </rect>
      </property>
-     <layout class="QGridLayout" name="gridLayout">
-      <item row="0" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>P Gain:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QDoubleSpinBox" name="doubleSpinBox"/>
-      </item>
-      <item row="1" column="1">
-       <widget class="QSlider" name="horizontalSlider">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="label_2">
-        <property name="text">
-         <string>I Gain:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_2"/>
-      </item>
-      <item row="3" column="1">
-       <widget class="QSlider" name="horizontalSlider_2">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="0">
-       <widget class="QLabel" name="label_3">
-        <property name="text">
-         <string>D Gain:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="1">
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_3"/>
-      </item>
-      <item row="5" column="1">
-       <widget class="QSlider" name="horizontalSlider_3">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-       </widget>
-      </item>
-     </layout>
+     <property name="currentIndex">
+      <number>4</number>
+     </property>
+     <widget class="QWidget" name="page">
+      <widget class="QWidget" name="layoutWidget_2">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>20</y>
+         <width>181</width>
+         <height>158</height>
+        </rect>
+       </property>
+       <layout class="QGridLayout" name="gridLayout">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label">
+          <property name="text">
+           <string>P Gain:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QDoubleSpinBox" name="pGainSpinBox"/>
+        </item>
+        <item row="1" column="1">
+         <widget class="QSlider" name="pGainSlider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_2">
+          <property name="text">
+           <string>I Gain:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QDoubleSpinBox" name="iGainSpinBox"/>
+        </item>
+        <item row="3" column="1">
+         <widget class="QSlider" name="iGainSlider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>D Gain:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QDoubleSpinBox" name="dGainSpinBox"/>
+        </item>
+        <item row="5" column="1">
+         <widget class="QSlider" name="dGainSlider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+     <widget class="QWidget" name="page_3">
+      <widget class="QWidget" name="">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>20</y>
+         <width>181</width>
+         <height>104</height>
+        </rect>
+       </property>
+       <layout class="QGridLayout" name="gridLayout_2">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_9">
+          <property name="text">
+           <string>f0 (Hz): </string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QDoubleSpinBox" name="lp_f0SpinBox"/>
+        </item>
+        <item row="1" column="1">
+         <widget class="QSlider" name="lp_f0Slider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_10">
+          <property name="text">
+           <string>I Gain:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QDoubleSpinBox" name="lp_KSpinBox"/>
+        </item>
+        <item row="3" column="1">
+         <widget class="QSlider" name="lp_KSlider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+     <widget class="QWidget" name="page_4">
+      <widget class="QWidget" name="layoutWidget_6">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>20</y>
+         <width>181</width>
+         <height>104</height>
+        </rect>
+       </property>
+       <layout class="QGridLayout" name="gridLayout_3">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_11">
+          <property name="text">
+           <string>f0 (Hz): </string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QDoubleSpinBox" name="hp_f0SpinBox"/>
+        </item>
+        <item row="1" column="1">
+         <widget class="QSlider" name="hp_f0Slider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_12">
+          <property name="text">
+           <string>I Gain:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QDoubleSpinBox" name="hp_KSpinBox"/>
+        </item>
+        <item row="3" column="1">
+         <widget class="QSlider" name="hp_KSlider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+     <widget class="QWidget" name="page_5">
+      <widget class="QWidget" name="layoutWidget_7">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>20</y>
+         <width>181</width>
+         <height>104</height>
+        </rect>
+       </property>
+       <layout class="QGridLayout" name="gridLayout_8">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_13">
+          <property name="text">
+           <string>f0 (Hz): </string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QDoubleSpinBox" name="ap_f0SpinBox"/>
+        </item>
+        <item row="1" column="1">
+         <widget class="QSlider" name="ap_f0Slider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_14">
+          <property name="text">
+           <string>I Gain:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QDoubleSpinBox" name="ap_KSpinBox"/>
+        </item>
+        <item row="3" column="1">
+         <widget class="QSlider" name="ap_KSlider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+     <widget class="QWidget" name="page_2">
+      <widget class="QWidget" name="layoutWidget_8">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>20</y>
+         <width>181</width>
+         <height>158</height>
+        </rect>
+       </property>
+       <layout class="QGridLayout" name="gridLayout_9">
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_15">
+          <property name="text">
+           <string>f0 (Hz)</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QDoubleSpinBox" name="notch_f0SpinBox"/>
+        </item>
+        <item row="1" column="1">
+         <widget class="QSlider" name="notch_f0Slider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="label_16">
+          <property name="text">
+           <string>Q:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QDoubleSpinBox" name="notch_QSpinBox"/>
+        </item>
+        <item row="3" column="1">
+         <widget class="QSlider" name="notch_QSlider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="label_17">
+          <property name="text">
+           <string>K:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QDoubleSpinBox" name="notch_KSpinBox"/>
+        </item>
+        <item row="5" column="1">
+         <widget class="QSlider" name="notch_KSlider">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
     </widget>
+    <zorder>stackedWidget</zorder>
+    <zorder>groupBox_5</zorder>
    </widget>
   </widget>
  </widget>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>comboBox</sender>
+   <signal>currentIndexChanged(int)</signal>
+   <receiver>stackedWidget</receiver>
+   <slot>setCurrentIndex(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>79</x>
+     <y>154</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>199</x>
+     <y>187</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>
