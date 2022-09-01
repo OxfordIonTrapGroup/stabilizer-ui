@@ -34,7 +34,9 @@ def main():
 
     app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")
-    app.setApplicationName("Test")
+    app.setOrganizationDomain("photonic.link")
+    app.setApplicationName("Dual IIR UI")
+
 
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
