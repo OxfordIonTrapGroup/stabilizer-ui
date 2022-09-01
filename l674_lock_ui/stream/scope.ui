@@ -1,78 +1,68 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>fft_scope</class>
- <widget class="QWidget" name="fft_scope">
+ <widget class="QWidget" name="verticalLayoutWidget">
   <property name="geometry">
    <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>647</width>
+    <x>-1</x>
+    <y>-1</y>
+    <width>551</width>
     <height>361</height>
    </rect>
   </property>
-  <widget class="QWidget" name="verticalLayoutWidget">
-   <property name="geometry">
-    <rect>
-     <x>-1</x>
-     <y>-1</y>
-     <width>551</width>
-     <height>361</height>
-    </rect>
+  <layout class="QVBoxLayout" name="verticalLayout_5">
+   <property name="spacing">
+    <number>2</number>
    </property>
-   <layout class="QVBoxLayout" name="verticalLayout_5">
-    <property name="spacing">
-     <number>2</number>
-    </property>
-    <property name="leftMargin">
-     <number>2</number>
-    </property>
-    <property name="topMargin">
-     <number>2</number>
-    </property>
-    <property name="rightMargin">
-     <number>2</number>
-    </property>
-    <property name="bottomMargin">
-     <number>2</number>
-    </property>
-    <item>
-     <layout class="QHBoxLayout" name="horizontalLayout_8">
-      <item>
-       <widget class="QLineEdit" name="status_line">
-        <property name="text">
-         <string>&lt;pending&gt;</string>
-        </property>
-        <property name="frame">
-         <bool>false</bool>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-        </property>
-        <property name="readOnly">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="en_fft_box">
-        <property name="text">
-         <string>Enable FFT</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <widget class="GraphicsLayoutWidget" name="graphics_view" native="true"/>
-    </item>
-   </layout>
-  </widget>
+   <property name="leftMargin">
+    <number>2</number>
+   </property>
+   <property name="topMargin">
+    <number>2</number>
+   </property>
+   <property name="rightMargin">
+    <number>2</number>
+   </property>
+   <property name="bottomMargin">
+    <number>2</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_8">
+     <item>
+      <widget class="QLineEdit" name="status_line">
+       <property name="text">
+        <string>&lt;pending&gt;</string>
+       </property>
+       <property name="frame">
+        <bool>false</bool>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+       </property>
+       <property name="readOnly">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="en_fft_box">
+       <property name="text">
+        <string>Enable FFT</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="GraphicsLayoutWidget" name="graphics_view" native="true"/>
+   </item>
+  </layout>
  </widget>
  <customwidgets>
   <customwidget>
    <class>GraphicsLayoutWidget</class>
    <extends>QWidget</extends>
-   <header>graphicslayoutwidget.h</header>
+   <header>pyqtgraph</header>
   </customwidget>
  </customwidgets>
  <resources/>

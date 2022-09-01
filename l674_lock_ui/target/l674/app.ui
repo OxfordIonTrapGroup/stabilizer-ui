@@ -770,11 +770,6 @@
            </property>
           </widget>
          </widget>
-         <widget class="QWidget" name="tab_scope">
-          <attribute name="title">
-           <string>Scope</string>
-          </attribute>
-         </widget>
         </widget>
        </item>
       </layout>

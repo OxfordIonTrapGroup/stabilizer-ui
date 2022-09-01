@@ -152,7 +152,8 @@ class UI(QtWidgets.QMainWindow):
         for afe in [self.afe0GainBox, self.afe1GainBox]:
             afe.addItems(self.afe_options)
 
-        self.scope = FftScope(self.scopeGraphicsView, self.enableFftBox, self.streamStatusEdit)
+        self.scope = FftScope()
+        self.tabWidget.addTab(self.scope, "Scope")
 
     def _link_paired_widgets(self):
         for s, b in [(self.fastPGainSlider, self.fastPGainBox),
