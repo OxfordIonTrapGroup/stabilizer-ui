@@ -1,11 +1,12 @@
 import asyncio
 from contextlib import suppress
-from gmqtt import Client
 from typing import Any, Optional, Dict, Iterable
 import logging
 import json
-import uuid
 from enum import Enum
+
+from gmqtt import Client
+import uuid
 import stabilizer
 import numpy as np
 
@@ -141,7 +142,7 @@ class StabilizerInterfaceBase:
                             i_gain: float):
         b0 = i_gain * 2 * np.pi * stabilizer.SAMPLE_PERIOD + p_gain
         b1 = -p_gain
-        await self._set_iir(channel, iir_idx=0, ba=[b0, b1, 0, 1, 0])
+        await self.set_iir(channel, iir_idx, [b0, b1, 0, 1, 0])
 
     async def set_iir(self, channel: int, iir_idx: int, ba: Iterable):
         key = f"{self.iir_ch_topic_base}/{channel}/{iir_idx}"
@@ -149,7 +150,7 @@ class StabilizerInterfaceBase:
         value = {'ba': list(ba), 'y_offset': 0.0, 'y_min': -fs, 'y_max': fs}
         await self.request_settings_change(key, value)
 
-    def _publish_ui_change(self, topic: str, argument: Any):
+    def publish_ui_change(self, topic: str, argument: Any):
         payload = json.dumps(argument).encode("utf-8")
         self._interface._client.publish(f"{self._interface._topic_base}/{topic}",
                                         payload,

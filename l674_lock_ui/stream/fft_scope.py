@@ -1,10 +1,10 @@
 from PyQt5 import QtWidgets
 from pyqtgraph import GraphicsLayoutWidget
 from stabilizer import SAMPLE_PERIOD
-from typing import List
 import numpy as np
 import numpy.fft
-from .stream import CallbackPayload, StreamData
+from .thread import CallbackPayload, StreamData
+from . import MAX_BUFFER_PERIOD, SCOPE_TIME_SCALE
 
 
 class FftScope(QtWidgets.Qtwidget):
@@ -33,7 +33,7 @@ class FftScope(QtWidgets.Qtwidget):
                 "ylabel": "ASD / (V/sqrt(Hz))",
                 "xlabel": "Frequency / kHz",
                 "log": [True, True],
-                "xrange": [0.5, np.log10(0.5 * MAX_BUFFER_PERIOD / SAMPLE_PERIOD)],
+                "xrange": [0.5, np.log10(0.5 * SCOPE_TIME_SCALE / SAMPLE_PERIOD)],
                 "yrange": [-7, -1],
             },
             False: {
