@@ -187,7 +187,7 @@ async def update_stabilizer(ui: UI,
                             stabilizer_interface: StabilizerInterface,
                             root_topic: str,
                             broker_host: str,
-                            stream_target: Dict[str, Union[List[int], int]],
+                            stream_target: StreamTarget,
                             broker_port: int = 1883):
     def read(widget):
         if isinstance(widget, (
@@ -271,7 +271,7 @@ async def update_stabilizer(ui: UI,
         for key, cfg in settings_map.items():
             read_handler = cfg[1][0] if len(cfg) == 2 else read
             state[key] = read_handler(cfg[0])
-        state[Settings.stream_target] = stream_target
+        state[Settings.stream_target] = stream_target._asdict()
         return state
 
     def write_ui(key, value):
@@ -761,9 +761,8 @@ def main():
 
         # Find out which local IP address we are going to direct the stream to.
         # Assume the local IP address is the same for the broker and the stabilizer.
-        local_ip = stabilizer.stream.get_local_ip(args.stabilizer_broker)
-        # Format already right for MQTT broker (IP as list of `int`s).
-        stream_target = {"ip": local_ip, "port": args.stream_port}
+        local_ip = get_local_ip(args.stabilizer_broker)
+        stream_target = StreamTarget(local_ip, args.stream_port)
 
         stabilizer_topic = f"dt/sinara/l674/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = asyncio.create_task(

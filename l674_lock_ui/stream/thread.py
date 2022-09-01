@@ -1,17 +1,28 @@
 import asyncio
 import time
 import threading
-from collections import deque
+from collections import deque, namedtuple
 from dataclasses import dataclass
-from typing import Dict, Union, List, Callable
+from typing import Dict, Union, List, Callable, NamedTuple
 
-from stabilizer.stream import StabilizerStream, AdcDac, wrap
+from . import MAX_BUFFER_PERIOD
+
+from stabilizer.stream import StabilizerStream
+from stabilizer.stream import AdcDac, wrap
 from stabilizer import DAC_VOLTS_PER_LSB, SAMPLE_PERIOD
 import numpy as np
 
 # Order is consistent with `AdcDac.to_mu()`.
 StreamData = namedtuple("StreamData", "ADC0 ADC1 DAC0 DAC1")
+
 CallbackPayload = namedtuple("CallbackPayload", "values download loss")
+
+class StreamTarget(NamedTuple):
+    ip: List[int]
+    port: int = 9293
+
+    def get_ip(self) -> str:
+        return ".".join(map(str, self.ip))
 
 
 class StreamThread:
@@ -19,7 +30,7 @@ class StreamThread:
                  ui_callback: Callable,
                  precondition_data: Callable,
                  callback_interval: float,
-                 stream_target: Dict[str, Union[List[int], int]],
+                 stream_target: StreamTarget,
                  max_buffer_period: float = MAX_BUFFER_PERIOD):
         main_event_loop = asyncio.get_running_loop()
         self._terminate = threading.Event()
@@ -86,7 +97,7 @@ def stream_worker(
     ui_callback: Callable,
     precondition_data: Callable,
     callback_interval: float,
-    stream_target: Dict[str, Union[List[int], int]],
+    stream_target: StreamTarget,
     main_loop: asyncio.AbstractEventLoop,
     terminate: threading.Event,
     maxlen: int,
@@ -102,8 +113,8 @@ def stream_worker(
 
     async def handle_stream():
         """This coroutine doesn't run in the main thread's loop!"""
-        ip, port = '.'.join(map(str, stream_target["ip"])), stream_target["port"]
-        transport, stream = await StabilizerStream.open((ip, port), 1)
+        transport, stream = await StabilizerStream.open(
+            (stream_target.get_ip(), stream_target.port), 1)
         try:
             while not terminate.is_set():
                 frame = await stream.queue.get()
