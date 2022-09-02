@@ -1,6 +1,5 @@
 import os
 from PyQt5 import QtWidgets, uic
-from pyqtgraph import GraphicsLayoutWidget
 from stabilizer import SAMPLE_PERIOD
 import numpy as np
 import numpy.fft
