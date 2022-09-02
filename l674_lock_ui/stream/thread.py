@@ -2,7 +2,6 @@ import asyncio
 import time
 import threading
 from collections import deque, namedtuple
-from dataclasses import dataclass
 from typing import Callable
 
 from . import MAX_BUFFER_PERIOD
@@ -43,48 +42,42 @@ class StreamThread:
         self._thread.join()
 
 
-@dataclass
-class StreamStats:
-    """Periodically resetting stream statistics using
-    non-overlapping windows of 1s duration.
-    """
-    expect = None
-    received = 0
-    lost = 0
-    bytes = 0
+_StatPoint = namedtuple("_StatPoint", "time received lost bytes")
 
-    def __post_init__(self):
-        self._start_ns = time.monotonic_ns()
-        self._last_ns = -1
+
+class StreamStats:
+    """Moving average stream statistics
+
+    :param maxlen: The number of retained historic points.
+        Typically, there are 4000 updates per second.
+    """
+    def __init__(self, maxlen=4000):
+        self._expect = None
+        self._stat = deque(maxlen=maxlen)
+        self._stat.append(_StatPoint(time.monotonic_ns(), 0, 0, 0))
 
     def update(self, frame: AdcDac):
-        now_ns = time.monotonic_ns()
-        if now_ns - self._start_ns > 1e9:
-            self.expect = None
-            self.received = 0
-            self.lost = 0
-            self.bytes = 0
-            self._start_ns = self._last_ns
-        self._last_ns = now_ns
-
-        if self.expect is not None:
-            self.lost += wrap(frame.header.sequence - self.expect)
+        sequence = frame.header.sequence
+        lost = 0 if self._expect is None else wrap(sequence - self._expect)
         batch_count = frame.batch_count()
-        self.received += batch_count
-        self.expect = wrap(frame.header.sequence + batch_count)
-        self.bytes += frame.size()
+        self._expect = wrap(sequence + batch_count)
+        bytes = frame.size()
+
+        self._stat.append(_StatPoint(time.monotonic_ns(), batch_count, lost, bytes))
 
     @property
     def download(self):
         """Bytes per second"""
-        duration = (self._last_ns - self._start_ns + 1) / 1e9
-        return self.bytes / duration
+        duration = (self._stat[-1].time - self._stat[0].time + 1) / 1e9
+        bytes = np.sum(s.bytes for s in self._stat)
+        return bytes / duration
 
     @property
     def loss(self):
         """Fraction of batches lost"""
-        sent = self.received + self.lost
-        return self.lost / sent if sent else 1
+        received, lost = np.sum([[s.received, s.lost] for s in self._stat], axis=0)
+        sent = received + lost
+        return lost / sent if sent else 1
 
 
 def stream_worker(
