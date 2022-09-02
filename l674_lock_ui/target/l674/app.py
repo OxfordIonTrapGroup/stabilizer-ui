@@ -217,21 +217,21 @@ async def update_stabilizer(ui: UI,
 
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
-        Settings.fast_p_gain: UiMqttBridgeConfig(ui.fastPGainBox),
-        Settings.fast_i_gain: UiMqttBridgeConfig(ui.fastIGainBox, *kilo),
-        Settings.fast_notch_enable: UiMqttBridgeConfig(ui.notchGroup),
-        Settings.fast_notch_frequency: UiMqttBridgeConfig(ui.notchFreqBox, *kilo),
-        Settings.fast_notch_quality_factor: UiMqttBridgeConfig(ui.notchQBox),
-        Settings.slow_p_gain: UiMqttBridgeConfig(ui.slowPGainBox),
-        Settings.slow_i_gain: UiMqttBridgeConfig(ui.slowIGainBox),
-        Settings.slow_enable: UiMqttBridgeConfig(ui.slowPIDGroup),
-        Settings.lock_mode: UiMqttBridgeConfig(
+        Settings.fast_p_gain: UiMqttConfig([ui.fastPGainBox]),
+        Settings.fast_i_gain: UiMqttConfig([ui.fastIGainBox], *kilo),
+        Settings.fast_notch_enable: UiMqttConfig([ui.notchGroup]),
+        Settings.fast_notch_frequency: UiMqttConfig([ui.notchFreqBox], *kilo),
+        Settings.fast_notch_quality_factor: UiMqttConfig([ui.notchQBox]),
+        Settings.slow_p_gain: UiMqttConfig([ui.slowPGainBox]),
+        Settings.slow_i_gain: UiMqttConfig([ui.slowIGainBox]),
+        Settings.slow_enable: UiMqttConfig([ui.slowPIDGroup]),
+        Settings.lock_mode: UiMqttConfig(
             [ui.disablePztButton, ui.rampPztButton, ui.enablePztButton],
             *radio_group(["Disabled", "RampPassThrough", "Enabled"])),
-        Settings.gain_ramp_time: UiMqttBridgeConfig(ui.gainRampTimeBox),
-        Settings.ld_threshold: UiMqttBridgeConfig(ui.lockDetectThresholdBox),
-        Settings.ld_reset_time: UiMqttBridgeConfig(ui.lockDetectDelayBox),
-        Settings.adc1_routing: UiMqttBridgeConfig(
+        Settings.gain_ramp_time: UiMqttConfig([ui.gainRampTimeBox]),
+        Settings.ld_threshold: UiMqttConfig([ui.lockDetectThresholdBox]),
+        Settings.ld_reset_time: UiMqttConfig([ui.lockDetectDelayBox]),
+        Settings.adc1_routing: UiMqttConfig(
             [ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
             *radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"])),
         Settings.aux_ttl_out: UiMqttConfig([ui.enableAOMLockBox], *invert),

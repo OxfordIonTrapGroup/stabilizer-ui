@@ -18,7 +18,10 @@ class NetworkAddress(NamedTuple):
         return ".".join(map(str, self.ip))
 
 
-def read(widget):
+def read(widgets):
+    assert len(widgets) == 1, "Default read() only implemented for one widget"
+    widget = widgets[0]
+
     if isinstance(widget, (
             QtWidgets.QCheckBox,
             QtWidgets.QRadioButton,
@@ -34,7 +37,11 @@ def read(widget):
 
     assert f"Widget type not handled: {widget}"
 
-def write(widget, value):
+
+def write(widgets, value):
+    assert len(widgets) == 1, "Default write() only implemented for one widget"
+    widget = widgets[0]
+
     if isinstance(widget, (
             QtWidgets.QCheckBox,
             QtWidgets.QRadioButton,
@@ -50,8 +57,8 @@ def write(widget, value):
         assert f"Widget type not handled: {widget}"
 
 
-class UiMqttBridgeConfig(NamedTuple):
-    widgets = Optional[Union[QtWidgets.QWidget, List[QtWidgets.QWidget]]]
+class UiMqttConfig(NamedTuple):
+    widgets: List[QtWidgets.QWidget]
     read_handler: Callable = read
     write_handler: Callable = write
 
