@@ -44,6 +44,14 @@ class UI(QtWidgets.QMainWindow):
 def main():
     logging.basicConfig(level=logging.INFO)
 
+    # parser = argparse.ArgumentParser(
+    #     description="Interface for the Dual-IIR Stabilizer.")
+    # parser.add_argument("-b", "--stabilizer-broker", default="10.255.6.4")
+    # parser.add_argument("--stabilizer-mac", default="80-1f-12-5d-47-df")
+    # parser.add_argument("--stream-port", default=9293, type=int)
+    # common_args.simple_network_args(parser, 4110)
+    # args = parser.parse_args()
+
     app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")
     app.setOrganizationDomain("photonic.link")
@@ -54,7 +62,7 @@ def main():
         asyncio.set_event_loop(loop)
 
         ui = UI()
-        ui.resize(1200, 600)
+        ui.resize(1200, 800)
         ui.show()
 
         sys.exit(loop.run_forever())
