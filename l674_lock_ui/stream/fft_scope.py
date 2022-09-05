@@ -76,7 +76,8 @@ class FftScope(QtWidgets.QWidget):
              buf) for buf in data
         ]
         transforms = [
-            np.abs(numpy.fft.rfft(buf)) * np.sqrt(2 * SAMPLE_PERIOD / len(buf))
+            np.abs(numpy.fft.rfft(buf * np.hamming(len(buf)))) * np.sqrt(
+                2 * SAMPLE_PERIOD / len(buf))
             for buf in data
         ]
         spectra = [(np.linspace(0, 0.5 / SAMPLE_PERIOD, len(fbuf)) * SCOPE_TIME_SCALE,
