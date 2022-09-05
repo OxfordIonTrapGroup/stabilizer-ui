@@ -1,11 +1,8 @@
 from enum import Enum
 import stabilizer.iir_coefficients as iir
 from stabilizer import SAMPLE_PERIOD
-from typing import namedtuple
+from collections import namedtuple
 from math import inf
-
-__all__ = [LowpassFilter, HighpassFilter, AllpassFilter, NotchFilter, PIDFilter, XPassArgs, NotchArgs, PidArgs]
-
 
 class _AbstractArgs:
     def __init__(self, *kwargs):
@@ -62,3 +59,5 @@ class PIDFilter:
         args = XPassArgs(*args, **kwargs)
         args.sample_period = SAMPLE_PERIOD
         return iir.pid_coefficients(args)
+
+__all__ = [LowpassFilter, HighpassFilter, AllpassFilter, NotchFilter, PIDFilter, XPassArgs, NotchArgs, PidArgs]
