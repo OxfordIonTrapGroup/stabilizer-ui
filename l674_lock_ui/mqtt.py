@@ -12,6 +12,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+Y_MAX = stabilizer.voltage_to_machine_units(stabilizer.DAC_FULL_SCALE)
 
 def _int_to_bytes(i):
     return i.to_bytes(i.bit_length() // 8 + 1, byteorder="little")
@@ -144,10 +145,15 @@ class StabilizerInterfaceBase:
         b1 = -p_gain
         await self.set_iir(channel, iir_idx, [b0, b1, 0, 1, 0])
 
-    async def set_iir(self, channel: int, iir_idx: int, ba: Iterable):
+    async def set_iir(self,
+                      channel: int,
+                      iir_idx: int,
+                      ba: Iterable,
+                      y_offset: float = 0.0,
+                      y_min: float = -Y_MAX,
+                      y_max: float = Y_MAX):
         key = f"{self.iir_ch_topic_base}/{channel}/{iir_idx}"
-        fs = stabilizer.voltage_to_machine_units(stabilizer.DAC_FULL_SCALE)
-        value = {'ba': list(ba), 'y_offset': 0.0, 'y_min': -fs, 'y_max': fs}
+        value = {'ba': list(ba), 'y_offset': y_offset, 'y_min': y_min, 'y_max': y_max}
         await self.request_settings_change(key, value)
 
     def publish_ui_change(self, topic: str, argument: Any):
