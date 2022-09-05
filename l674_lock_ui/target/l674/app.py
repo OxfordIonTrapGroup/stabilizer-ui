@@ -5,7 +5,6 @@ import time
 import os
 import sys
 from typing import Awaitable, Callable
-import textwrap
 from contextlib import suppress
 from enum import Enum, unique
 
@@ -632,11 +631,6 @@ class UIStatePublisher:
 
     async def get_lock_state(self):
         return self.ui.lock_state.name
-
-
-def fmt_mac(mac: str) -> str:
-    mac_nosep = ''.join(c for c in mac if c.isalnum()).lower()
-    return '-'.join(textwrap.wrap(mac_nosep, 2))
 
 
 def main():

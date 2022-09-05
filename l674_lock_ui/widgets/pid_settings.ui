@@ -76,7 +76,7 @@
      <string>Ki limit: </string>
     </property>
    </widget>
-   <widget class="QDoubleSpinBox" name="KiLimBox">
+   <widget class="QDoubleSpinBox" name="Ki_limitBox">
     <property name="geometry">
      <rect>
       <x>50</x>
@@ -87,6 +87,9 @@
     </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
+    </property>
+    <property name="value">
+     <double>10000.000000000000000</double>
     </property>
    </widget>
    <widget class="Line" name="line">
@@ -128,7 +131,7 @@
      <string>Kii limit: </string>
     </property>
    </widget>
-   <widget class="QDoubleSpinBox" name="KiiLimBox">
+   <widget class="QDoubleSpinBox" name="Kii_limitBox">
     <property name="geometry">
      <rect>
       <x>50</x>
@@ -139,6 +142,9 @@
     </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
+    </property>
+    <property name="value">
+     <double>10000.000000000000000</double>
     </property>
    </widget>
    <widget class="QDoubleSpinBox" name="KiiBox">
@@ -269,7 +275,7 @@
      <string>Kd limit: </string>
     </property>
    </widget>
-   <widget class="QDoubleSpinBox" name="KdLimBox">
+   <widget class="QDoubleSpinBox" name="Kd_limitBox">
     <property name="geometry">
      <rect>
       <x>50</x>
@@ -280,6 +286,9 @@
     </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
+    </property>
+    <property name="value">
+     <double>10000.000000000000000</double>
     </property>
    </widget>
    <widget class="Line" name="line_2">
@@ -321,7 +330,7 @@
      <string>Kdd limit: </string>
     </property>
    </widget>
-   <widget class="QDoubleSpinBox" name="KddLimBox">
+   <widget class="QDoubleSpinBox" name="Kdd_limitBox">
     <property name="geometry">
      <rect>
       <x>60</x>
@@ -332,6 +341,9 @@
     </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
+    </property>
+    <property name="value">
+     <double>10000.000000000000000</double>
     </property>
    </widget>
    <widget class="QDoubleSpinBox" name="KddBox">

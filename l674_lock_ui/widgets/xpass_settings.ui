@@ -37,7 +37,7 @@
    <property name="title">
     <string>Parameters</string>
    </property>
-   <widget class="QDoubleSpinBox" name="f0Box_2">
+   <widget class="QDoubleSpinBox" name="f0Box">
     <property name="geometry">
      <rect>
       <x>30</x>

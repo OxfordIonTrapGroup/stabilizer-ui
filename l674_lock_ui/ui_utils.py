@@ -1,4 +1,5 @@
 from PyQt5 import QtWidgets
+import textwrap
 
 
 def lerp(start, stop, fractional_position):
@@ -39,3 +40,8 @@ def link_slider_to_spinbox(slider: QtWidgets.QSlider,
 
     # Only tangentially related: Don't update gains/... while user is typing.
     spinbox.setKeyboardTracking(False)
+
+
+def fmt_mac(mac: str) -> str:
+    mac_nosep = ''.join(c for c in mac if c.isalnum()).lower()
+    return '-'.join(textwrap.wrap(mac_nosep, 2))
