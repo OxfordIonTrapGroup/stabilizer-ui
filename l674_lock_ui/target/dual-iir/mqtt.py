@@ -1,15 +1,65 @@
 import asyncio
 import logging
-from enum import Enum
+from enum import Enum, unique
 
 from ...mqtt import StabilizerInterfaceBase
+from ...iir import *
 
 logger = logging.getLogger(__name__)
 
 
-@unique
-class Settings(Enum):
-    pass
+def _construct_settings_enum():
+    channels = ['0', '1']
+    iirs = ['0', '1']
+
+    filters = zip(['pid', 'notch', 'lowpass', 'highpass', 'allpass'],
+                  [PidArgs, NotchArgs, XPassArgs, XPassArgs, XPassArgs])
+
+    settings = {}
+    for c in channels:
+        filter_settings[f"channel_{c}_afe_gain"] = f"settings/afe/{c}"
+        for iir_idx in iirs:
+            name_root = f"channel_{c}_iir_{iir_idx}_"
+            path_root = f"ui/channel_{c}/iir_{iir_idx}/"
+            filter_args[name_root + "filter"] = path_root + "filter"
+            filter_args[name_root + "x_offset"] = path_root + "x_offset"
+            filter_args[name_root + "y_offset"] = path_root + "y_offset"
+            filter_args[name_root + "y_min"] = path_root + "y_min"
+            filter_args[name_root + "y_max"] = path_root + "y_max"
+            for f_str, f_args in filters:
+                for arg in f_args.parameters:
+                    filter_args[name_root +
+                                f"{f_str}_{arg}"] = path_root + f"{f_str}/{arg}"
+    settings['stream_target'] = "settings/stream_target"
+    return Enum('DynamicEnum', settings)
+
+
+Settings = _construct_settings_enum()
+
+
+def _construct_iir_settings_dicts(channel, iir):
+    _prefix = f"channel_{c}_iir_{iir}_"
+    filters = zip(['pid', 'notch', 'lowpass', 'highpass', 'allpass'],
+                  [PidArgs, NotchArgs, XPassArgs, XPassArgs, XPassArgs])
+    settings = [_prefix + "filter"]
+    for f_str, f_args in filters:
+        for arg in f_args.parameters:
+            settings.append(_prefix + f"{f_str}_{arg}")
+    return {getattr(Settings, setting) for setting in settings}
+
+
+def _construct_native_settings_dict():
+    native_settings = ["stream_target"]
+    _settings = ["afe_gain"]
+    for channel in range(2):
+        native_settings += f"channel_{c}_" + "afe_gain"
+    return {getattr(Settings, setting) for setting in native_settings}
+
+
+def _get_channel_and_iir(setting: Settings):
+    setting_str = setting._name_
+    _split_str = setting_str.split('_')
+    return int(_split_str[1]), int(_split_str[3])
 
 
 class StabilizerInterface(StabilizerInterfaceBase):
@@ -20,91 +70,59 @@ class StabilizerInterface(StabilizerInterfaceBase):
     that seems a bit wasteful.)
     """
     #: Settings which are directly addressed to Stabilizer.
-    native_settings = {
-        Settings.gain_ramp_time,
-        Settings.ld_threshold,
-        Settings.ld_reset_time,
-        Settings.adc1_routing,
-        Settings.aux_ttl_out,
-        Settings.stream_target,
-        Settings.afe0_gain,
-        Settings.afe1_gain,
-    }
+    native_settings = _construct_native_settings_dict()
     #: IIR[0][0]
-    fast_pid_settings = {
-        Settings.fast_p_gain,
-        Settings.fast_i_gain,
-    }
+    channel_0_iir_0 = _construct_iir_settings_dicts(0, 0)
     #: IIR[0][1]
-    fast_notch_settings = {
-        Settings.fast_notch_enable,
-        Settings.fast_notch_frequency,
-        Settings.fast_notch_quality_factor,
-    }
+    channel_0_iir_1 = _construct_iir_settings_dicts(0, 1)
     #: IIR[1][0]
-    slow_pid_settings = {
-        Settings.slow_p_gain,
-        Settings.slow_i_gain,
-        Settings.slow_enable,
-    }
-    read_adc1_filtered_topic = "read_adc1_filtered"
-    iir_ch_topic_base = "settings/iir_ch"
+    channel_1_iir_0 = _construct_iir_settings_dicts(1, 0)
+    #: IIR[1][1]
+    channel_1_iir_1 = _construct_iir_settings_dicts(1, 1)
 
-    async def read_adc(self) -> float:
-        await self._interface_set.wait()
-        # Argument irrelevant.
-        return float(await self._interface.request(self.read_adc1_filtered_topic, 0))
+    iir_ch_topic_base = "settings/iir_ch"
 
     async def triage_setting_change(self, setting: Settings, all_values: Dict[Settings,
                                                                               Any]):
         if setting in self.native_settings:
-            await self._request_settings_change(setting.value, all_values[setting])
+            await self.request_settings_change(setting.value, all_values[setting])
         else:
-            self._publish_ui_change(setting.value, all_values[setting])
+            self.publish_ui_change(setting.value, all_values[setting])
 
-        if (setting is Settings.lock_mode or setting in self.fast_pid_settings
-                or setting in self.slow_pid_settings):
-            lock_mode = all_values[Settings.lock_mode]
-            if lock_mode != "Enabled" and setting is not Settings.lock_mode:
-                # Ignore gain changes if lock is not enabled.
-                pass
-            elif lock_mode == "Disabled":
-                await self._set_iir(channel=0, iir_idx=0, ba=[0.0] * 5)
-                await self._set_iir(channel=1, iir_idx=0, ba=[0.0] * 5)
-            elif lock_mode == "RampPassThrough":
-                # Gain 5 gives approximately ±10 V when driven using the Vescent servo box ramp.
-                await self._set_iir(channel=0, iir_idx=0, ba=[5.0] + [0.0] * 4)
-                await self._set_iir(channel=1, iir_idx=0, ba=[0.0] * 5)
+        if (setting in self.channel_0_iir_0) or (setting in self.channel_0_iir_1) or (
+                setting in self.channel_1_iir_0) or (setting in self.channel_1_iir_1):
+            channel, iir = _get_channel_and_iir(setting)
+            _prefix = f"channel_{channel}_iir_{iir}_"
+            if all_values[getattr(Settings, _prefix + "filter")] == "pid":
+                _prefix += "pid_"
+                kwargs = {param: _prefix + param for param in PidArgs.parameters}
+                ba = PIDFilter.get_ba(**kwargs)
+            elif all_values[getattr(Settings, _prefix + "filter")] == "notch":
+                _prefix += "notch_"
+                kwargs = {param: _prefix + param for param in NotchArgs.parameters}
+                ba = NotchFilter.get_ba(**kwargs)
+            elif all_values[getattr(Settings, _prefix + "filter")] == "lowpass":
+                _prefix += "lowpass_"
+                kwargs = {param: _prefix + param for param in LowpassArgs.parameters}
+                ba = LowpassFilter.get_ba(**kwargs)
+            elif all_values[getattr(Settings, _prefix + "filter")] == "highpass":
+                _prefix += "highpass_"
+                kwargs = {param: _prefix + param for param in HighpassArgs.parameters}
+                ba = HighpassFilter.get_ba(**kwargs)
+            elif all_values[getattr(Settings, _prefix + "filter")] == "allpass":
+                _prefix += "allpass_"
+                kwargs = {param: _prefix + param for param in AllpassArgs.parameters}
+                ba = AllpassFilter.get_ba(**kwargs)
             else:
-                # Negative sign in fast branch to match AOM lock; both PZTs have same sign.
-                await self._set_pi_gains(channel=0,
-                                         iir_idx=0,
-                                         p_gain=-all_values[Settings.fast_p_gain],
-                                         i_gain=-all_values[Settings.fast_i_gain])
-                if all_values[Settings.slow_enable]:
-                    await self._set_pi_gains(channel=1,
-                                             iir_idx=0,
-                                             p_gain=all_values[Settings.slow_p_gain],
-                                             i_gain=all_values[Settings.slow_i_gain])
-                else:
-                    await self._set_pi_gains(channel=1,
-                                             iir_idx=0,
-                                             p_gain=0.0,
-                                             i_gain=0.0)
+                raise ValueError("Unknown filter set.")
+            x_offset = all_values[getattr(Settings, _prefix + "x_offset")]
+            y_offset = all_values[getattr(Settings, _prefix + "y_offset")]
+            y_min = all_values[getattr(Settings, _prefix + "y_min")]
+            y_max = all_values[getattr(Settings, _prefix + "y_max")]
 
-        if setting in self.fast_notch_settings:
-            if all_values[Settings.fast_notch_enable]:
-                f0 = (all_values[Settings.fast_notch_frequency] * np.pi *
-                      stabilizer.SAMPLE_PERIOD)
-                q = all_values[Settings.fast_notch_quality_factor]
-                # unit gain
-                denominator = (1 + f0 / q + f0**2)
-                a1 = 2 * (1 - f0**2) / denominator
-                a2 = -(1 - f0 / q + f0**2) / denominator
-                b0 = (1 + f0**2) / denominator
-                b1 = -(2 * (1 - f0**2)) / denominator
-                await self._set_iir(channel=0, iir_idx=1, ba=[b0, b1, b0, a1, a2])
-            else:
-                await self._set_iir(channel=0, iir_idx=1, ba=[1.0] + [0.0] * 4)
-
-        # We rely on the hardware to initialise IIR[1][1] with a simple pass-through response.
+            await self.set_iir(channel=channel,
+                               iir_idx=iir,
+                               ba=ba,
+                               y_offset=y_offset,
+                               y_min=y_min,
+                               y_max=y_max)
