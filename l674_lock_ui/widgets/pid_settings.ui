@@ -19,19 +19,19 @@
      <x>0</x>
      <y>60</y>
      <width>141</width>
-     <height>151</height>
+     <height>171</height>
     </rect>
    </property>
    <property name="minimumSize">
     <size>
      <width>141</width>
-     <height>151</height>
+     <height>171</height>
     </size>
    </property>
    <property name="maximumSize">
     <size>
      <width>141</width>
-     <height>151</height>
+     <height>171</height>
     </size>
    </property>
    <property name="title">
@@ -77,6 +77,9 @@
     </property>
    </widget>
    <widget class="QDoubleSpinBox" name="Ki_limitBox">
+    <property name="enabled">
+     <bool>false</bool>
+    </property>
     <property name="geometry">
      <rect>
       <x>50</x>
@@ -96,7 +99,7 @@
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>80</y>
+      <y>90</y>
       <width>118</width>
       <height>3</height>
      </rect>
@@ -109,7 +112,7 @@
     <property name="geometry">
      <rect>
       <x>11</x>
-      <y>91</y>
+      <y>100</y>
       <width>19</width>
       <height>16</height>
      </rect>
@@ -122,7 +125,7 @@
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>120</y>
+      <y>130</y>
       <width>41</width>
       <height>16</height>
      </rect>
@@ -132,10 +135,13 @@
     </property>
    </widget>
    <widget class="QDoubleSpinBox" name="Kii_limitBox">
+    <property name="enabled">
+     <bool>false</bool>
+    </property>
     <property name="geometry">
      <rect>
       <x>50</x>
-      <y>120</y>
+      <y>130</y>
       <width>81</width>
       <height>20</height>
      </rect>
@@ -151,13 +157,51 @@
     <property name="geometry">
      <rect>
       <x>30</x>
-      <y>91</y>
+      <y>100</y>
       <width>101</width>
       <height>20</height>
      </rect>
     </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
+    </property>
+   </widget>
+   <widget class="QCheckBox" name="Ki_limitIsInf">
+    <property name="geometry">
+     <rect>
+      <x>50</x>
+      <y>70</y>
+      <width>81</width>
+      <height>17</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>Inf</string>
+    </property>
+    <property name="checked">
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QCheckBox" name="Kii_limitIsInf">
+    <property name="geometry">
+     <rect>
+      <x>50</x>
+      <y>150</y>
+      <width>81</width>
+      <height>17</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>Inf</string>
+    </property>
+    <property name="checked">
+     <bool>true</bool>
     </property>
    </widget>
   </widget>
@@ -216,21 +260,21 @@
    <property name="geometry">
     <rect>
      <x>0</x>
-     <y>220</y>
+     <y>240</y>
      <width>141</width>
-     <height>151</height>
+     <height>171</height>
     </rect>
    </property>
    <property name="minimumSize">
     <size>
      <width>141</width>
-     <height>151</height>
+     <height>171</height>
     </size>
    </property>
    <property name="maximumSize">
     <size>
      <width>141</width>
-     <height>151</height>
+     <height>171</height>
     </size>
    </property>
    <property name="title">
@@ -276,6 +320,9 @@
     </property>
    </widget>
    <widget class="QDoubleSpinBox" name="Kd_limitBox">
+    <property name="enabled">
+     <bool>false</bool>
+    </property>
     <property name="geometry">
      <rect>
       <x>50</x>
@@ -295,7 +342,7 @@
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>80</y>
+      <y>90</y>
       <width>118</width>
       <height>3</height>
      </rect>
@@ -308,7 +355,7 @@
     <property name="geometry">
      <rect>
       <x>11</x>
-      <y>91</y>
+      <y>100</y>
       <width>19</width>
       <height>16</height>
      </rect>
@@ -321,7 +368,7 @@
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>120</y>
+      <y>130</y>
       <width>41</width>
       <height>16</height>
      </rect>
@@ -331,10 +378,13 @@
     </property>
    </widget>
    <widget class="QDoubleSpinBox" name="Kdd_limitBox">
+    <property name="enabled">
+     <bool>false</bool>
+    </property>
     <property name="geometry">
      <rect>
       <x>60</x>
-      <y>120</y>
+      <y>130</y>
       <width>71</width>
       <height>20</height>
      </rect>
@@ -350,7 +400,7 @@
     <property name="geometry">
      <rect>
       <x>30</x>
-      <y>91</y>
+      <y>100</y>
       <width>101</width>
       <height>20</height>
      </rect>
@@ -359,8 +409,114 @@
      <double>100000.000000000000000</double>
     </property>
    </widget>
+   <widget class="QCheckBox" name="Kd_limitIsInf">
+    <property name="geometry">
+     <rect>
+      <x>50</x>
+      <y>70</y>
+      <width>81</width>
+      <height>17</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>Inf</string>
+    </property>
+    <property name="checked">
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QCheckBox" name="Kdd_limitIsInf">
+    <property name="geometry">
+     <rect>
+      <x>60</x>
+      <y>150</y>
+      <width>70</width>
+      <height>17</height>
+     </rect>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::RightToLeft</enum>
+    </property>
+    <property name="text">
+     <string>Inf</string>
+    </property>
+    <property name="checked">
+     <bool>true</bool>
+    </property>
+    <property name="tristate">
+     <bool>false</bool>
+    </property>
+   </widget>
   </widget>
  </widget>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>Ki_limitIsInf</sender>
+   <signal>clicked(bool)</signal>
+   <receiver>Ki_limitBox</receiver>
+   <slot>setDisabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>69</x>
+     <y>139</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>74</x>
+     <y>117</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>Kii_limitIsInf</sender>
+   <signal>clicked(bool)</signal>
+   <receiver>Kii_limitBox</receiver>
+   <slot>setDisabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>83</x>
+     <y>221</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>86</x>
+     <y>199</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>Kd_limitIsInf</sender>
+   <signal>clicked(bool)</signal>
+   <receiver>Kd_limitBox</receiver>
+   <slot>setDisabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>78</x>
+     <y>323</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>83</x>
+     <y>303</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>Kdd_limitIsInf</sender>
+   <signal>clicked(bool)</signal>
+   <receiver>Kdd_limitBox</receiver>
+   <slot>setDisabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>91</x>
+     <y>403</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>91</x>
+     <y>386</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
 </ui>

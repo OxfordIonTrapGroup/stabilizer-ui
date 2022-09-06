@@ -5,6 +5,7 @@ import os
 import sys
 from contextlib import suppress
 from enum import Enum, unique
+from math import inf
 
 import numpy as np
 from PyQt5 import QtGui, QtWidgets, uic
@@ -62,6 +63,32 @@ class UI(QtWidgets.QMainWindow):
 async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
                             root_topic: str, broker_address: NetworkAddress,
                             stream_target: NetworkAddress):
+    def spinbox_checkbox_group():
+        def read(widgets):
+            """Expects widgets in the form [spinbox, checkbox]."""
+            if widgets[1].isChecked():
+                return inf
+            else:
+                return widgets[0].value()
+
+        def write(widgets, value):
+            """Expects widgets in the form [spinbox, checkbox]."""
+            if value == inf:
+                widgets[1].setChecked(True)
+            else:
+                widgets[0].setValue(value)
+
+        return read, write
+
+    def _is_limit(arg):
+        split_arg = arg.split('_')
+        if len(split_arg) == 1:
+            return False
+        elif split_arg[1] == 'limit':
+            print(arg)
+            return True
+        else:
+            return False
 
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
@@ -94,9 +121,16 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
                                  name_root + "y_min")] = UiMqttConfig([iir_ui.y_minBox])
             for f_str, f_args in filters:
                 for arg in f_args.parameters:
-                    settings_map[getattr(Settings,
-                                         name_root + f"{f_str}_{arg}")] = UiMqttConfig(
-                                             [getattr(iir_ui.widgets[f_str], f"{arg}Box")])
+                    if _is_limit(arg):
+                        settings_map[getattr(
+                            Settings, name_root + f"{f_str}_{arg}")] = UiMqttConfig([
+                                getattr(iir_ui.widgets[f_str], f"{arg}Box"),
+                                getattr(iir_ui.widgets[f_str], f"{arg}IsInf")
+                            ], *spinbox_checkbox_group())
+                    else:
+                        settings_map[getattr(
+                            Settings, name_root + f"{f_str}_{arg}")] = UiMqttConfig(
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")])
 
     def read_ui():
         state = {}
@@ -156,7 +190,7 @@ def main():
         asyncio.set_event_loop(loop)
 
         ui = UI()
-        ui.resize(1200, 800)
+        ui.resize(1200, 600)
         ui.show()
 
         stabilizer_interface = StabilizerInterface()
