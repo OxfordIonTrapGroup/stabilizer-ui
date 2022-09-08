@@ -13,7 +13,7 @@
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <widget class="QGroupBox" name="groupBox_2">
+  <widget class="QGroupBox" name="iGainBox">
    <property name="geometry">
     <rect>
      <x>0</x>
@@ -45,6 +45,12 @@
       <width>101</width>
       <height>20</height>
      </rect>
+    </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
+    </property>
+    <property name="decimals">
+     <number>0</number>
     </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
@@ -87,6 +93,9 @@
       <width>81</width>
       <height>20</height>
      </rect>
+    </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
     </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
@@ -146,6 +155,9 @@
       <height>20</height>
      </rect>
     </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
+    </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
     </property>
@@ -162,8 +174,17 @@
       <height>20</height>
      </rect>
     </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
+    </property>
+    <property name="decimals">
+     <number>4</number>
+    </property>
     <property name="maximum">
-     <double>100000.000000000000000</double>
+     <double>1.000000000000000</double>
+    </property>
+    <property name="singleStep">
+     <double>0.001000000000000</double>
     </property>
    </widget>
    <widget class="QCheckBox" name="Ki_limitIsInf">
@@ -205,7 +226,7 @@
     </property>
    </widget>
   </widget>
-  <widget class="QGroupBox" name="groupBox">
+  <widget class="QGroupBox" name="pGainBox">
    <property name="geometry">
     <rect>
      <x>0</x>
@@ -238,6 +259,9 @@
       <height>20</height>
      </rect>
     </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
+    </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
     </property>
@@ -256,7 +280,7 @@
     </property>
    </widget>
   </widget>
-  <widget class="QGroupBox" name="groupBox_3">
+  <widget class="QGroupBox" name="dGainBox">
    <property name="geometry">
     <rect>
      <x>0</x>
@@ -288,6 +312,12 @@
       <width>101</width>
       <height>20</height>
      </rect>
+    </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
+    </property>
+    <property name="decimals">
+     <number>4</number>
     </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
@@ -330,6 +360,9 @@
       <width>81</width>
       <height>20</height>
      </rect>
+    </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
     </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
@@ -389,6 +422,9 @@
       <height>20</height>
      </rect>
     </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
+    </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
     </property>
@@ -404,6 +440,12 @@
       <width>101</width>
       <height>20</height>
      </rect>
+    </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
+    </property>
+    <property name="decimals">
+     <number>4</number>
     </property>
     <property name="maximum">
      <double>100000.000000000000000</double>

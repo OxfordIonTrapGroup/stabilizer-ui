@@ -46,8 +46,20 @@
       <height>20</height>
      </rect>
     </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
+    </property>
+    <property name="suffix">
+     <string> kHz</string>
+    </property>
+    <property name="minimum">
+     <double>0.010000000000000</double>
+    </property>
     <property name="maximum">
-     <double>100000.000000000000000</double>
+     <double>1000.000000000000000</double>
+    </property>
+    <property name="value">
+     <double>1.000000000000000</double>
     </property>
    </widget>
    <widget class="QLabel" name="label_3">
@@ -85,8 +97,17 @@
       <height>20</height>
      </rect>
     </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
+    </property>
+    <property name="minimum">
+     <double>0.100000000000000</double>
+    </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
+    </property>
+    <property name="value">
+     <double>1.000000000000000</double>
     </property>
    </widget>
    <widget class="QDoubleSpinBox" name="KBox">
@@ -98,8 +119,17 @@
       <height>20</height>
      </rect>
     </property>
+    <property name="keyboardTracking">
+     <bool>false</bool>
+    </property>
+    <property name="minimum">
+     <double>0.010000000000000</double>
+    </property>
     <property name="maximum">
      <double>100000.000000000000000</double>
+    </property>
+    <property name="value">
+     <double>1.000000000000000</double>
     </property>
    </widget>
    <widget class="QLabel" name="label_5">

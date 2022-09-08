@@ -12,7 +12,7 @@ from PyQt5 import QtGui, QtWidgets, uic
 from qasync import QEventLoop
 from stabilizer.stream import get_local_ip
 
-from .mqtt import StabilizerInterface, Settings
+from .mqtt import StabilizerInterface
 
 from ...mqtt import MqttInterface
 from ...channel_settings import ChannelSettings
@@ -21,13 +21,14 @@ from ...stream.thread import StreamThread
 from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import ui_mqtt_bridge
 from ...ui_utils import fmt_mac
-from ...iir import *
+from ...iir import FILTERS
 
 logger = logging.getLogger(__name__)
 
 #: Interval between scope plot updates, in seconds.
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
+
 
 
 class UI(QtWidgets.QMainWindow):
@@ -39,12 +40,11 @@ class UI(QtWidgets.QMainWindow):
         layout = QtWidgets.QHBoxLayout()
 
         # Create UI for channel settings.
-        self.channel_settings = [('Channel 0', ChannelSettings()),
-                                 ('Channel 1', ChannelSettings())]
+        self.channel_settings = [ChannelSettings(), ChannelSettings()]
 
         self.tab_channel_settings = QtWidgets.QTabWidget()
-        for label, channel in self.channel_settings:
-            self.tab_channel_settings.addTab(channel, label)
+        for i, channel in enumerate(self.channel_settings):
+            self.tab_channel_settings.addTab(channel, f"Channel {i}")
         layout.addWidget(self.tab_channel_settings)
 
         # Create UI for FFT scope.
@@ -59,10 +59,26 @@ class UI(QtWidgets.QMainWindow):
             return
         self.fft_scope.update(payload)
 
+    async def update_transfer_function(self, setting, all_values):
+        if setting.split('/')[0]=='ui':
+            channel, iir = setting.split('/')[1:3]
+            path_root = f"ui/{channel}/{iir}/"
+            filter_type = all_values[path_root + "filter"]
+            filter_idx = [f.filter_type for f in FILTERS].index(filter_type)
+            kwargs = {
+                        param: all_values[path_root + f"{filter_type}/{param}"]
+                        for param in FILTERS[filter_idx].parameters
+                    }
+            ba = FILTERS[filter_idx].get_coefficients(**kwargs)
+            _iir_settings = self.channel_settings[int(channel)].iir_settings[int(iir)]
+            _iir_settings.update_transfer_function(ba)
+
 
 async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
                             root_topic: str, broker_address: NetworkAddress,
                             stream_target: NetworkAddress):
+    kilo = (lambda w: ui_mqtt_bridge.read(w) * 1e3, lambda w, v: ui_mqtt_bridge.write(w, v / 1e3))
+
     def spinbox_checkbox_group():
         def read(widgets):
             """Expects widgets in the form [spinbox, checkbox]."""
@@ -80,57 +96,39 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
 
         return read, write
 
-    def _is_limit(arg):
-        split_arg = arg.split('_')
-        if len(split_arg) == 1:
-            return False
-        elif split_arg[1] == 'limit':
-            print(arg)
-            return True
-        else:
-            return False
-
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
-        Settings.stream_target:
+        "settings/stream_target":
         UiMqttConfig([], lambda _: stream_target._asdict(),
                      lambda _w, _v: stream_target._asdict())
     }
-    channels = ['0', '1']
-    iirs = ['0', '1']
 
-    filters = list(
-        zip(['pid', 'notch', 'lowpass', 'highpass', 'allpass'],
-            [PidArgs, NotchArgs, XPassArgs, XPassArgs, XPassArgs]))
-    for c in channels:
-        channel_root = f"channel_{c}_"
-        settings_map[getattr(Settings, channel_root + "afe_gain")] = UiMqttConfig(
-            [ui.channel_settings[int(c)][1].afeGainBox])
-        for iir in iirs:
-            name_root = channel_root + f"iir_{iir}_"
-            iir_ui = ui.channel_settings[int(c)][1].iir_settings[int(iir)][1]
-            settings_map[getattr(Settings, name_root + "filter")] = UiMqttConfig(
-                [iir_ui.filterComboBox])
-            settings_map[getattr(Settings, name_root + "x_offset")] = UiMqttConfig(
-                [iir_ui.x_offsetBox])
-            settings_map[getattr(Settings, name_root + "y_offset")] = UiMqttConfig(
-                [iir_ui.y_offsetBox])
-            settings_map[getattr(Settings,
-                                 name_root + "y_max")] = UiMqttConfig([iir_ui.y_maxBox])
-            settings_map[getattr(Settings,
-                                 name_root + "y_min")] = UiMqttConfig([iir_ui.y_minBox])
-            for f_str, f_args in filters:
-                for arg in f_args.parameters:
-                    if _is_limit(arg):
-                        settings_map[getattr(
-                            Settings, name_root + f"{f_str}_{arg}")] = UiMqttConfig([
-                                getattr(iir_ui.widgets[f_str], f"{arg}Box"),
-                                getattr(iir_ui.widgets[f_str], f"{arg}IsInf")
-                            ], *spinbox_checkbox_group())
+    for c in range(2):
+        channel_root = f"{c}/"
+        settings_map[f"settings/afe/{c}"] = UiMqttConfig([ui.channel_settings[c].afeGainBox])
+        for iir in range(2):
+            name_root = f"ui/{c}/{iir}/"
+            iir_ui = ui.channel_settings[c].iir_settings[iir]
+            settings_map[name_root + "filter"] = UiMqttConfig([iir_ui.filterComboBox])
+            settings_map[name_root + "x_offset"] = UiMqttConfig([iir_ui.x_offsetBox])
+            settings_map[name_root + "y_offset"] = UiMqttConfig([iir_ui.y_offsetBox])
+            settings_map[name_root + "y_max"] = UiMqttConfig([iir_ui.y_maxBox])
+            settings_map[name_root + "y_min"] = UiMqttConfig([iir_ui.y_minBox])
+            for f in FILTERS:
+                f_str = f.filter_type
+                for arg in f.parameters:
+                    if arg.split('_')[-1] == 'limit':
+                        settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig([
+                            getattr(iir_ui.widgets[f_str], f"{arg}Box"),
+                            getattr(iir_ui.widgets[f_str], f"{arg}IsInf")
+                        ], *spinbox_checkbox_group())
                     else:
-                        settings_map[getattr(
-                            Settings, name_root + f"{f_str}_{arg}")] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")])
+                        if arg == 'f0':
+                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo)
+                        else:
+                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
+                                    [getattr(iir_ui.widgets[f_str], f"{arg}Box")])
 
     def read_ui():
         state = {}
@@ -142,7 +140,7 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
         bridge = await UiMqttBridge.new(broker_address, settings_map)
         # ui.comm_status_label.setText(
         #     f"Connected to MQTT broker at {broker_address.get_ip()}.")
-        await bridge.load_ui(Settings, root_topic)
+        await bridge.load_ui(lambda x: x, root_topic)
         keys_to_write, ui_updated = bridge.connect_ui()
 
         #
@@ -154,7 +152,7 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
         # Allow relock task to directly request ADC1 updates.
         stabilizer_interface.set_interface(interface)
 
-        keys_to_write.update(set(Settings))
+        # keys_to_write.update(set(Settings))
         ui_updated.set()  # trigger initial update
         while True:
             await ui_updated.wait()
@@ -162,7 +160,9 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
                 # Use while/pop instead of for loop, as UI task might push extra
                 # elements while we are executing requests.
                 key = keys_to_write.pop()
-                await stabilizer_interface.change(key, read_ui())
+                all_params =  read_ui()
+                await stabilizer_interface.change(key, all_params)
+                await ui.update_transfer_function(key, all_params)
             ui_updated.clear()
     except BaseException as e:
         if isinstance(e, asyncio.CancelledError):
