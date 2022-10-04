@@ -78,6 +78,7 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
                             root_topic: str, broker_address: NetworkAddress,
                             stream_target: NetworkAddress):
     kilo = (lambda w: ui_mqtt_bridge.read(w) * 1e3, lambda w, v: ui_mqtt_bridge.write(w, v / 1e3))
+    kilo2 = (lambda w: ui_mqtt_bridge.read(w) * 1e3, lambda w, v: ui_mqtt_bridge.write(w, v / 1e3))
 
     def spinbox_checkbox_group():
         def read(widgets):
@@ -126,6 +127,12 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
                         if arg == 'f0':
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
                                 [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo)
+                        elif arg == 'Ki':
+                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo)
+                        elif arg == 'Kii':
+                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo2)
                         else:
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
                                     [getattr(iir_ui.widgets[f_str], f"{arg}Box")])

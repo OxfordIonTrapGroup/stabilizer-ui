@@ -5,7 +5,7 @@ from stabilizer.iir_coefficients import get_filters
 import numpy as np
 from scipy import signal
 
-from .ui_utils import QCursorSpinBox
+# from .ui_utils import QCursorSpinBox
 
 from stabilizer import SAMPLE_PERIOD
 
