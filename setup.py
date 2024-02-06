@@ -7,6 +7,6 @@ setup(
     description="l674 lock Stabilizer GUI (via MQTT), including automatic relocking",
     author="David Nadlinger",
     packages=find_packages(),
-    dependencies=["gmqtt", "PyQt5", "qasync", "sipyco", "websockets"],
+    dependencies=["gmqtt", "PyQt5", "qasync", "sipyco", "websockets", "pyqtgraph"],
     entry_points={"gui_scripts": ["l674_lock_ui = l674_lock_ui.app:main"]},
 )
