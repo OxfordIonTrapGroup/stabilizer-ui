@@ -20,7 +20,7 @@ def _int_to_bytes(i):
 
 
 def starts_with(string, prefix) -> bool:
-    return len(string) >= len(prefix) and string[:len(prefix)] == prefix
+    return len(string) >= len(prefix) and string[: len(prefix)] == prefix
 
 
 class MqttInterface:
@@ -31,11 +31,10 @@ class MqttInterface:
     A timeout is also applied to every request (which is necessary for robustness, as
     Stabilizer only supports QoS 0 for now).
     """
-    def __init__(self,
-                 client: Client,
-                 topic_base: str,
-                 timeout: float,
-                 maxsize: int = 512):
+
+    def __init__(
+        self, client: Client, topic_base: str, timeout: float, maxsize: int = 512
+    ):
         self._client = client
         self._topic_base = topic_base
         self._pending = {}
@@ -66,23 +65,27 @@ class MqttInterface:
         self._pending[correlation_data] = result
 
         payload = json.dumps(argument).encode("utf-8")
-        self._client.publish(f"{self._topic_base}/{topic}",
-                             payload,
-                             qos=0,
-                             retain=retain,
-                             response_topic=f"{self._response_base}/{topic}",
-                             correlation_data=correlation_data)
+        self._client.publish(
+            f"{self._topic_base}/{topic}",
+            payload,
+            qos=0,
+            retain=retain,
+            response_topic=f"{self._response_base}/{topic}",
+            correlation_data=correlation_data,
+        )
         self._next_seq_id += 1
 
         async def fail_after_timeout():
             await asyncio.sleep(self._timeout)
             result.set_exception(
-                TimeoutError(f"No response to {topic} request after {self._timeout} s"))
+                TimeoutError(f"No response to {topic} request after {self._timeout} s")
+            )
             self._pending.pop(correlation_data)
 
         _, pending = await asyncio.wait(
             [result, asyncio.create_task(fail_after_timeout())],
-            return_when=asyncio.FIRST_COMPLETED)
+            return_when=asyncio.FIRST_COMPLETED,
+        )
         for p in pending:
             p.cancel()
             with suppress(asyncio.CancelledError):
@@ -98,14 +101,17 @@ class MqttInterface:
         if len(cd) != 1:
             logger.warning(
                 "Received response without (valid) correlation data (topic '%s', payload %s)",
-                topic, payload)
+                topic,
+                payload,
+            )
             return 0
         seq_id = cd[0]
 
         if seq_id not in self._pending:
             # This is fine if Stabilizer restarts, though.
-            logger.warning("Received unexpected/late response for '%s' (id %s)", topic,
-                           seq_id)
+            logger.warning(
+                "Received unexpected/late response for '%s' (id %s)", topic, seq_id
+            )
             return 0
 
         result = self._pending.pop(seq_id)
@@ -125,6 +131,7 @@ class StabilizerInterfaceBase:
     """
     Shim for controlling stabilizer over MQTT
     """
+
     def __init__(self):
         self._interface_set = asyncio.Event()
         self._interface: Optional[MqttInterface] = None
@@ -140,34 +147,36 @@ class StabilizerInterfaceBase:
     async def triage_setting_change(self, setting: Enum, all_values: Dict[Enum, Any]):
         raise NotImplementedError
 
-    async def set_pi_gains(self, channel: int, iir_idx: int, p_gain: float,
-                           i_gain: float):
+    async def set_pi_gains(
+        self, channel: int, iir_idx: int, p_gain: float, i_gain: float
+    ):
         b0 = i_gain * 2 * np.pi * stabilizer.SAMPLE_PERIOD + p_gain
         b1 = -p_gain
         await self.set_iir(channel, iir_idx, [b0, b1, 0, 1, 0])
 
-    async def set_iir(self,
-                      channel: int,
-                      iir_idx: int,
-                      ba: Iterable,
-                      y_offset: float = 0.0,
-                      y_min: float = -Y_MAX,
-                      y_max: float = Y_MAX):
+    async def set_iir(
+        self,
+        channel: int,
+        iir_idx: int,
+        ba: Iterable,
+        y_offset: float = 0.0,
+        y_min: float = -Y_MAX,
+        y_max: float = Y_MAX,
+    ):
         key = f"{self.iir_ch_topic_base}/{channel}/{iir_idx}"
         value = {
-            'ba': list(ba),
-            'y_offset': stabilizer.voltage_to_machine_units(y_offset),
-            'y_min': stabilizer.voltage_to_machine_units(y_min),
-            'y_max': stabilizer.voltage_to_machine_units(y_max)
+            "ba": list(ba),
+            "y_offset": stabilizer.voltage_to_machine_units(y_offset),
+            "y_min": stabilizer.voltage_to_machine_units(y_min),
+            "y_max": stabilizer.voltage_to_machine_units(y_max),
         }
         await self.request_settings_change(key, value)
 
     def publish_ui_change(self, topic: str, argument: Any):
         payload = json.dumps(argument).encode("utf-8")
-        self._interface._client.publish(f"{self._interface._topic_base}/{topic}",
-                                        payload,
-                                        qos=0,
-                                        retain=True)
+        self._interface._client.publish(
+            f"{self._interface._topic_base}/{topic}", payload, qos=0, retain=True
+        )
 
     async def request_settings_change(self, key: str, value: Any):
         """

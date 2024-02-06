@@ -22,11 +22,14 @@ def read(widgets):
     assert len(widgets) == 1, "Default read() only implemented for one widget"
     widget = widgets[0]
 
-    if isinstance(widget, (
+    if isinstance(
+        widget,
+        (
             QtWidgets.QCheckBox,
             QtWidgets.QRadioButton,
             QtWidgets.QGroupBox,
-    )):
+        ),
+    ):
         return widget.isChecked()
 
     if isinstance(widget, QtWidgets.QDoubleSpinBox):
@@ -42,11 +45,14 @@ def write(widgets, value):
     assert len(widgets) == 1, "Default write() only implemented for one widget"
     widget = widgets[0]
 
-    if isinstance(widget, (
+    if isinstance(
+        widget,
+        (
             QtWidgets.QCheckBox,
             QtWidgets.QRadioButton,
             QtWidgets.QGroupBox,
-    )):
+        ),
+    ):
         widget.setChecked(value)
     elif isinstance(widget, QtWidgets.QDoubleSpinBox):
         widget.setValue(value)
@@ -76,17 +82,20 @@ class UiMqttBridge:
         return cls(client, *args, **kwargs)
 
     async def load_ui(self, objectify: Callable, root_topic: str):
-        """ Load current settings from MQTT """
+        """Load current settings from MQTT"""
         retained_settings = {}
 
         def collect_settings(_client, topic, value, _qos, _properties):
-            subtopic = topic[len(root_topic) + 1:]
+            subtopic = topic[len(root_topic) + 1 :]
             try:
                 key = objectify(subtopic)
                 decoded_value = json.loads(value)
                 retained_settings[key] = decoded_value
-                logger.info("Registering message topic '#/%s' with value '%s'",
-                            subtopic, decoded_value)
+                logger.info(
+                    "Registering message topic '#/%s' with value '%s'",
+                    subtopic,
+                    decoded_value,
+                )
             except ValueError:
                 logger.info("Ignoring message topic '%s'", subtopic)
             return 0
@@ -106,7 +115,7 @@ class UiMqttBridge:
                 cfg.write_handler(cfg.widgets, retained_value)
 
     def connect_ui(self):
-        """ Set up UI signals """
+        """Set up UI signals"""
         keys_to_write = set()
         ui_updated = asyncio.Event()
 
@@ -115,6 +124,7 @@ class UiMqttBridge:
             def queue(*args):
                 keys_to_write.add(key)
                 ui_updated.set()
+
             return queue
 
         for key, cfg in self.configs.items():

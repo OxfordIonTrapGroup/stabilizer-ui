@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 
-
 class UI(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -60,25 +59,35 @@ class UI(QtWidgets.QMainWindow):
         self.fft_scope.update(payload)
 
     async def update_transfer_function(self, setting, all_values):
-        if setting.split('/')[0]=='ui':
-            channel, iir = setting.split('/')[1:3]
+        if setting.split("/")[0] == "ui":
+            channel, iir = setting.split("/")[1:3]
             path_root = f"ui/{channel}/{iir}/"
             filter_type = all_values[path_root + "filter"]
             filter_idx = [f.filter_type for f in FILTERS].index(filter_type)
             kwargs = {
-                        param: all_values[path_root + f"{filter_type}/{param}"]
-                        for param in FILTERS[filter_idx].parameters
-                    }
+                param: all_values[path_root + f"{filter_type}/{param}"]
+                for param in FILTERS[filter_idx].parameters
+            }
             ba = FILTERS[filter_idx].get_coefficients(**kwargs)
             _iir_settings = self.channel_settings[int(channel)].iir_settings[int(iir)]
             _iir_settings.update_transfer_function(ba)
 
 
-async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
-                            root_topic: str, broker_address: NetworkAddress,
-                            stream_target: NetworkAddress):
-    kilo = (lambda w: ui_mqtt_bridge.read(w) * 1e3, lambda w, v: ui_mqtt_bridge.write(w, v / 1e3))
-    kilo2 = (lambda w: ui_mqtt_bridge.read(w) * 1e3, lambda w, v: ui_mqtt_bridge.write(w, v / 1e3))
+async def update_stabilizer(
+    ui: UI,
+    stabilizer_interface: StabilizerInterface,
+    root_topic: str,
+    broker_address: NetworkAddress,
+    stream_target: NetworkAddress,
+):
+    kilo = (
+        lambda w: ui_mqtt_bridge.read(w) * 1e3,
+        lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
+    )
+    kilo2 = (
+        lambda w: ui_mqtt_bridge.read(w) * 1e3,
+        lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
+    )
 
     def spinbox_checkbox_group():
         def read(widgets):
@@ -99,14 +108,18 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
 
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
-        "settings/stream_target":
-        UiMqttConfig([], lambda _: stream_target._asdict(),
-                     lambda _w, _v: stream_target._asdict())
+        "settings/stream_target": UiMqttConfig(
+            [],
+            lambda _: stream_target._asdict(),
+            lambda _w, _v: stream_target._asdict(),
+        )
     }
 
     for c in range(2):
         channel_root = f"{c}/"
-        settings_map[f"settings/afe/{c}"] = UiMqttConfig([ui.channel_settings[c].afeGainBox])
+        settings_map[f"settings/afe/{c}"] = UiMqttConfig(
+            [ui.channel_settings[c].afeGainBox]
+        )
         for iir in range(2):
             name_root = f"ui/{c}/{iir}/"
             iir_ui = ui.channel_settings[c].iir_settings[iir]
@@ -118,24 +131,31 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
             for f in FILTERS:
                 f_str = f.filter_type
                 for arg in f.parameters:
-                    if arg.split('_')[-1] == 'limit':
-                        settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig([
-                            getattr(iir_ui.widgets[f_str], f"{arg}Box"),
-                            getattr(iir_ui.widgets[f_str], f"{arg}IsInf")
-                        ], *spinbox_checkbox_group())
+                    if arg.split("_")[-1] == "limit":
+                        settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
+                            [
+                                getattr(iir_ui.widgets[f_str], f"{arg}Box"),
+                                getattr(iir_ui.widgets[f_str], f"{arg}IsInf"),
+                            ],
+                            *spinbox_checkbox_group(),
+                        )
                     else:
-                        if arg == 'f0':
+                        if arg == "f0":
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo)
-                        elif arg == 'Ki':
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo
+                            )
+                        elif arg == "Ki":
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo)
-                        elif arg == 'Kii':
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo
+                            )
+                        elif arg == "Kii":
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo2)
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo2
+                            )
                         else:
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                    [getattr(iir_ui.widgets[f_str], f"{arg}Box")])
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")]
+                            )
 
     def read_ui():
         state = {}
@@ -167,7 +187,7 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
                 # Use while/pop instead of for loop, as UI task might push extra
                 # elements while we are executing requests.
                 key = keys_to_write.pop()
-                all_params =  read_ui()
+                all_params = read_ui()
                 await stabilizer_interface.change(key, all_params)
                 await ui.update_transfer_function(key, all_params)
             ui_updated.clear()
@@ -181,7 +201,8 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser(
-        description="Interface for the Dual-IIR Stabilizer.")
+        description="Interface for the Dual-IIR Stabilizer."
+    )
     parser.add_argument("-b", "--broker-host", default="10.255.6.4")
     parser.add_argument("--broker-port", default=1883, type=int)
     parser.add_argument("--stabilizer-mac", default="80-34-28-5f-59-0b")
@@ -207,13 +228,20 @@ def main():
         local_ip = get_local_ip(args.broker_host)
         stream_target = NetworkAddress(local_ip, args.stream_port)
 
-        broker_address = NetworkAddress(list(map(int, args.broker_host.split('.'))),
-                                        args.broker_port)
+        broker_address = NetworkAddress(
+            list(map(int, args.broker_host.split("."))), args.broker_port
+        )
 
         stabilizer_topic = f"dt/sinara/dual-iir/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(
-            update_stabilizer(ui, stabilizer_interface, stabilizer_topic,
-                              broker_address, stream_target))
+            update_stabilizer(
+                ui,
+                stabilizer_interface,
+                stabilizer_topic,
+                broker_address,
+                stream_target,
+            )
+        )
 
         # stream_thread = StreamThread(ui.update_stream, FftScope.precondition_data,
         #                              SCOPE_UPDATE_PERIOD, stream_target)
