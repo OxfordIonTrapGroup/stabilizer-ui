@@ -184,7 +184,7 @@ def main():
         description="Interface for the Dual-IIR Stabilizer.")
     parser.add_argument("-b", "--broker-host", default="10.255.6.4")
     parser.add_argument("--broker-port", default=1883, type=int)
-    parser.add_argument("--stabilizer-mac", default="80-1f-12-5d-c8-3d")
+    parser.add_argument("--stabilizer-mac", default="80-34-28-5f-59-0b")
     parser.add_argument("--stream-port", default=9293, type=int)
     args = parser.parse_args()
 
@@ -211,7 +211,7 @@ def main():
                                         args.broker_port)
 
         stabilizer_topic = f"dt/sinara/dual-iir/{fmt_mac(args.stabilizer_mac)}"
-        stabilizer_task = asyncio.create_task(
+        stabilizer_task = loop.create_task(
             update_stabilizer(ui, stabilizer_interface, stabilizer_topic,
                               broker_address, stream_target))
 
