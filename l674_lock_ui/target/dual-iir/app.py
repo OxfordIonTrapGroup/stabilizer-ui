@@ -54,8 +54,8 @@ class UI(QtWidgets.QMainWindow):
         wid.setLayout(layout)
 
     def update_stream(self, payload):
-        if self.tabWidget.currentIndex() != 1:
-            return
+        # if self.tab_channel_settings.currentIndex() != 1:
+        #    return
         self.fft_scope.update(payload)
 
     async def update_transfer_function(self, setting, all_values):
@@ -243,9 +243,15 @@ def main():
             )
         )
 
-        # stream_thread = StreamThread(ui.update_stream, FftScope.precondition_data,
-        #                              SCOPE_UPDATE_PERIOD, stream_target)
-        # stream_thread.start()
+        stream_thread = StreamThread(
+            ui.update_stream,
+            FftScope.precondition_data,
+            SCOPE_UPDATE_PERIOD,
+            stream_target,
+            broker_address,
+            loop,
+        )
+        stream_thread.start()
 
         try:
             sys.exit(loop.run_forever())

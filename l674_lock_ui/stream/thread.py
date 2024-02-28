@@ -19,19 +19,30 @@ CallbackPayload = namedtuple("CallbackPayload", "values download loss")
 
 
 class StreamThread:
-    def __init__(self,
-                 ui_callback: Callable,
-                 precondition_data: Callable,
-                 callback_interval: float,
-                 stream_target: NetworkAddress,
-                 max_buffer_period: float = MAX_BUFFER_PERIOD):
-        main_event_loop = asyncio.get_running_loop()
+    def __init__(
+        self,
+        ui_callback: Callable,
+        precondition_data: Callable,
+        callback_interval: float,
+        stream_target: NetworkAddress,
+        broker_address: NetworkAddress,
+        main_event_loop: asyncio.AbstractEventLoop,
+        max_buffer_period: float = MAX_BUFFER_PERIOD,
+    ):
         self._terminate = threading.Event()
         maxlen = int(max_buffer_period / SAMPLE_PERIOD)
         self._thread = threading.Thread(
             target=stream_worker,
-            args=(ui_callback, precondition_data, callback_interval, stream_target,
-                  main_event_loop, self._terminate, maxlen),
+            args=(
+                ui_callback,
+                precondition_data,
+                callback_interval,
+                stream_target,
+                broker_address,
+                main_event_loop,
+                self._terminate,
+                maxlen,
+            ),
         )
 
     def start(self):
@@ -51,6 +62,7 @@ class StreamStats:
     :param maxlen: The number of retained historic points.
         Typically, there are 4000 updates per second.
     """
+
     def __init__(self, maxlen=4000):
         self._expect = None
         self._stat = deque(maxlen=maxlen)
@@ -59,7 +71,7 @@ class StreamStats:
     def update(self, frame: AdcDac):
         sequence = frame.header.sequence
         lost = 0 if self._expect is None else wrap(sequence - self._expect)
-        batch_count = frame.batch_count()
+        batch_count = frame.header.batches
         self._expect = wrap(sequence + batch_count)
         bytes = frame.size()
 
@@ -85,6 +97,7 @@ def stream_worker(
     precondition_data: Callable,
     callback_interval: float,
     stream_target: NetworkAddress,
+    broker_address: NetworkAddress,
     main_loop: asyncio.AbstractEventLoop,
     terminate: threading.Event,
     maxlen: int,
@@ -101,7 +114,8 @@ def stream_worker(
     async def handle_stream():
         """This coroutine doesn't run in the main thread's loop!"""
         transport, stream = await StabilizerStream.open(
-            (stream_target.get_ip(), stream_target.port), 1)
+            stream_target.get_ip(), stream_target.port, broker_address.get_ip(), 1
+        )
         try:
             while not terminate.is_set():
                 frame = await stream.queue.get()
