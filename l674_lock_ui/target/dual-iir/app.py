@@ -256,7 +256,7 @@ def main():
         try:
             sys.exit(loop.run_forever())
         finally:
-            # stream_thread.close()
+            stream_thread.close()
             with suppress(asyncio.CancelledError):
                 stabilizer_task.cancel()
                 loop.run_until_complete(stabilizer_task)
