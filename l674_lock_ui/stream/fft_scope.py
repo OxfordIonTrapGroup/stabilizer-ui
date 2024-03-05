@@ -23,8 +23,9 @@ class FftScope(QtWidgets.QWidget):
         legends = [plt.addLegend(offset=(-10, 10)) for plt in scope_plot_items]
         # Create the objects holding the data to plot.
         self._scope_plot_data_items = [plt.plot() for plt in scope_plot_items]
-        for legend, item, title in zip(legends, self._scope_plot_data_items,
-                                       StreamData._fields):
+        for legend, item, title in zip(
+            legends, self._scope_plot_data_items, StreamData._fields
+        ):
             legend.addItem(item, title)
 
         # Maps `self.en_fft_box.isChecked()` to a dictionary of axis settings.
@@ -48,18 +49,18 @@ class FftScope(QtWidgets.QWidget):
         def update_axes(button_checked):
             cfg = self.scope_config[bool(button_checked)]
             for plt in scope_plot_items:
-                plt.setLogMode(*cfg['log'])
-                plt.setRange(xRange=cfg['xrange'], yRange=cfg['yrange'], update=False)
-                plt.setLabels(left=cfg['ylabel'], bottom=cfg['xlabel'])
+                plt.setLogMode(*cfg["log"])
+                plt.setRange(xRange=cfg["xrange"], yRange=cfg["yrange"], update=False)
+                plt.setLabels(left=cfg["ylabel"], bottom=cfg["xlabel"])
 
         self.en_fft_box.stateChanged.connect(update_axes)
         update_axes(self.en_fft_box.isChecked())
 
     def update(self, payload: CallbackPayload):
-        """ Callback for the stream thread
-        """
+        """Callback for the stream thread"""
         message = "Speed: {:.2f} MB/s ({:.3f} % batches lost)".format(
-            payload.download / 1e6, 100 * payload.loss)
+            payload.download / 1e6, 100 * payload.loss
+        )
         self.status_line.setText(message)
 
         traces, spectra = payload.values
@@ -69,17 +70,21 @@ class FftScope(QtWidgets.QWidget):
 
     @staticmethod
     def precondition_data(data: StreamData):
-        """ Transforms data into payload values recognised by `update()`
-        """
+        """Transforms data into payload values recognised by `update()`"""
         traces = [
-            (np.linspace(-len(buf) * SAMPLE_PERIOD, 0, len(buf)) / SCOPE_TIME_SCALE,
-             buf) for buf in data
-        ]
-        transforms = [
-            np.abs(numpy.fft.rfft(buf * np.hamming(len(buf)))) * np.sqrt(
-                2 * SAMPLE_PERIOD / len(buf))
+            (
+                np.linspace(-len(buf) * SAMPLE_PERIOD, 0, len(buf)) / SCOPE_TIME_SCALE,
+                buf,
+            )
             for buf in data
         ]
-        spectra = [(np.linspace(0, 0.5 / SAMPLE_PERIOD, len(fbuf)) * SCOPE_TIME_SCALE,
-                    fbuf) for fbuf in transforms]
+        transforms = [
+            np.abs(numpy.fft.rfft(buf * np.hamming(len(buf))))
+            * np.sqrt(2 * SAMPLE_PERIOD / len(buf))
+            for buf in data
+        ]
+        spectra = [
+            (np.linspace(0, 0.5 / SAMPLE_PERIOD, len(fbuf)) * SCOPE_TIME_SCALE, fbuf)
+            for fbuf in transforms
+        ]
         return traces, spectra

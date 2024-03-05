@@ -44,7 +44,15 @@ class NotchArgs(_AbstractArgs):
 class PidArgs(_AbstractArgs):
     filter_type = "pid"
     parameters = [
-        "Kp", "Ki", "Ki_limit", "Kii", "Kii_limit", "Kd", "Kd_limit", "Kdd", "Kdd_limit"
+        "Kp",
+        "Ki",
+        "Ki_limit",
+        "Kii",
+        "Kii_limit",
+        "Kd",
+        "Kd_limit",
+        "Kdd",
+        "Kdd_limit",
     ]
     coefficients_func = iir.pid_coefficients
 
