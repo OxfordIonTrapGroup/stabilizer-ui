@@ -77,7 +77,9 @@ class _IIRWidget(QtWidgets.QWidget):
     def update_transfer_function(self, coefficients):
         f, h = signal.freqz(
             coefficients[:3],
-            np.r_[1, [-c for c in coefficients[3:]]],
+            np.r_[
+                1, [c for c in coefficients[3:]]
+            ],  # TODO: This could be simplified once the stabilizer python script is updated
             worN=self.f,
             fs=1 / SAMPLE_PERIOD,
         )

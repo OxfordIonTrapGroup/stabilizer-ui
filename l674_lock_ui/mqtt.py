@@ -166,9 +166,9 @@ class StabilizerInterfaceBase:
         key = f"{self.iir_ch_topic_base}/{channel}/{iir_idx}"
         value = {
             "ba": list(ba),
-            "y_offset": stabilizer.voltage_to_machine_units(y_offset),
-            "y_min": stabilizer.voltage_to_machine_units(y_min),
-            "y_max": stabilizer.voltage_to_machine_units(y_max),
+            "u": stabilizer.voltage_to_machine_units(y_offset),
+            "min": stabilizer.voltage_to_machine_units(y_min),
+            "max": stabilizer.voltage_to_machine_units(y_max),
         }
         await self.request_settings_change(key, value)
 
