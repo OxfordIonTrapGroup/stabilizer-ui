@@ -1,0 +1,51 @@
+[tool.poetry]
+name = "stabilizer-ui"
+version = "1.0"
+description = "Stabilizer GUI to view streamed data (via MQTT), including automatic relocking. Initially written for 674 lock, to be generalised"
+authors = ["David Nadlinger, Peter Drmota"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+SiPyCo = { git = "https://github.com/m-labs/sipyco.git" }
+python = "^3.9"
+gmqtt = "^0.6.14"
+PyQt5 = "^5.15.10"
+qasync = "^0.27.1"
+websockets = "^12.0"
+pyqtgraph = "^0.13.4"
+numpy = "^1.21.0"
+stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
+
+[tool.poetry.group.dev.dependencies]
+poethepoet = "^0.22.1"
+toml = "^0.10.2"
+
+# Pin exact versions of linters to avoid inconsistencies between CI environments.
+# YAPF 0.33–0.40 split before comparison operators, rather than after, not matching the
+# default behaviour for arithmetic operators, so stay on 0.32 for now – though at some
+# point we might just update and not care.
+yapf = "0.32.0"
+flake8 = "6.1.0"
+
+# To generate documentation.
+sphinx = "^7.2.6"
+sphinx-rtd-theme = "^1.3.0"
+
+[tool.poetry.scripts]
+l674_lock_ui = "stabilizer_ui.target.l674.app:main"
+dual_iir_ui = "stabilizer_ui.target.dual_iir.app:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poe.tasks]
+fmt = "yapf -i -r examples ndscan test"
+fmt-test = "yapf -d -r examples ndscan test"
+lint = "flake8 examples ndscan test"
+test = "python -m unittest discover -v test"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+style = "pep440"
