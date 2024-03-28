@@ -4,6 +4,7 @@ from typing import Any, Optional, Dict, Iterable
 import logging
 import json
 from enum import Enum
+import abc
 
 from gmqtt import Client
 import uuid
@@ -127,7 +128,7 @@ class MqttInterface:
         return 0
 
 
-class StabilizerInterfaceBase:
+class StabilizerInterface:
     """
     Shim for controlling stabilizer over MQTT
     """

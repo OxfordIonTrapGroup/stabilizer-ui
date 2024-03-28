@@ -14,7 +14,7 @@ from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
 from stabilizer.stream import get_local_ip
 
-from .mqtt import StabilizerInterface, Settings
+from .interface import Lock674Interface, Settings
 from .solstis import EnsureSolstis
 
 from ...mqtt import MqttInterface
@@ -186,7 +186,7 @@ class UI(QtWidgets.QMainWindow):
 
 
 async def update_stabilizer(ui: UI,
-                            stabilizer_interface: StabilizerInterface,
+                            stabilizer_interface: Lock674Interface,
                             root_topic: str,
                             broker_address: NetworkAddress,
                             stream_target: NetworkAddress):
@@ -306,7 +306,7 @@ class RelockStep(Enum):
     try_lock = "try_lock"
 
 
-async def relock_laser(ui: UI, stabilizer_interface: StabilizerInterface,
+async def relock_laser(ui: UI, stabilizer_interface: Lock674Interface,
                        get_freq: Callable[[], Awaitable[float]],
                        approximate_target_freq: float, solstis_host: str):
     logger.info(
@@ -528,7 +528,7 @@ class WavemeterInterface:
                 self._client = None
 
 
-async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface, wand_host: str,
+async def monitor_lock_state(ui: UI, stabilizer_interface: Lock674Interface, wand_host: str,
                              wand_port: int, wand_channel: str, solstis_host: str):
     # While not relocking, we regularly poll the wavemeter and save the last reading,
     # to be "graduated" to last_locked_freq_reading once we know that the laser was
@@ -661,7 +661,7 @@ def main():
         ui = UI()
         ui.show()
 
-        stabilizer_interface = StabilizerInterface()
+        stabilizer_interface = Lock674Interface()
 
         ui.comm_status_label.setText(
             f"Connecting to MQTT broker at {args.broker_host}…")

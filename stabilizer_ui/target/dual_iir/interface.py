@@ -2,13 +2,13 @@ import asyncio
 import logging
 from enum import Enum, unique
 
-from ...mqtt import StabilizerInterfaceBase
+from ...mqtt import StabilizerInterface
 from ...iir import FILTERS
 
 logger = logging.getLogger(__name__)
 
 
-class StabilizerInterface(StabilizerInterfaceBase):
+class DualIirInterface(StabilizerInterface):
     """
     Shim for controlling `l674` stabilizer over MQTT; for the relock task to have something
     to hold on to before the Stabilizer write task has finished initial bringup of the

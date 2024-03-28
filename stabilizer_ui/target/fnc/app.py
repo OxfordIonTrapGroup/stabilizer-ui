@@ -12,7 +12,7 @@ from PyQt5 import QtGui, QtWidgets, uic
 from qasync import QEventLoop
 from stabilizer.stream import get_local_ip
 
-from .interface import DualIirInterface
+from .interface import FncInterface
 
 from ...mqtt import MqttInterface
 from ...channel_settings import ChannelSettings
@@ -75,7 +75,7 @@ class UI(QtWidgets.QMainWindow):
 
 async def update_stabilizer(
     ui: UI,
-    stabilizer_interface: DualIirInterface,
+    stabilizer_interface: FncInterface,
     root_topic: str,
     broker_address: NetworkAddress,
     stream_target: NetworkAddress,
@@ -221,7 +221,7 @@ def main():
         ui.resize(1200, 600)
         ui.show()
 
-        stabilizer_interface = DualIirInterface()
+        stabilizer_interface = FncInterface()
 
         # Find out which local IP address we are going to direct the stream to.
         # Assume the local IP address is the same for the broker and the stabilizer.
