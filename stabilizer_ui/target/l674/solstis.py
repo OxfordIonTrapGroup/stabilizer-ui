@@ -14,6 +14,7 @@ class EnsureSolstis:
     Context manager ensuring a connection to the interface is established and exceptions
     are logged only.
     """
+
     def __init__(self, *args, **kwargs):
         self._new_args = args
         self._new_kwargs = kwargs
@@ -63,6 +64,7 @@ class Solstis:
     the web UI) are just silently ignored; they could be exposed as callbacks in the
     future.
     """
+
     @classmethod
     async def new(cls, server, port=8088, timeout=10) -> Solstis:
         # Connect to control page URL to get the page_start message.
@@ -74,6 +76,7 @@ class Solstis:
         logger.info("Connected to ICE-Bloc.")
 
         receive_queue = asyncio.Queue(maxsize=512)
+
         async def receive_loop():
             try:
                 async for message in socket:

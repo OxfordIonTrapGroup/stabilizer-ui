@@ -1,14 +1,11 @@
 import argparse
 import asyncio
 import logging
-import os
 import sys
 from contextlib import suppress
-from enum import Enum, unique
 from math import inf
 
-import numpy as np
-from PyQt5 import QtGui, QtWidgets, uic
+from PyQt5 import QtWidgets
 from qasync import QEventLoop
 from stabilizer.stream import get_local_ip
 
@@ -30,7 +27,9 @@ logger = logging.getLogger(__name__)
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
+
 class UI(QtWidgets.QMainWindow):
+
     def __init__(self):
         super().__init__()
 
@@ -71,7 +70,8 @@ class UI(QtWidgets.QMainWindow):
                 raise ValueError(f"Filter {filter_type} parameter messsages not created.")
             filter_params = {f.name: f.get_message() for f in filter.get_children()}
 
-            ba = next(f for f in FILTERS if f.filter_type == filter_type).get_coefficients(**filter_params)
+            ba = next(f for f in FILTERS
+                      if f.filter_type == filter_type).get_coefficients(**filter_params)
             _iir_settings = self.channel_settings[_ch].iir_settings[_iir]
             _iir_settings.update_transfer_function(ba)
 
@@ -93,6 +93,7 @@ async def update_stabilizer(
     )
 
     def spinbox_checkbox_group():
+
         def read(widgets):
             """Expects widgets in the form [spinbox, checkbox]."""
             if widgets[1].isChecked():
@@ -112,14 +113,14 @@ async def update_stabilizer(
     stabilizer_settings, ui_settings = app_settings_root.get_children(["settings", "ui"])
 
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
-    stabilizer_settings.get_child("stream_target").set_message(UiMqttConfig(
+    stabilizer_settings.get_child("stream_target").set_message(
+        UiMqttConfig(
             [],
             lambda _: stream_target._asdict(),
             lambda _w, _v: stream_target._asdict(),
-        )
-    )
+        ))
 
-    for afe in stabilizer_settings.get_child("afe").get_children():
+    for (ch, afe) in enumerate(stabilizer_settings.get_child("afe").get_children()):
         afe.set_message(UiMqttConfig([ui.channel_settings[ch].afeGainBox]))
 
     for ch in ui_settings.get_children():
@@ -134,25 +135,31 @@ async def update_stabilizer(
                 filter_topic = iir.get_child(filter.filter_type)
                 for arg in filter_topic.get_children():
                     if arg.name.split("_")[-1] == "limit":
-                        arg.set_message(UiMqttConfig(
-                            [
-                                getattr(iir.widgets[filter.filter_type], f"{arg.name}Box"),
-                                getattr(iir.widgets[filter.filter_type], f"{arg.name}IsInf"),
-                            ],
-                            *spinbox_checkbox_group(),
-                        ))
+                        arg.set_message(
+                            UiMqttConfig(
+                                [
+                                    getattr(iir.widgets[filter.filter_type],
+                                            f"{arg.name}Box"),
+                                    getattr(iir.widgets[filter.filter_type],
+                                            f"{arg.name}IsInf"),
+                                ],
+                                *spinbox_checkbox_group(),
+                            ))
                     elif arg.name in {"f0", "Ki"}:
-                        arg.set_message(UiMqttConfig(
-                            [getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")], *kilo
-                        ))
+                        arg.set_message(
+                            UiMqttConfig([
+                                getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")
+                            ], *kilo))
                     elif arg.name == "Kii":
-                        arg.set_message(UiMqttConfig(
-                            [getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")], *kilo2
-                        ))
+                        arg.set_message(
+                            UiMqttConfig([
+                                getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")
+                            ], *kilo2))
                     else:
-                        arg.set_message(UiMqttConfig(
-                            [getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")]
-                        ))
+                        arg.set_message(
+                            UiMqttConfig([
+                                getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")
+                            ]))
 
     settings_map = app_settings_root.traverse_as_dict()
 
@@ -199,9 +206,7 @@ async def update_stabilizer(
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    parser = argparse.ArgumentParser(
-        description="Interface for the Dual-IIR Stabilizer."
-    )
+    parser = argparse.ArgumentParser(description="Interface for the Dual-IIR Stabilizer.")
     parser.add_argument("-b", "--broker-host", default="10.255.6.4")
     parser.add_argument("--broker-port", default=1883, type=int)
     parser.add_argument("--stabilizer-mac", default="80-34-28-5f-59-0b")
@@ -227,9 +232,8 @@ def main():
         local_ip = get_local_ip(args.broker_host)
         stream_target = NetworkAddress(local_ip, args.stream_port)
 
-        broker_address = NetworkAddress(
-            list(map(int, args.broker_host.split("."))), args.broker_port
-        )
+        broker_address = NetworkAddress(list(map(int, args.broker_host.split("."))),
+                                        args.broker_port)
 
         stabilizer_topic = f"dt/sinara/fnc/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(
@@ -239,8 +243,7 @@ def main():
                 stabilizer_topic,
                 broker_address,
                 stream_target,
-            )
-        )
+            ))
 
         stream_thread = StreamThread(
             ui.update_stream,

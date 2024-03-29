@@ -1,14 +1,11 @@
 import argparse
 import asyncio
 import logging
-import os
 import sys
 from contextlib import suppress
-from enum import Enum, unique
 from math import inf
 
-import numpy as np
-from PyQt5 import QtGui, QtWidgets, uic
+from PyQt5 import QtWidgets
 from qasync import QEventLoop
 from stabilizer.stream import get_local_ip
 
@@ -31,6 +28,7 @@ SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 
 class UI(QtWidgets.QMainWindow):
+
     def __init__(self):
         super().__init__()
 
@@ -90,6 +88,7 @@ async def update_stabilizer(
     )
 
     def spinbox_checkbox_group():
+
         def read(widgets):
             """Expects widgets in the form [spinbox, checkbox]."""
             if widgets[1].isChecked():
@@ -108,7 +107,8 @@ async def update_stabilizer(
 
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
-        "settings/stream_target": UiMqttConfig(
+        "settings/stream_target":
+        UiMqttConfig(
             [],
             lambda _: stream_target._asdict(),
             lambda _w, _v: stream_target._asdict(),
@@ -116,10 +116,8 @@ async def update_stabilizer(
     }
 
     for c in range(2):
-        channel_root = f"{c}/"
         settings_map[f"settings/afe/{c}"] = UiMqttConfig(
-            [ui.channel_settings[c].afeGainBox]
-        )
+            [ui.channel_settings[c].afeGainBox])
         for iir in range(2):
             name_root = f"ui/{c}/{iir}/"
             iir_ui = ui.channel_settings[c].iir_settings[iir]
@@ -142,20 +140,16 @@ async def update_stabilizer(
                     else:
                         if arg == "f0":
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo
-                            )
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo)
                         elif arg == "Ki":
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo
-                            )
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo)
                         elif arg == "Kii":
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo2
-                            )
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo2)
                         else:
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")]
-                            )
+                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")])
 
     def read_ui():
         state = {}
@@ -200,9 +194,7 @@ async def update_stabilizer(
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    parser = argparse.ArgumentParser(
-        description="Interface for the Dual-IIR Stabilizer."
-    )
+    parser = argparse.ArgumentParser(description="Interface for the Dual-IIR Stabilizer.")
     parser.add_argument("-b", "--broker-host", default="10.255.6.4")
     parser.add_argument("--broker-port", default=1883, type=int)
     parser.add_argument("--stabilizer-mac", default="80-34-28-5f-59-0b")
@@ -228,9 +220,8 @@ def main():
         local_ip = get_local_ip(args.broker_host)
         stream_target = NetworkAddress(local_ip, args.stream_port)
 
-        broker_address = NetworkAddress(
-            list(map(int, args.broker_host.split("."))), args.broker_port
-        )
+        broker_address = NetworkAddress(list(map(int, args.broker_host.split("."))),
+                                        args.broker_port)
 
         stabilizer_topic = f"dt/sinara/dual-iir/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(
@@ -240,8 +231,7 @@ def main():
                 stabilizer_topic,
                 broker_address,
                 stream_target,
-            )
-        )
+            ))
 
         stream_thread = StreamThread(
             ui.update_stream,

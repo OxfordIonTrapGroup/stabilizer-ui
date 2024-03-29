@@ -23,7 +23,7 @@ def read(widgets):
     widget = widgets[0]
 
     if isinstance(
-        widget,
+            widget,
         (
             QtWidgets.QCheckBox,
             QtWidgets.QRadioButton,
@@ -46,7 +46,7 @@ def write(widgets, value):
     widget = widgets[0]
 
     if isinstance(
-        widget,
+            widget,
         (
             QtWidgets.QCheckBox,
             QtWidgets.QRadioButton,
@@ -70,6 +70,7 @@ class UiMqttConfig(NamedTuple):
 
 
 class UiMqttBridge:
+
     def __init__(self, client: MqttClient, configs: Dict[Enum, UiMqttConfig]):
         self.client = client
         self.configs = configs
@@ -86,7 +87,7 @@ class UiMqttBridge:
         retained_settings = {}
 
         def collect_settings(_client, topic, value, _qos, _properties):
-            subtopic = topic[len(root_topic) + 1 :]
+            subtopic = topic[len(root_topic) + 1:]
             try:
                 key = objectify(subtopic)
                 decoded_value = json.loads(value)
@@ -121,6 +122,7 @@ class UiMqttBridge:
 
         # Capture loop variable.
         def make_queue(key):
+
             def queue(*args):
                 keys_to_write.add(key)
                 ui_updated.set()

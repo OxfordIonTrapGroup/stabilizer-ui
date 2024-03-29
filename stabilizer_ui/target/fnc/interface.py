@@ -1,9 +1,10 @@
 import logging
 
 from ...mqtt import StabilizerInterface
-from ...iir import PidArgs, FILTERS
+from ...iir import FILTERS
 
 logger = logging.getLogger(__name__)
+
 
 class FncInterface(StabilizerInterface):
     """
@@ -17,7 +18,8 @@ class FncInterface(StabilizerInterface):
 
         setting_root = setting.root()
         if setting_root.name == "settings":
-            await self.request_settings_change(setting.get_path_from_root(), setting.get_message())
+            await self.request_settings_change(setting.get_path_from_root(),
+                                               setting.get_message())
         elif setting_root.name == "ui":
             self.publish_ui_change(setting.get_path_from_root(), setting.get_message())
             ui_iir = setting.get_parent_until(lambda x: x.name.startswith("iir"))
@@ -32,8 +34,9 @@ class FncInterface(StabilizerInterface):
                 raise ValueError(f"Filter {filter_type} parameter messsages not created.")
             filter_params = {f.name: f.get_message() for f in filter.get_children()}
 
-            ba = next(f for f in FILTERS if f.filter_type == filter_type).get_coefficients(**filter_params)
-            
+            ba = next(f for f in FILTERS
+                      if f.filter_type == filter_type).get_coefficients(**filter_params)
+
             await self.set_iir(
                 channel=_ch,
                 iir_idx=_iir_idx,

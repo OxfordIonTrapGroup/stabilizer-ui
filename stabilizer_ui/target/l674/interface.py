@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from enum import Enum, unique
 
@@ -33,10 +32,10 @@ class Settings(Enum):
 
 class Lock674Interface(StabilizerInterface):
     """
-    Shim for controlling `l674` stabilizer over MQTT; for the relock task to have something
-    to hold on to before the Stabilizer write task has finished initial bringup of the
-    MQTT connection. (Could potentially just use two MQTT connections instead, although
-    that seems a bit wasteful.)
+    Shim for controlling `l674` stabilizer over MQTT; for the relock task to have
+    something to hold on to before the Stabilizer write task has finished initial
+    bringup of the MQTT connection. (Could potentially just use two MQTT connections
+    instead, although that seems a bit wasteful.)
     """
     #: Settings which are directly addressed to Stabilizer.
     native_settings = {
@@ -90,11 +89,11 @@ class Lock674Interface(StabilizerInterface):
                 await self.set_iir(channel=0, iir_idx=0, ba=[0.0] * 5)
                 await self.set_iir(channel=1, iir_idx=0, ba=[0.0] * 5)
             elif lock_mode == "RampPassThrough":
-                # Gain 5 gives approximately ±10 V when driven using the Vescent servo box ramp.
+                # Gain 5 gives approx ±10V when driven using the Vescent servo box ramp.
                 await self.set_iir(channel=0, iir_idx=0, ba=[5.0] + [0.0] * 4)
                 await self.set_iir(channel=1, iir_idx=0, ba=[0.0] * 5)
             else:
-                # Negative sign in fast branch to match AOM lock; both PZTs have same sign.
+                # Negative sign in fast branch to match AOM lock; both PZTs have same sign
                 await self.set_pi_gains(channel=0,
                                         iir_idx=0,
                                         p_gain=-all_values[Settings.fast_p_gain],
@@ -105,10 +104,7 @@ class Lock674Interface(StabilizerInterface):
                                             p_gain=all_values[Settings.slow_p_gain],
                                             i_gain=all_values[Settings.slow_i_gain])
                 else:
-                    await self.set_pi_gains(channel=1,
-                                            iir_idx=0,
-                                            p_gain=0.0,
-                                            i_gain=0.0)
+                    await self.set_pi_gains(channel=1, iir_idx=0, p_gain=0.0, i_gain=0.0)
 
         if setting in self.fast_notch_settings:
             if all_values[Settings.fast_notch_enable]:
@@ -124,4 +120,4 @@ class Lock674Interface(StabilizerInterface):
             else:
                 await self.set_iir(channel=0, iir_idx=1, ba=[1.0] + [0.0] * 4)
 
-        # We rely on the hardware to initialise IIR[1][1] with a simple pass-through response.
+        # We rely on hardware to initialise IIR[1][1] with a simple pass-through response.

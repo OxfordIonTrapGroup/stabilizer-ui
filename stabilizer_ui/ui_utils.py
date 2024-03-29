@@ -10,9 +10,8 @@ def inv_lerp(start, stop, position):
     return (position - start) / (stop - start)
 
 
-def link_slider_to_spinbox(
-    slider: QtWidgets.QSlider, spinbox: QtWidgets.QDoubleSpinBox
-) -> None:
+def link_slider_to_spinbox(slider: QtWidgets.QSlider,
+                           spinbox: QtWidgets.QDoubleSpinBox) -> None:
     """Links the given slider and spinbox, so that changes to one are reflected in the
     other.
 

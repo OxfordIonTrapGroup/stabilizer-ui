@@ -1,9 +1,9 @@
-from enum import Enum
 import stabilizer.iir_coefficients as iir
 from stabilizer import SAMPLE_PERIOD
 
 
 class _AbstractArgs:
+
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             if key not in self.parameters:

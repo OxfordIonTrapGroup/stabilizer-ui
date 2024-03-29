@@ -19,6 +19,7 @@ CallbackPayload = namedtuple("CallbackPayload", "values download loss")
 
 
 class StreamThread:
+
     def __init__(
         self,
         ui_callback: Callable,
@@ -113,9 +114,9 @@ def stream_worker(
 
     async def handle_stream():
         """This coroutine doesn't run in the main thread's loop!"""
-        transport, stream = await StabilizerStream.open(
-            stream_target.get_ip(), stream_target.port, broker_address.get_ip(), 1
-        )
+        transport, stream = await StabilizerStream.open(stream_target.get_ip(),
+                                                        stream_target.port,
+                                                        broker_address.get_ip(), 1)
         try:
             while not terminate.is_set():
                 frame = await stream.queue.get()

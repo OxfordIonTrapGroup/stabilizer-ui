@@ -2,13 +2,15 @@
 ignore =
     # indentation is not a multiple of four (YAPF)
     E111, E114,
-    # continuation line over-indented for hanging indent (YAPF)
-    E126,
+    # continuation line over-indented/unaligned for hanging indent (YAPF)
+    E126, E131
     # visually indented line with same indent as next logical line (YAPF)
     E129,
     # Line breaks before/after binary operators (YAPF)
     W503, W504,
     # Star imports are common in idiomatic ARTIQ code
-    F403, F405
+    F403, F405,
+    # Do not use bare 'except'
+    E722,
 
-max-line-length=88
+max-line-length=90

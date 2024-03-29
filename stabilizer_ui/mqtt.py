@@ -4,7 +4,6 @@ from typing import Any, Optional, Dict, Iterable
 import logging
 import json
 from enum import Enum
-import abc
 
 from gmqtt import Client
 import uuid
@@ -21,7 +20,7 @@ def _int_to_bytes(i):
 
 
 def starts_with(string, prefix) -> bool:
-    return len(string) >= len(prefix) and string[: len(prefix)] == prefix
+    return len(string) >= len(prefix) and string[:len(prefix)] == prefix
 
 
 class MqttInterface:
@@ -33,9 +32,11 @@ class MqttInterface:
     Stabilizer only supports QoS 0 for now).
     """
 
-    def __init__(
-        self, client: Client, topic_base: str, timeout: float, maxsize: int = 512
-    ):
+    def __init__(self,
+                 client: Client,
+                 topic_base: str,
+                 timeout: float,
+                 maxsize: int = 512):
         self._client = client
         self._topic_base = topic_base
         self._pending = {}
@@ -56,9 +57,9 @@ class MqttInterface:
 
     async def request(self, topic: str, argument: Any, retain: bool = False):
         if len(self._pending) > self._maxsize:
-            # By construction, `correlation_data` should always be removed from `_pending`
-            # either by `_on_message()` or after `_timeout`. If something goes wrong, however
-            # the dictionary could grow indefinitely.
+            # By construction, `correlation_data` should always be removed from
+            # `_pending` either by `_on_message()` or after `_timeout`. If something
+            # goes wrong, however the dictionary could grow indefinitely.
             raise RuntimeError("Too many unhandled requests")
         result = asyncio.Future()
         correlation_data = _int_to_bytes(self._next_seq_id)
@@ -79,8 +80,7 @@ class MqttInterface:
         async def fail_after_timeout():
             await asyncio.sleep(self._timeout)
             result.set_exception(
-                TimeoutError(f"No response to {topic} request after {self._timeout} s")
-            )
+                TimeoutError(f"No response to {topic} request after {self._timeout} s"))
             self._pending.pop(correlation_data)
 
         _, pending = await asyncio.wait(
@@ -101,7 +101,8 @@ class MqttInterface:
         cd = properties.get("correlation_data", [])
         if len(cd) != 1:
             logger.warning(
-                "Received response without (valid) correlation data (topic '%s', payload %s)",
+                ("Received response without (valid) correlation data"
+                 "(topic '%s', payload %s) "),
                 topic,
                 payload,
             )
@@ -110,9 +111,8 @@ class MqttInterface:
 
         if seq_id not in self._pending:
             # This is fine if Stabilizer restarts, though.
-            logger.warning(
-                "Received unexpected/late response for '%s' (id %s)", topic, seq_id
-            )
+            logger.warning("Received unexpected/late response for '%s' (id %s)", topic,
+                           seq_id)
             return 0
 
         result = self._pending.pop(seq_id)
@@ -148,9 +148,8 @@ class StabilizerInterface:
     async def triage_setting_change(self, setting: Enum, all_values: Dict[Enum, Any]):
         raise NotImplementedError
 
-    async def set_pi_gains(
-        self, channel: int, iir_idx: int, p_gain: float, i_gain: float
-    ):
+    async def set_pi_gains(self, channel: int, iir_idx: int, p_gain: float,
+                           i_gain: float):
         b0 = i_gain * 2 * np.pi * stabilizer.SAMPLE_PERIOD + p_gain
         b1 = -p_gain
         await self.set_iir(channel, iir_idx, [b0, b1, 0, 1, 0])
@@ -175,9 +174,10 @@ class StabilizerInterface:
 
     def publish_ui_change(self, topic: str, argument: Any):
         payload = json.dumps(argument).encode("utf-8")
-        self._interface._client.publish(
-            f"{self._interface._topic_base}/{topic}", payload, qos=0, retain=True
-        )
+        self._interface._client.publish(f"{self._interface._topic_base}/{topic}",
+                                        payload,
+                                        qos=0,
+                                        retain=True)
 
     async def request_settings_change(self, key: str, value: Any):
         """
