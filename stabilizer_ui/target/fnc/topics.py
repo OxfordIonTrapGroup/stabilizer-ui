@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, List, Self, Callable
 
-from ...iir import FILTERS
+from ...iir.filters import FILTERS
 
 logger = logging.getLogger(__name__)
 

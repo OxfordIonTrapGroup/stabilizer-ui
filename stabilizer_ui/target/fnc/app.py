@@ -13,13 +13,13 @@ from .interface import FncInterface
 from .topics import app_settings_root
 
 from ...mqtt import MqttInterface
-from ...channel_settings import ChannelSettings
+from ...iir.channel_settings import ChannelSettings
 from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
 from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import ui_mqtt_bridge
 from ...ui_utils import fmt_mac
-from ...iir import FILTERS
+from ...iir.filters import FILTERS
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +53,6 @@ class UI(QtWidgets.QMainWindow):
         wid.setLayout(layout)
 
     def update_stream(self, payload):
-        # if self.tab_channel_settings.currentIndex() != 1:
-        #    return
         self.fft_scope.update(payload)
 
     async def update_transfer_function(self, setting):
@@ -185,8 +183,8 @@ async def update_stabilizer(
         # Allow relock task to directly request ADC1 updates.
         stabilizer_interface.set_interface(interface)
 
-        # keys_to_write.update(set(Settings))
-        ui_updated.set()  # trigger initial update
+        # trigger initial update
+        ui_updated.set()  
         while True:
             await ui_updated.wait()
             while keys_to_write:

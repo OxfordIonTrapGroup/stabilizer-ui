@@ -1,7 +1,7 @@
 import logging
 
 from ...mqtt import StabilizerInterface
-from ...iir import FILTERS
+from ...iir.filters import FILTERS
 
 logger = logging.getLogger(__name__)
 
