@@ -13,6 +13,7 @@ from qasync import QEventLoop
 from stabilizer.stream import get_local_ip
 
 from .interface import FncInterface
+from .topics import app_settings_root
 
 from ...mqtt import MqttInterface
 from ...channel_settings import ChannelSettings
@@ -28,7 +29,6 @@ logger = logging.getLogger(__name__)
 #: Interval between scope plot updates, in seconds.
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
-
 
 class UI(QtWidgets.QMainWindow):
     def __init__(self):
@@ -58,18 +58,21 @@ class UI(QtWidgets.QMainWindow):
         #    return
         self.fft_scope.update(payload)
 
-    async def update_transfer_function(self, setting, all_values):
-        if setting.split("/")[0] == "ui":
-            channel, iir = setting.split("/")[1:3]
-            path_root = f"ui/{channel}/{iir}/"
-            filter_type = all_values[path_root + "filter"]
-            filter_idx = [f.filter_type for f in FILTERS].index(filter_type)
-            kwargs = {
-                param: all_values[path_root + f"{filter_type}/{param}"]
-                for param in FILTERS[filter_idx].parameters
-            }
-            ba = FILTERS[filter_idx].get_coefficients(**kwargs)
-            _iir_settings = self.channel_settings[int(channel)].iir_settings[int(iir)]
+    async def update_transfer_function(self, setting):
+        if setting.root().name == "ui":
+            ui_iir = setting.get_parent_until(lambda x: x.name.startswith("iir"))
+            (_ch, _iir) = (int(ui_iir.get_parent().name[2:]), int(ui_iir.name[3:]))
+
+            filter_type = ui_iir.get_child("filter").get_message()
+            filter = ui_iir.get_child(filter_type)
+
+            # require parameters to be set by application
+            if not filter.has_children():
+                raise ValueError(f"Filter {filter_type} parameter messsages not created.")
+            filter_params = {f.name: f.get_message() for f in filter.get_children()}
+
+            ba = next(f for f in FILTERS if f.filter_type == filter_type).get_coefficients(**filter_params)
+            _iir_settings = self.channel_settings[_ch].iir_settings[_iir]
             _iir_settings.update_transfer_function(ba)
 
 
@@ -106,56 +109,52 @@ async def update_stabilizer(
 
         return read, write
 
+    stabilizer_settings, ui_settings = app_settings_root.get_children(["settings", "ui"])
+
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
-    settings_map = {
-        "settings/stream_target": UiMqttConfig(
+    stabilizer_settings.get_child("stream_target").set_message(UiMqttConfig(
             [],
             lambda _: stream_target._asdict(),
             lambda _w, _v: stream_target._asdict(),
         )
-    }
+    )
 
-    for c in range(2):
-        channel_root = f"{c}/"
-        settings_map[f"settings/afe/{c}"] = UiMqttConfig(
-            [ui.channel_settings[c].afeGainBox]
-        )
-        for iir in range(2):
-            name_root = f"ui/{c}/{iir}/"
-            iir_ui = ui.channel_settings[c].iir_settings[iir]
-            settings_map[name_root + "filter"] = UiMqttConfig([iir_ui.filterComboBox])
-            settings_map[name_root + "x_offset"] = UiMqttConfig([iir_ui.x_offsetBox])
-            settings_map[name_root + "y_offset"] = UiMqttConfig([iir_ui.y_offsetBox])
-            settings_map[name_root + "y_max"] = UiMqttConfig([iir_ui.y_maxBox])
-            settings_map[name_root + "y_min"] = UiMqttConfig([iir_ui.y_minBox])
-            for f in FILTERS:
-                f_str = f.filter_type
-                for arg in f.parameters:
-                    if arg.split("_")[-1] == "limit":
-                        settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
+    for afe in stabilizer_settings.get_child("afe").get_children():
+        afe.set_message(UiMqttConfig([ui.channel_settings[ch].afeGainBox]))
+
+    for ch in ui_settings.get_children():
+        for iir in enumerate(ch.get_children()):
+            iir.get_child("filter").set_message(UiMqttConfig([iir.filterComboBox]))
+            iir.get_child("x_offset").set_message(UiMqttConfig([iir.x_offsetBox]))
+            iir.get_child("y_offset").set_message(UiMqttConfig([iir.y_offsetBox]))
+            iir.get_child("y_max").set_message(UiMqttConfig([iir.y_maxBox]))
+            iir.get_child("y_min").set_message(UiMqttConfig([iir.y_minBox]))
+
+            for filter in FILTERS:
+                filter_topic = iir.get_child(filter.filter_type)
+                for arg in filter_topic.get_children():
+                    if arg.name.split("_")[-1] == "limit":
+                        arg.set_message(UiMqttConfig(
                             [
-                                getattr(iir_ui.widgets[f_str], f"{arg}Box"),
-                                getattr(iir_ui.widgets[f_str], f"{arg}IsInf"),
+                                getattr(iir.widgets[filter.filter_type], f"{arg.name}Box"),
+                                getattr(iir.widgets[filter.filter_type], f"{arg.name}IsInf"),
                             ],
                             *spinbox_checkbox_group(),
-                        )
+                        ))
+                    elif arg.name in {"f0", "Ki"}:
+                        arg.set_message(UiMqttConfig(
+                            [getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")], *kilo
+                        ))
+                    elif arg.name == "Kii":
+                        arg.set_message(UiMqttConfig(
+                            [getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")], *kilo2
+                        ))
                     else:
-                        if arg == "f0":
-                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo
-                            )
-                        elif arg == "Ki":
-                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo
-                            )
-                        elif arg == "Kii":
-                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo2
-                            )
-                        else:
-                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")]
-                            )
+                        arg.set_message(UiMqttConfig(
+                            [getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")]
+                        ))
+
+    settings_map = app_settings_root.traverse_as_dict()
 
     def read_ui():
         state = {}
@@ -165,8 +164,8 @@ async def update_stabilizer(
 
     try:
         bridge = await UiMqttBridge.new(broker_address, settings_map)
-        # ui.comm_status_label.setText(
-        #     f"Connected to MQTT broker at {broker_address.get_ip()}.")
+        ui.comm_status_label.setText(
+            f"Connected to MQTT broker at {broker_address.get_ip()}.")
         await bridge.load_ui(lambda x: x, root_topic)
         keys_to_write, ui_updated = bridge.connect_ui()
 
@@ -232,7 +231,7 @@ def main():
             list(map(int, args.broker_host.split("."))), args.broker_port
         )
 
-        stabilizer_topic = f"dt/sinara/dual-iir/{fmt_mac(args.stabilizer_mac)}"
+        stabilizer_topic = f"dt/sinara/fnc/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(
             update_stabilizer(
                 ui,

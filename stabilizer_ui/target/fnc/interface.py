@@ -1,44 +1,44 @@
 import logging
 
 from ...mqtt import StabilizerInterface
-from ...iir import FILTERS
+from ...iir import PidArgs, FILTERS
 
 logger = logging.getLogger(__name__)
 
 class FncInterface(StabilizerInterface):
     """
-    
+    Interface for the FNC stabilizer.
     """
 
     iir_ch_topic_base = "settings/iir_ch"
 
-    async def triage_setting_change(self, setting, all_values):
-        logger.info("Setting change'%s'", setting)
-        if setting.split("/")[0] == "settings":
-            await self.request_settings_change(setting, all_values[setting])
-        else:
-            self.publish_ui_change(setting, all_values[setting])
-            channel, iir = setting.split("/")[1:3]
-            path_root = f"ui/{channel}/{iir}/"
-            x_offset = all_values[path_root + "x_offset"]
-            y_offset = all_values[path_root + "y_offset"]
-            y_min = all_values[path_root + "y_min"]
-            y_max = all_values[path_root + "y_max"]
+    async def triage_setting_change(self, setting):
+        logger.info("Change setting {root}'")
 
-            filter_type = all_values[path_root + "filter"]
-            filter_idx = [f.filter_type for f in FILTERS].index(filter_type)
-            kwargs = {
-                param: all_values[path_root + f"{filter_type}/{param}"]
-                for param in FILTERS[filter_idx].parameters
-            }
-            ba = FILTERS[filter_idx].get_coefficients(**kwargs)
+        setting_root = setting.root()
+        if setting_root.name == "settings":
+            await self.request_settings_change(setting.get_path_from_root(), setting.get_message())
+        elif setting_root.name == "ui":
+            self.publish_ui_change(setting.get_path_from_root(), setting.get_message())
+            ui_iir = setting.get_parent_until(lambda x: x.name.startswith("iir"))
 
+            (_ch, _iir_idx) = int(ui_iir.get_parent().name[2:]), int(ui_iir.name[3:])
+
+            filter_type = ui_iir.get_child("filter").get_message()
+            filter = ui_iir.get_child(filter_type)
+
+            # require parameters to be set by application
+            if not filter.has_children():
+                raise ValueError(f"Filter {filter_type} parameter messsages not created.")
+            filter_params = {f.name: f.get_message() for f in filter.get_children()}
+
+            ba = next(f for f in FILTERS if f.filter_type == filter_type).get_coefficients(**filter_params)
+            
             await self.set_iir(
-                channel=int(channel),
-                iir_idx=int(iir),
+                channel=_ch,
+                iir_idx=_iir_idx,
                 ba=ba,
-                y_offset=y_offset,
-                y_min=y_min,
-                y_max=y_max,
+                y_offset=ui_iir.get_child("y_offset").get_message(),
+                y_min=ui_iir.get_child("y_min").get_message(),
+                y_max=ui_iir.get_child("y_max").get_message(),
             )
-    
