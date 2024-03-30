@@ -3,3 +3,5 @@ __pycache__/
 l674_lock_ui.egg-info/
 build/
 *.ipynb*
+*.code-workspace
+.DS_Store
