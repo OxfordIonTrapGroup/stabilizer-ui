@@ -118,16 +118,18 @@ async def update_stabilizer(
             lambda _w, _v: stream_target._asdict(),
         ))
 
-    for (ch, afe) in enumerate(stabilizer_settings.get_child("afe").get_children()):
-        afe.set_message(UiMqttConfig([ui.channel_settings[ch].afeGainBox]))
+    for (ch_index, afe) in enumerate(stabilizer_settings.get_child("afe").get_children()):
+        afe.set_message(UiMqttConfig([ui.channel_settings[ch_index].afeGainBox]))
 
-    for ch in ui_settings.get_children():
-        for iir in enumerate(ch.get_children()):
-            iir.get_child("filter").set_message(UiMqttConfig([iir.filterComboBox]))
-            iir.get_child("x_offset").set_message(UiMqttConfig([iir.x_offsetBox]))
-            iir.get_child("y_offset").set_message(UiMqttConfig([iir.y_offsetBox]))
-            iir.get_child("y_max").set_message(UiMqttConfig([iir.y_maxBox]))
-            iir.get_child("y_min").set_message(UiMqttConfig([iir.y_minBox]))
+    for (ch_index, channel) in enumerate(ui_settings.get_children()):
+        for (iir_index, iir) in enumerate(ch.get_children()):
+            iir_ui = ui.channel_settings[ch_index].iir_settings[iir_index]
+
+            iir.get_child("filter").set_message(UiMqttConfig([iir_ui.filterComboBox]))
+            iir.get_child("x_offset").set_message(UiMqttConfig([iir_ui.x_offsetBox]))
+            iir.get_child("y_offset").set_message(UiMqttConfig([iir_ui.y_offsetBox]))
+            iir.get_child("y_max").set_message(UiMqttConfig([iir_ui.y_maxBox]))
+            iir.get_child("y_min").set_message(UiMqttConfig([iir_ui.y_minBox]))
 
             for filter in FILTERS:
                 filter_topic = iir.get_child(filter.filter_type)
@@ -136,9 +138,9 @@ async def update_stabilizer(
                         arg.set_message(
                             UiMqttConfig(
                                 [
-                                    getattr(iir.widgets[filter.filter_type],
+                                    getattr(iir_ui.widgets[filter.filter_type],
                                             f"{arg.name}Box"),
-                                    getattr(iir.widgets[filter.filter_type],
+                                    getattr(iir_ui.widgets[filter.filter_type],
                                             f"{arg.name}IsInf"),
                                 ],
                                 *spinbox_checkbox_group(),
@@ -146,17 +148,17 @@ async def update_stabilizer(
                     elif arg.name in {"f0", "Ki"}:
                         arg.set_message(
                             UiMqttConfig([
-                                getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")
+                                getattr(iir_ui.widgets[filter.filter_type], f"{arg.name}Box")
                             ], *kilo))
                     elif arg.name == "Kii":
                         arg.set_message(
                             UiMqttConfig([
-                                getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")
+                                getattr(iir_ui.widgets[filter.filter_type], f"{arg.name}Box")
                             ], *kilo2))
                     else:
                         arg.set_message(
                             UiMqttConfig([
-                                getattr(iir.widgets[filter.filter_type], f"{arg.name}Box")
+                                getattr(iir_ui.widgets[filter.filter_type], f"{arg.name}Box")
                             ]))
 
     settings_map = app_settings_root.traverse_as_dict()
