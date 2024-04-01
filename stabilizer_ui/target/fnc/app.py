@@ -30,20 +30,17 @@ SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 NUM_CHANNELS = 2
 
-def dump(obj, all=True):
-    for attr in dir(obj):
-        attr_ = getattr(obj, attr)
-        if all or "PyQt5.QtWidgets" in repr(attr_):
-            print("obj.%s = %r" % (attr, attr_))
 class UI(QtWidgets.QMainWindow):
-
+    """ Main UI window for FNC"""
     def __init__(self):
         super().__init__()
 
+        # Set up main window with Horizontal layout
         self.setCentralWidget(QtWidgets.QWidget(self))
         self.centralWidget = self.centralWidget()
         self.centralWidgetLayout = QtWidgets.QHBoxLayout(self.centralWidget)
-
+        
+        # Add FFT scope next to a vertical layout for settings
         self.settingsLayout = QtWidgets.QVBoxLayout()
         self.fftScopeWidget = FftScope()
         self.centralWidgetLayout.addLayout(self.settingsLayout)
@@ -56,6 +53,7 @@ class UI(QtWidgets.QMainWindow):
         self.settingsLayout.addWidget(self.clockWidget)
         self.settingsLayout.addWidget(self.channelTabWidget)
 
+        # Set FFT scope to take max available space
         fftScopeSizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.fftScopeWidget.setSizePolicy(fftScopeSizePolicy)
         self.fftScopeWidget.setMinimumSize(400, 200)
@@ -68,12 +66,13 @@ class UI(QtWidgets.QMainWindow):
         self.streamWidget.update(payload)
 
     async def update_transfer_function(self, setting):
+        """Update transfer function plot based on setting change."""
         if setting.root().name == "ui":
             ui_iir = setting.get_parent_until(lambda x: x.name.startswith("iir"))
             (_ch, _iir) = (int(ui_iir.get_parent().name[2:]), int(ui_iir.name[3:]))
 
-            filter_type = ui_iir.find_child("filter").get_message()
-            filter = ui_iir.find_child(filter_type)
+            filter_type = ui_iir.get_child("filter").get_message()
+            filter = ui_iir.get_child(filter_type)
 
             # require parameters to be set by application
             if not filter.has_children():
@@ -93,10 +92,13 @@ async def update_stabilizer(
     broker_address: NetworkAddress,
     stream_target: NetworkAddress,
 ):
+    
+    # I gains in KiloHertz
     kilo = (
         lambda w: ui_mqtt_bridge.read(w) * 1e3,
         lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
     )
+    # II gains in KiloHertz^2
     kilo2 = (
         lambda w: ui_mqtt_bridge.read(w) * 1e3,
         lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
@@ -119,29 +121,11 @@ async def update_stabilizer(
                 widgets[0].setValue(value)
 
         return read, write
-    
-    # def dds_in_follows_out_group():
-    #     def read(widgets):
-    #         """Expects widgets in the form [dds_in Spinbox, checkbox, dds_out Spinbox]"""
-    #         if widgets[1].isChecked():
-    #             widgets[0].setReadOnly(True)
-    #             widgets[0].setValue(2 * widgets[2].getValue())
-    #         else:
-    #             widgets[0].setReadOnly(False)
-    #         return widgets[2].getValue()
 
-    #     def write(widgets, value):
-    #         """Expects widgets in the form [dds_in spinbox, checkbox, dds_out spinbox]."""
-    #         if widgets[1].isChecked():
-    #             return
-    #         else:
-    #             widgets[0].setValue(value)
-    #     return read, write
-
-    stabilizer_settings, ui_settings = app_settings_root.find_children(["settings", "ui"])
+    stabilizer_settings, ui_settings = app_settings_root.get_children(["settings", "ui"])
 
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
-    stabilizer_settings.find_child("stream_target").set_ui_mqtt_config(
+    stabilizer_settings.get_child("stream_target").set_ui_mqtt_config(
         UiMqttConfig(
             [],
             lambda _: stream_target._asdict(),
@@ -149,43 +133,36 @@ async def update_stabilizer(
         ))
 
     # Clock settings
-    clk_multiplier, ext_clk, clk_freq = ui_settings.find_child("clock").find_children(["multiplier", "ext_clock", "frequency"])
+    clk_multiplier, ext_clk, clk_freq = ui_settings.get_child("clock").get_children(["multiplier", "extClock", "frequency"])
 
     clk_multiplier.set_ui_mqtt_config(UiMqttConfig([ui.clockWidget.multiplierBox]))
     clk_freq.set_ui_mqtt_config(UiMqttConfig([ui.clockWidget.frequencyBox]))
     ext_clk.set_ui_mqtt_config(UiMqttConfig([ui.clockWidget.extClkCheckBox]))
 
-    for (ch_index, channel) in enumerate(ui_settings.find_children(["ch0", "ch1"])):
-        channel.find_child("afe").set_ui_mqtt_config(UiMqttConfig([ui.channels[ch_index].afeGainBox]))
+    for (ch_index, channel) in enumerate(ui_settings.get_children(["ch0", "ch1"])):
+        channel.get_child("afe").set_ui_mqtt_config(UiMqttConfig([ui.channels[ch_index].afeGainBox]))
 
         # Pounder settings
-        dds_in, dds_out = channel.find_children(["pounder/ddsIn", "pounder/ddsOut"])
+        dds_in, dds_out = channel.get_children(["pounder/ddsIn", "pounder/ddsOut"])
         
         widget_attribute = lambda dds, suffix: getattr(ui.channels[ch_index], f"{dds.name}{suffix}Box")
 
         for dds in (dds_in, dds_out):
-            dds.find_child("attenuation").set_ui_mqtt_config(UiMqttConfig([widget_attribute(dds, "Attenuation")]))
-            dds.find_child("amplitude").set_ui_mqtt_config(UiMqttConfig([widget_attribute(dds, "Amplitude")]))
-            dds.find_child("frequency").set_ui_mqtt_config(UiMqttConfig([widget_attribute(dds, "Frequency")]))
-
-        # dds_out.find_child("frequency").set_ui_mqtt_config(UiMqttConfig([widget_attribute(dds_out, "Frequency")]))
-        # dds_in.find_child("frequency").set_ui_mqtt_config(UiMqttConfig([widget_attribute(dds_in, "Frequency"), 
-        #                                                                 widget_attribute(dds_in, "FollowsOut"), 
-        #                                                                 widget_attribute(dds_out, "Frequency"),
-        #                                                                 *dds_in_follows_out_group()]))
+            for child in dds.get_children(["attenuation", "amplitude", "frequency"]):
+                child.set_ui_mqtt_config(UiMqttConfig([widget_attribute(dds, child.name.capitalize())]))
         
 
-        for (iir_index, iir) in enumerate(channel.find_children(["iir0", "iir1"])):
+        for (iir_index, iir) in enumerate(channel.get_children(["iir0", "iir1"])):
             iirWidget = ui.channels[ch_index].iir_settings[iir_index]
 
-            iir.find_child("filter").set_ui_mqtt_config(UiMqttConfig([iirWidget.filterComboBox]))
-            iir.find_child("x_offset").set_ui_mqtt_config(UiMqttConfig([iirWidget.x_offsetBox]))
-            iir.find_child("y_offset").set_ui_mqtt_config(UiMqttConfig([iirWidget.y_offsetBox]))
-            iir.find_child("y_max").set_ui_mqtt_config(UiMqttConfig([iirWidget.y_maxBox]))
-            iir.find_child("y_min").set_ui_mqtt_config(UiMqttConfig([iirWidget.y_minBox]))
+            iir.get_child("filter").set_ui_mqtt_config(UiMqttConfig([iirWidget.filterComboBox]))
+            iir.get_child("x_offset").set_ui_mqtt_config(UiMqttConfig([iirWidget.x_offsetBox]))
+            iir.get_child("y_offset").set_ui_mqtt_config(UiMqttConfig([iirWidget.y_offsetBox]))
+            iir.get_child("y_max").set_ui_mqtt_config(UiMqttConfig([iirWidget.y_maxBox]))
+            iir.get_child("y_min").set_ui_mqtt_config(UiMqttConfig([iirWidget.y_minBox]))
 
             for filter in FILTERS:
-                filter_topic = iir.find_child(filter.filter_type)
+                filter_topic = iir.get_child(filter.filter_type)
                 for arg in filter_topic.get_children():
                     widget_attribute = lambda suffix: getattr(iirWidget.widgets[filter.filter_type], f"{arg.name}{suffix}")
 
