@@ -32,6 +32,10 @@ flake8 = "6.1.0"
 l674_lock_ui = "stabilizer_ui.target.l674.app:main"
 dual_iir_ui = "stabilizer_ui.target.dual_iir.app:main"
 
+[tool.poe.tasks]
+fmt = "yapf -ir stabilizer_ui"
+lint = "flake8 stabilizer_ui"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
