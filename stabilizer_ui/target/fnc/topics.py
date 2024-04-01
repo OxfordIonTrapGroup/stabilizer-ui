@@ -2,29 +2,30 @@ import logging
 from typing import Optional, List, Self, Callable
 
 from ...iir.filters import FILTERS
+from ...ui_mqtt_bridge import UiMqttConfig
 
 logger = logging.getLogger(__name__)
 
 
-class TopicLevel:
+class TopicTree:
 
     @classmethod
-    def new(cls, name: str, value=None):
+    def new(cls, name: str):
         topics = name.split("/")
         if len(topics) == 1:
-            return TopicLevel(name)
+            return TopicTree(name)
         else:
-            subtopics = [TopicLevel(topic) for topic in topics]
+            subtopics = [TopicTree(topic) for topic in topics]
             for i in range(len(subtopics) - 1):
                 subtopics[i].add_child(subtopics[i + 1])
             return subtopics[-1]
 
-    def __init__(self, name: str, value=None):
+    def __init__(self, name: str):
         self._parent = None
         self.name = name
 
         self._children = []
-        self._value = value
+        self._ui_mqtt_config = None
 
     def __repr__(self):
         return self.get_path_from_root()
@@ -46,7 +47,7 @@ class TopicLevel:
         self._parent = None
 
     def create_child(self, subtopic_name: str) -> Self:
-        child = TopicLevel.new(subtopic_name)
+        child = TopicTree.new(subtopic_name)
         self.add_child(child.root())
         return child
 
@@ -75,14 +76,6 @@ class TopicLevel:
             return f"{self.name}{child_path}"
         return self._parent.get_path_from_root(f"/{self.name}{child_path}")
 
-    def set_message_value(self, value) -> None:
-        if not self._children:
-            raise ValueError("This topic has subtopics, it can't have a value")
-        self._value = value
-
-    def get_message_value(self):
-        return self._value
-
     def find_child(self, path: str) -> Self:
         path = path.split("/")
         child = next((child for child in self._children if child.name == path[0]), None)
@@ -90,12 +83,12 @@ class TopicLevel:
         if len(path) == 1:
             return child
         elif child is not None:
-            return child.get_child("/".join(path[1:]))
+            return child.find_child("/".join(path[1:]))
         else:
             raise ValueError(f"Child {path[0]} not found in topic {self.name}")
 
     def find_children(self, paths: List[str]) -> List[Self]:
-        return [self.get_child(path) for path in paths]
+        return [self.find_child(path) for path in paths]
 
     def get_or_create_child(self, path: str) -> Self:
         path = path.split("/")
@@ -123,37 +116,56 @@ class TopicLevel:
     def has_children(self) -> bool:
         return bool(self._children)
 
-    def traverse_as_dict(self) -> dict:
+    def get_leaves(self, _leaves=[]) -> list[Self]:
         if not self._children:
-            return {self.get_path_from_root(): self._value}
+            _leaves.append(self)
         else:
-            return {
-                key: val
-                for child in self._children
-                for key, val in child.traverse_as_dict().items()
-            }
+            for child in self._children:
+                child.get_leaves(_leaves)
+        return _leaves
+        
+    def set_ui_mqtt_config(self, ui_mqtt_config: UiMqttConfig):
+        self._ui_mqtt_config = ui_mqtt_config
 
-
-stabilizer_settings = TopicLevel("settings")
-ui_settings = TopicLevel("ui")
+stabilizer_settings = TopicTree("settings")
+ui_settings = TopicTree("ui")
 
 # Create stabilizer settings topics tree
-_, _afe, _iir = stabilizer_settings.create_children(["stream_target", "afe", "iir_ch"])
-_afe.create_children(["0", "1"])
-for ch in _iir.create_children(["0", "1"]):
+stream_target, afe, iir, pounder = stabilizer_settings.create_children(["stream_target", "afe", "iir_ch", "pounder"])
+afe.create_children(["0", "1"])
+for ch in iir.create_children(["0", "1"]):
     ch.create_children(["0", "1"])
 
+clock, dds_in, dds_out = pounder.create_children(["clock", "in_channel", "out_channel"])
+clock.create_children(["multiplier", "external_clock", "reference_clock_frequency"])
+
+dds_in_channels = dds_in.create_children(["0", "1"])
+dds_out_channels = dds_out.create_children(["0", "1"])
+
+for dds in dds_in_channels + dds_out_channels:
+    dds.create_children(["attenuation", "dds/amplitude", "dds/phase_offset", "dds/frequency"])
+
 # Create UI settings topics tree
-for ch in ui_settings.create_children(["ch0", "ch1"]):
+ui_clk = ui_settings.create_child("clock")
+ui_clk_multiplier, ui_ext_clk, ui_frequency = ui_clk.create_children(["multiplier", "extClock", "frequency"])
+
+ui_channels = ui_settings.create_children(["ch0", "ch1"])
+for ch in ui_channels:
     for iir in ch.create_children(["iir0", "iir1"]):
         iir.create_children(["filter", "y_offset", "y_min", "y_max", "x_offset"])
         for filter in FILTERS:
             filter_topic = iir.create_child(filter.filter_type)
             filter_topic.create_children(filter.parameters)
+    
+    ui_afe, ui_pounder = ch.create_children(["afe", "pounder"])
+    ch_dds_list = ui_pounder.create_children(["ddsIn", "ddsOut"])
+    for dds in ch_dds_list:
+        dds.create_children(["attenuation", "amplitude", "frequency"])
+    ch_dds_list[0].create_child("track_dds_out")
 
 # Root topic. Not using the method `add_child` because it sets the parent of the child
 # It's unnecessary to see the sinara root when traversed up the tree when getting the
 # path but provides a useful starting point to get all topics when traversing down.
 # The MAC address to the Stabilizer board needs to be changed when the app is launched
-app_settings_root = TopicLevel("dt/sinara/fnc/<MAC>")
+app_settings_root = TopicTree("dt/sinara/fnc/<MAC>")
 app_settings_root._children = [stabilizer_settings, ui_settings]

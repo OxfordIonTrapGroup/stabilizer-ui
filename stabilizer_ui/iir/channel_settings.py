@@ -12,13 +12,13 @@ class AbstractChannelSettings(QtWidgets.QWidget):
     """
     afe_options = ["G1", "G2", "G5", "G10"]
 
-    def __init__(self, ui_path):
-        ui_path = os.path.join(ui_path)
+    def __init__(self):
         super().__init__()
-        uic.loadUi(ui_path, self)
 
+    def _add_afe_options(self):
         self.afeGainBox.addItems(self.afe_options)
 
+    def _add_iir_tabWidget(self):
         self.iir_settings = [_IIRWidget(), _IIRWidget()]
         for i, iir in enumerate(self.iir_settings):
             self.IIRTabs.addTab(iir, f"Filter {i}")
@@ -27,8 +27,12 @@ class ChannelSettings(AbstractChannelSettings):
     """ Minimal channel settings widget for a dual-iir-like application
     """
     def __init__(self):
-        super().__init__(os.path.dirname(os.path.realpath(__file__)),
-                               "channel_settings.ui")
+        super().__init__()
+
+        uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)),"widgets/channel_settings.ui"), self)
+        
+        self._add_afe_options()
+        self._add_iir_tabWidget()
 
 class _IIRWidget(QtWidgets.QWidget):
 
