@@ -14,7 +14,7 @@ from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
 from stabilizer.stream import get_local_ip
 
-from .mqtt import StabilizerInterface, Settings
+from .interface import StabilizerInterface, Settings
 from .solstis import EnsureSolstis
 
 from ...mqtt import MqttInterface

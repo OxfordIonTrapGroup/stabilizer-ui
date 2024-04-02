@@ -1,7 +1,7 @@
 import logging
 from enum import Enum, unique
 
-from ...interface import AbstractStabilizerInterface
+from ...mqtt import AbstractStabilizerInterface
 from ...iir.filters import FILTERS
 
 logger = logging.getLogger(__name__)
