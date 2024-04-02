@@ -5,7 +5,7 @@ from enum import Enum, unique
 import numpy as np
 from stabilizer import SAMPLE_PERIOD
 
-from ...mqtt import StabilizerInterfaceBase
+from ...interface import AbstractStabilizerInterface
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class Settings(Enum):
     afe1_gain = "settings/afe/1"
 
 
-class StabilizerInterface(StabilizerInterfaceBase):
+class StabilizerInterface(AbstractStabilizerInterface):
     """
     Shim for controlling `l674` stabilizer over MQTT; for the relock task to have something
     to hold on to before the Stabilizer write task has finished initial bringup of the
