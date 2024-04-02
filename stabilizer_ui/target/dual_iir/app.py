@@ -12,16 +12,16 @@ from PyQt5 import QtGui, QtWidgets, uic
 from qasync import QEventLoop
 from stabilizer.stream import get_local_ip
 
-from .mqtt import StabilizerInterface
+from .interface import StabilizerInterface
 
-from ...mqtt import MqttInterface
-from ...channel_settings import ChannelSettings
+from ...interface import MqttInterface
+from ...iir.channel_settings import ChannelSettings
 from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
 from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import ui_mqtt_bridge
 from ...ui_utils import fmt_mac
-from ...iir import FILTERS
+from ...iir.filters import FILTERS
 
 logger = logging.getLogger(__name__)
 
