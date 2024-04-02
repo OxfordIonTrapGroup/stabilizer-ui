@@ -14,7 +14,7 @@ from stabilizer.stream import get_local_ip
 
 from .interface import StabilizerInterface
 
-from ...interface import MqttInterface
+from ...mqtt import MqttInterface
 from ...iir.channel_settings import ChannelSettings
 from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
