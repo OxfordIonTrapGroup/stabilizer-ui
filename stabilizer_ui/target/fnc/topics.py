@@ -51,7 +51,7 @@ class TopicTree:
     def get_parent(self) -> Optional[Self]:
         """Get the parent of the node. Returns None if the node is a root"""
         return self._parent
-    
+
     def get_parent_until(self, predicate: Callable[[Self], bool]):
         """Recursively traverse up the tree until the predicate is true.
         args:
@@ -104,13 +104,13 @@ class TopicTree:
         else:
             raise ValueError(f"Child {path[0]} not found in topic {self.name}")
 
-    def get_children(self, paths = Optional[str]) -> List[Self]:
+    def get_children(self, paths=Optional[str]) -> List[Self]:
         """Get a list of child nodes at the given paths. If no paths are given, returns all children."""
         if paths is None:
             return self._children
         else:
             return [self.get_child(path) for path in paths]
-        
+
     def has_children(self) -> bool:
         """Check if the node has children"""
         return bool(self._children)
@@ -138,7 +138,7 @@ class TopicTree:
         if self._parent is None:
             return self
         return self._parent.root()
-    
+
     def get_path_from_root(self, child_path: str = "") -> str:
         """Get the string path from the root to the node"""
         if self._parent is None:
@@ -153,16 +153,18 @@ class TopicTree:
             for child in self._children:
                 child.get_leaves(_leaves)
         return _leaves
-        
+
     def set_ui_mqtt_config(self, ui_mqtt_config: UiMqttConfig):
         """Set the UI MQTT configuration for the node"""
         self._ui_mqtt_config = ui_mqtt_config
+
 
 stabilizer_settings = TopicTree("settings")
 ui_settings = TopicTree("ui")
 
 # Create stabilizer settings topics tree
-stream_target, afe, iir, pounder = stabilizer_settings.create_children(["stream_target", "afe", "iir_ch", "pounder"])
+stream_target, afe, iir, pounder = stabilizer_settings.create_children(
+    ["stream_target", "afe", "iir_ch", "pounder"])
 afe.create_children(["0", "1"])
 for ch in iir.create_children(["0", "1"]):
     ch.create_children(["0", "1"])
@@ -177,11 +179,13 @@ dds_in_channels = dds_in.create_children(["0", "1"])
 dds_out_channels = dds_out.create_children(["0", "1"])
 
 for dds in dds_in_channels + dds_out_channels:
-    dds.create_children(["attenuation", "dds/amplitude", "dds/phase_offset", "dds/frequency"])
+    dds.create_children(
+        ["attenuation", "dds/amplitude", "dds/phase_offset", "dds/frequency"])
 
 # Create UI settings topics tree
 ui_clk = ui_settings.create_child("clock")
-ui_clk_multiplier, ui_ext_clk, ui_frequency = ui_clk.create_children(["multiplier", "extClock", "frequency"])
+ui_clk_multiplier, ui_ext_clk, ui_frequency = ui_clk.create_children(
+    ["multiplier", "extClock", "frequency"])
 
 ui_channels = ui_settings.create_children(["ch0", "ch1"])
 for ch in ui_channels:
@@ -190,7 +194,7 @@ for ch in ui_channels:
         for filter in FILTERS:
             filter_topic = iir.create_child(filter.filter_type)
             filter_topic.create_children(filter.parameters)
-    
+
     ui_afe, ui_pounder = ch.create_children(["afe", "pounder"])
     ch_dds_list = ui_pounder.create_children(["ddsIn", "ddsOut"])
     for dds in ch_dds_list:

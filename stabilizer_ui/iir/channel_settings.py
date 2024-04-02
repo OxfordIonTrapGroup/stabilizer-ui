@@ -6,6 +6,7 @@ from PyQt5 import QtWidgets, uic
 from stabilizer import SAMPLE_PERIOD
 from stabilizer.iir_coefficients import get_filters
 
+
 class AbstractChannelSettings(QtWidgets.QWidget):
     """ Abstract class for creating custom channel widgets.
     Sets up AFE gains and IIR filter settings.
@@ -22,29 +23,37 @@ class AbstractChannelSettings(QtWidgets.QWidget):
         self.iir_settings = [_IIRWidget(), _IIRWidget()]
         for i, iir in enumerate(self.iir_settings):
             self.IIRTabs.addTab(iir, f"Filter {i}")
-        
+
 
 class ChannelSettings(AbstractChannelSettings):
     """ Minimal channel settings widget for a dual-iir-like application
     """
+
     def __init__(self):
         super().__init__()
 
-        uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)),"widgets/channel_settings.ui"), self)
-        
+        uic.loadUi(
+            os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                         "widgets/channel_settings.ui"), self)
+
         self._add_afe_options()
         self._add_iir_tabWidget()
+
 
 class ChannelSettings(AbstractChannelSettings):
     """ Minimal channel settings widget for a dual-iir-like application
     """
+
     def __init__(self):
         super().__init__()
 
-        uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)),"widgets/channel_settings.ui"), self)
-        
+        uic.loadUi(
+            os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                         "widgets/channel_settings.ui"), self)
+
         self._add_afe_options()
         self._add_iir_tabWidget()
+
 
 class _IIRWidget(QtWidgets.QWidget):
 
@@ -55,7 +64,7 @@ class _IIRWidget(QtWidgets.QWidget):
         uic.loadUi(ui_path, self)
 
         # Obtains dict of filters from stabilizer.py module
-        self.filters = (get_filters()) 
+        self.filters = (get_filters())
         self.widgets = {}
 
         # Add filter parameter widgets to filterParamsStack

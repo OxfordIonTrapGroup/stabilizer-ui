@@ -27,10 +27,14 @@ class StabilizerInterface(AbstractStabilizerInterface):
             filter_type = ui_iir.get_child("filter").get_message()
             filters = ui_iir.get_child(filter_type)
 
-            filter_params = {filter.name: filter.get_message() for filter in filters.get_children()}
+            filter_params = {
+                filter.name: filter.get_message()
+                for filter in filters.get_children()
+            }
 
-            ba = next(filter for filter in FILTERS
-                      if filter.filter_type == filter_type).get_coefficients(**filter_params)
+            ba = next(
+                filter for filter in FILTERS
+                if filter.filter_type == filter_type).get_coefficients(**filter_params)
 
             await self.set_iir(
                 channel=_ch,

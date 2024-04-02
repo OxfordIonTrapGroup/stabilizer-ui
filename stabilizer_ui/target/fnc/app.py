@@ -30,8 +30,10 @@ SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 NUM_CHANNELS = 2
 
+
 class UI(QtWidgets.QMainWindow):
     """ Main UI window for FNC"""
+
     def __init__(self):
         super().__init__()
 
@@ -39,7 +41,7 @@ class UI(QtWidgets.QMainWindow):
         self.setCentralWidget(QtWidgets.QWidget(self))
         self.centralWidget = self.centralWidget()
         self.centralWidgetLayout = QtWidgets.QHBoxLayout(self.centralWidget)
-        
+
         # Add FFT scope next to a vertical layout for settings
         self.settingsLayout = QtWidgets.QVBoxLayout()
         self.fftScopeWidget = FftScope()
@@ -48,13 +50,15 @@ class UI(QtWidgets.QMainWindow):
 
         self.channelTabWidget = ChannelTabWidget()
         self.channels = self.channelTabWidget.channels
-        self.clockWidget = uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)), "widgets/clock.ui"))
+        self.clockWidget = uic.loadUi(
+            os.path.join(os.path.dirname(os.path.realpath(__file__)), "widgets/clock.ui"))
 
         self.settingsLayout.addWidget(self.clockWidget)
         self.settingsLayout.addWidget(self.channelTabWidget)
 
         # Set FFT scope to take max available space
-        fftScopeSizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        fftScopeSizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                                                   QtWidgets.QSizePolicy.Expanding)
         self.fftScopeWidget.setSizePolicy(fftScopeSizePolicy)
         self.fftScopeWidget.setMinimumSize(400, 200)
 
@@ -92,7 +96,7 @@ async def update_stabilizer(
     broker_address: NetworkAddress,
     stream_target: NetworkAddress,
 ):
-    
+
     # I gains in KiloHertz
     kilo = (
         lambda w: ui_mqtt_bridge.read(w) * 1e3,
@@ -133,38 +137,45 @@ async def update_stabilizer(
         ))
 
     # Clock settings
-    clk_multiplier, ext_clk, clk_freq = ui_settings.get_child("clock").get_children(["multiplier", "extClock", "frequency"])
+    clk_multiplier, ext_clk, clk_freq = ui_settings.get_child("clock").get_children(
+        ["multiplier", "extClock", "frequency"])
 
     clk_multiplier.set_ui_mqtt_config(UiMqttConfig([ui.clockWidget.multiplierBox]))
     clk_freq.set_ui_mqtt_config(UiMqttConfig([ui.clockWidget.frequencyBox]))
     ext_clk.set_ui_mqtt_config(UiMqttConfig([ui.clockWidget.extClkCheckBox]))
 
     for (ch_index, channel) in enumerate(ui_settings.get_children(["ch0", "ch1"])):
-        channel.get_child("afe").set_ui_mqtt_config(UiMqttConfig([ui.channels[ch_index].afeGainBox]))
+        channel.get_child("afe").set_ui_mqtt_config(
+            UiMqttConfig([ui.channels[ch_index].afeGainBox]))
 
         # Pounder settings
         dds_in, dds_out = channel.get_children(["pounder/ddsIn", "pounder/ddsOut"])
-        
-        widget_attribute = lambda dds, suffix: getattr(ui.channels[ch_index], f"{dds.name}{suffix}Box")
+
+        widget_attribute = lambda dds, suffix: getattr(ui.channels[ch_index],
+                                                       f"{dds.name}{suffix}Box")
 
         for dds in (dds_in, dds_out):
             for child in dds.get_children(["attenuation", "amplitude", "frequency"]):
-                child.set_ui_mqtt_config(UiMqttConfig([widget_attribute(dds, child.name.capitalize())]))
-        
+                child.set_ui_mqtt_config(
+                    UiMqttConfig([widget_attribute(dds, child.name.capitalize())]))
 
         for (iir_index, iir) in enumerate(channel.get_children(["iir0", "iir1"])):
             iirWidget = ui.channels[ch_index].iir_settings[iir_index]
 
-            iir.get_child("filter").set_ui_mqtt_config(UiMqttConfig([iirWidget.filterComboBox]))
-            iir.get_child("x_offset").set_ui_mqtt_config(UiMqttConfig([iirWidget.x_offsetBox]))
-            iir.get_child("y_offset").set_ui_mqtt_config(UiMqttConfig([iirWidget.y_offsetBox]))
+            iir.get_child("filter").set_ui_mqtt_config(
+                UiMqttConfig([iirWidget.filterComboBox]))
+            iir.get_child("x_offset").set_ui_mqtt_config(
+                UiMqttConfig([iirWidget.x_offsetBox]))
+            iir.get_child("y_offset").set_ui_mqtt_config(
+                UiMqttConfig([iirWidget.y_offsetBox]))
             iir.get_child("y_max").set_ui_mqtt_config(UiMqttConfig([iirWidget.y_maxBox]))
             iir.get_child("y_min").set_ui_mqtt_config(UiMqttConfig([iirWidget.y_minBox]))
 
             for filter in FILTERS:
                 filter_topic = iir.get_child(filter.filter_type)
                 for arg in filter_topic.get_children():
-                    widget_attribute = lambda suffix: getattr(iirWidget.widgets[filter.filter_type], f"{arg.name}{suffix}")
+                    widget_attribute = lambda suffix: getattr(
+                        iirWidget.widgets[filter.filter_type], f"{arg.name}{suffix}")
 
                     if arg.name.split("_")[-1] == "limit":
                         arg.set_ui_mqtt_config(
@@ -177,21 +188,17 @@ async def update_stabilizer(
                             ))
                     elif arg.name in {"f0", "Ki"}:
                         arg.set_ui_mqtt_config(
-                            UiMqttConfig([
-                                widget_attribute("Box")
-                            ], *kilo))
+                            UiMqttConfig([widget_attribute("Box")], *kilo))
                     elif arg.name == "Kii":
                         arg.set_ui_mqtt_config(
-                            UiMqttConfig([
-                                widget_attribute("Box")
-                            ], *kilo2))
+                            UiMqttConfig([widget_attribute("Box")], *kilo2))
                     else:
-                        arg.set_ui_mqtt_config(
-                            UiMqttConfig([
-                                widget_attribute("Box")
-                            ]))
+                        arg.set_ui_mqtt_config(UiMqttConfig([widget_attribute("Box")]))
 
-    settings_map = {topic.get_path_from_root(): topic._ui_mqtt_config for topic in app_settings_root.get_leaves()}
+    settings_map = {
+        topic.get_path_from_root(): topic._ui_mqtt_config
+        for topic in app_settings_root.get_leaves()
+    }
     logger.error(settings_map.keys())
 
     def read_ui():
@@ -217,7 +224,7 @@ async def update_stabilizer(
         stabilizer_interface.set_interface(interface)
 
         # trigger initial update
-        ui_updated.set()  
+        ui_updated.set()
         while True:
             await ui_updated.wait()
             while keys_to_write:

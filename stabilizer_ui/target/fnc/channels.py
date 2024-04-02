@@ -5,17 +5,20 @@ from PyQt5 import QtWidgets, uic
 
 NUM_CHANNELS = 2
 
+
 class ChannelSettings(AbstractChannelSettings):
     """ Channel settings"""
+
     def __init__(self):
         super().__init__()
 
-        uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                               "widgets/channel.ui"), self)
-        
+        uic.loadUi(
+            os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                         "widgets/channel.ui"), self)
+
         self._add_afe_options()
         self._add_iir_tabWidget()
-        
+
         # Disable mouse wheel scrolling on spinboxes to prevent accidental changes
         spinboxes = self.findChildren(QtWidgets.QDoubleSpinBox)
         for box in spinboxes:
@@ -42,8 +45,7 @@ class ChannelSettings(AbstractChannelSettings):
             self.ddsInFrequencyBox.setEnabled(False)
 
             # Update DDS In frequency when DDS Out frequency changes
-            self.ddsOutFrequencyBox.valueChanged.connect(
-                self._updateDdsIoFrequencies)
+            self.ddsOutFrequencyBox.valueChanged.connect(self._updateDdsIoFrequencies)
         else:
             self.ddsInFrequencyBox.setEnabled(True)
 
@@ -62,15 +64,14 @@ class ChannelSettings(AbstractChannelSettings):
     def _snapAttenuationValue(self, value):
         """Snap attenuation values to 0.5 dB steps"""
         self.sender().setValue(0.5 * round(2 * value))
-    
+
 
 class ChannelTabWidget(QtWidgets.QTabWidget):
     """ Channel tab widget comprising NUM_CHANNELS ChannelSettings tabs"""
+
     def __init__(self):
         super().__init__()
 
         self.channels = [ChannelSettings() for _ in range(NUM_CHANNELS)]
         for i in range(NUM_CHANNELS):
             self.addTab(ChannelSettings(), f"Channel {i}")
-
-        

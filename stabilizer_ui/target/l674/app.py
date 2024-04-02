@@ -24,7 +24,6 @@ from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import ui_mqtt_bridge
 from ...ui_utils import link_slider_to_spinbox, fmt_mac
 
-
 logger = logging.getLogger(__name__)
 
 #
@@ -110,6 +109,7 @@ class LockState(Enum):
 
 
 class TextEditLogHandler(logging.Handler):
+
     def __init__(self, text_edit: QtWidgets.QTextEdit):
         super().__init__(level=logging.INFO)
         self.text_edit = text_edit
@@ -185,16 +185,17 @@ class UI(QtWidgets.QMainWindow):
         self.scope.update(payload)
 
 
-async def update_stabilizer(ui: UI,
-                            stabilizer_interface: StabilizerInterface,
-                            root_topic: str,
-                            broker_address: NetworkAddress,
+async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
+                            root_topic: str, broker_address: NetworkAddress,
                             stream_target: NetworkAddress):
 
-    invert = (lambda w: not ui_mqtt_bridge.read(w), lambda w, v: ui_mqtt_bridge.write(w, not v))
-    kilo = (lambda w: ui_mqtt_bridge.read(w) * 1e3, lambda w, v: ui_mqtt_bridge.write(w, v / 1e3))
+    invert = (lambda w: not ui_mqtt_bridge.read(w),
+              lambda w, v: ui_mqtt_bridge.write(w, not v))
+    kilo = (lambda w: ui_mqtt_bridge.read(w) * 1e3,
+            lambda w, v: ui_mqtt_bridge.write(w, v / 1e3))
 
     def radio_group(choices):
+
         def read(widgets):
             for i in range(1, len(widgets)):
                 if widgets[i].isChecked():
@@ -217,29 +218,44 @@ async def update_stabilizer(ui: UI,
 
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
-        Settings.fast_p_gain: UiMqttConfig([ui.fastPGainBox]),
-        Settings.fast_i_gain: UiMqttConfig([ui.fastIGainBox], *kilo),
-        Settings.fast_notch_enable: UiMqttConfig([ui.notchGroup]),
-        Settings.fast_notch_frequency: UiMqttConfig([ui.notchFreqBox], *kilo),
-        Settings.fast_notch_quality_factor: UiMqttConfig([ui.notchQBox]),
-        Settings.slow_p_gain: UiMqttConfig([ui.slowPGainBox]),
-        Settings.slow_i_gain: UiMqttConfig([ui.slowIGainBox]),
-        Settings.slow_enable: UiMqttConfig([ui.slowPIDGroup]),
-        Settings.lock_mode: UiMqttConfig(
-            [ui.disablePztButton, ui.rampPztButton, ui.enablePztButton],
-            *radio_group(["Disabled", "RampPassThrough", "Enabled"])),
-        Settings.gain_ramp_time: UiMqttConfig([ui.gainRampTimeBox]),
-        Settings.ld_threshold: UiMqttConfig([ui.lockDetectThresholdBox]),
-        Settings.ld_reset_time: UiMqttConfig([ui.lockDetectDelayBox]),
-        Settings.adc1_routing: UiMqttConfig(
+        Settings.fast_p_gain:
+        UiMqttConfig([ui.fastPGainBox]),
+        Settings.fast_i_gain:
+        UiMqttConfig([ui.fastIGainBox], *kilo),
+        Settings.fast_notch_enable:
+        UiMqttConfig([ui.notchGroup]),
+        Settings.fast_notch_frequency:
+        UiMqttConfig([ui.notchFreqBox], *kilo),
+        Settings.fast_notch_quality_factor:
+        UiMqttConfig([ui.notchQBox]),
+        Settings.slow_p_gain:
+        UiMqttConfig([ui.slowPGainBox]),
+        Settings.slow_i_gain:
+        UiMqttConfig([ui.slowIGainBox]),
+        Settings.slow_enable:
+        UiMqttConfig([ui.slowPIDGroup]),
+        Settings.lock_mode:
+        UiMqttConfig([ui.disablePztButton, ui.rampPztButton, ui.enablePztButton],
+                     *radio_group(["Disabled", "RampPassThrough", "Enabled"])),
+        Settings.gain_ramp_time:
+        UiMqttConfig([ui.gainRampTimeBox]),
+        Settings.ld_threshold:
+        UiMqttConfig([ui.lockDetectThresholdBox]),
+        Settings.ld_reset_time:
+        UiMqttConfig([ui.lockDetectDelayBox]),
+        Settings.adc1_routing:
+        UiMqttConfig(
             [ui.adc1IgnoreButton, ui.adc1FastInputButton, ui.adc1FastOutputButton],
             *radio_group(["Ignore", "SumWithADC0", "SumWithIIR0Output"])),
-        Settings.aux_ttl_out: UiMqttConfig([ui.enableAOMLockBox], *invert),
-        Settings.afe0_gain: UiMqttConfig([ui.afe0GainBox]),
-        Settings.afe1_gain: UiMqttConfig([ui.afe1GainBox]),
-        Settings.stream_target: UiMqttConfig([],
-                                             lambda _: stream_target._asdict(),
-                                             lambda _w, _v: stream_target._asdict())
+        Settings.aux_ttl_out:
+        UiMqttConfig([ui.enableAOMLockBox], *invert),
+        Settings.afe0_gain:
+        UiMqttConfig([ui.afe0GainBox]),
+        Settings.afe1_gain:
+        UiMqttConfig([ui.afe1GainBox]),
+        Settings.stream_target:
+        UiMqttConfig([], lambda _: stream_target._asdict(),
+                     lambda _w, _v: stream_target._asdict())
     }
 
     def read_ui():
@@ -407,7 +423,8 @@ async def relock_laser(ui: UI, stabilizer_interface: StabilizerInterface,
                             await solstis.set_resonator_tune(new_tune)
                         except ValueError as e:
                             logger.info(
-                                "Reached invalid resonator tune; restarting from etalon search")
+                                "Reached invalid resonator tune; restarting from etalon search"
+                            )
                             step = RelockStep.tune_etalon
                             break
                 continue
@@ -438,8 +455,9 @@ async def relock_laser(ui: UI, stabilizer_interface: StabilizerInterface,
                 await asyncio.sleep(0.2)
                 transmission = await read_adc()
                 if transmission < 0.2 * ui.lockDetectThresholdBox.value():
-                    logger.info("Transmission immediately low (%s); aborting lock attempt",
-                                f"{transmission*1e3:0.1f} mV")
+                    logger.info(
+                        "Transmission immediately low (%s); aborting lock attempt",
+                        f"{transmission*1e3:0.1f} mV")
                     try_approximate = False
                     step = RelockStep.reset_lock
                     continue
@@ -486,6 +504,7 @@ class WavemeterInterface:
     """Wraps a connection to the WAnD wavemeter server, offering an interface to query
     a single channel while automatically reconnecting on failure/timeout.
     """
+
     def __init__(self, host: str, port: int, channel: str, timeout: float):
         self._client = None
         self._host = host
@@ -528,8 +547,9 @@ class WavemeterInterface:
                 self._client = None
 
 
-async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface, wand_host: str,
-                             wand_port: int, wand_channel: str, solstis_host: str):
+async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface,
+                             wand_host: str, wand_port: int, wand_channel: str,
+                             solstis_host: str):
     # While not relocking, we regularly poll the wavemeter and save the last reading,
     # to be "graduated" to last_locked_freq_reading once we know that the laser was
     # in lock for it.
@@ -593,7 +613,9 @@ async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface, 
 
                 if ui.enableRelockingBox.isChecked():
                     assert relock_task is None
-                    logger.info("Cavity transmission low (%s mV), starting relocking task.", reading * 1e3)
+                    logger.info(
+                        "Cavity transmission low (%s mV), starting relocking task.",
+                        reading * 1e3)
                     if last_locked_freq_reading is None:
                         last_locked_freq_reading = DEFAULT_FREQ_TARGET
                         logger.warning(
@@ -612,8 +634,8 @@ async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface, 
                     relock_task = None
                     continue
 
-            ui.update_lock_state(
-                LockState.locked if is_locked else LockState.out_of_lock, reading)
+            ui.update_lock_state(LockState.locked if is_locked else LockState.out_of_lock,
+                                 reading)
     except Exception:
         logger.exception("Unexpected relocking failure")
         ui.update_lock_state(LockState.uninitialised, None)
@@ -627,6 +649,7 @@ async def monitor_lock_state(ui: UI, stabilizer_interface: StabilizerInterface, 
 
 
 class UIStatePublisher:
+
     def __init__(self, ui: UI):
         self.ui = ui
 
@@ -663,8 +686,7 @@ def main():
 
         stabilizer_interface = StabilizerInterface()
 
-        ui.comm_status_label.setText(
-            f"Connecting to MQTT broker at {args.broker_host}…")
+        ui.comm_status_label.setText(f"Connecting to MQTT broker at {args.broker_host}…")
 
         # Find out which local IP address we are going to direct the stream to.
         # Assume the local IP address is the same for the broker and the stabilizer.
@@ -676,8 +698,8 @@ def main():
 
         stabilizer_topic = f"dt/sinara/l674/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(
-            update_stabilizer(ui, stabilizer_interface, stabilizer_topic,
-                              broker_address, stream_target))
+            update_stabilizer(ui, stabilizer_interface, stabilizer_topic, broker_address,
+                              stream_target))
 
         monitor_lock_task = loop.create_task(
             monitor_lock_state(ui, stabilizer_interface, args.wand_host, args.wand_port,
