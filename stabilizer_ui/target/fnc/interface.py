@@ -1,12 +1,12 @@
 import logging
 
-from ...mqtt import StabilizerInterface
+from ...mqtt import AbstractStabilizerInterface
 from ...iir.filters import FILTERS
 
 logger = logging.getLogger(__name__)
 
 
-class FncInterface(StabilizerInterface):
+class StabilizerInterface(AbstractStabilizerInterface):
     """
     Interface for the FNC stabilizer.
     """

@@ -22,6 +22,18 @@ class AbstractChannelSettings(QtWidgets.QWidget):
         self.iir_settings = [_IIRWidget(), _IIRWidget()]
         for i, iir in enumerate(self.iir_settings):
             self.IIRTabs.addTab(iir, f"Filter {i}")
+        
+
+class ChannelSettings(AbstractChannelSettings):
+    """ Minimal channel settings widget for a dual-iir-like application
+    """
+    def __init__(self):
+        super().__init__()
+
+        uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)),"widgets/channel_settings.ui"), self)
+        
+        self._add_afe_options()
+        self._add_iir_tabWidget()
 
 class ChannelSettings(AbstractChannelSettings):
     """ Minimal channel settings widget for a dual-iir-like application
