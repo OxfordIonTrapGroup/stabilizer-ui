@@ -10,6 +10,7 @@ from stabilizer.stream import get_local_ip
 
 from .interface import StabilizerInterface
 from .ui import MainWindow
+from .topics import app_settings_root, stabilizer_settings, ui_settings
 
 from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
@@ -21,6 +22,8 @@ logger = logging.getLogger(__name__)
 #: Interval between scope plot updates, in seconds.
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
+
+DEFAULT_WINDOW_SIZE = (1200, 600)
 
 def main():
     logging.basicConfig(level=logging.INFO)
@@ -38,32 +41,32 @@ def main():
     app.setOrganizationDomain("photonic.link")
     app.setApplicationName("FNC UI")
 
+    app_settings_root.name = f"{fmt_mac(args.stabilizer_mac)}"
+
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
 
         ui = MainWindow()
-        ui.resize(1200, 600)
-        ui.show()
-
         ui.setWindowTitle(args.name + f" [{fmt_mac(args.stabilizer_mac)}]")
+        ui.resize(*DEFAULT_WINDOW_SIZE)
+        ui.show()
 
         stabilizer_interface = StabilizerInterface()
 
         # Find out which local IP address we are going to direct the stream to.
         # Assume the local IP address is the same for the broker and the stabilizer.
         local_ip = get_local_ip(args.broker_host)
+
         stream_target = NetworkAddress(local_ip, args.stream_port)
+        ui.set_mqtt_configs(app_settings_root, stream_target)
 
         broker_address = NetworkAddress(list(map(int, args.broker_host.split("."))),
                                         args.broker_port)
-
-        stabilizer_topic = f"dt/sinara/fnc/{fmt_mac(args.stabilizer_mac)}"
+        
         stabilizer_task = loop.create_task(
-            ui.update_stabilizer(
-                stabilizer_interface,
-                stabilizer_topic,
+            stabilizer_interface.update(
+                stabilizer_settings,
                 broker_address,
-                stream_target,
             ))
 
         stream_thread = StreamThread(

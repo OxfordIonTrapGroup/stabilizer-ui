@@ -1,17 +1,13 @@
 import os
 from PyQt5 import QtWidgets, uic
 from math import inf
-import asyncio
 import logging
-from typing import Self
 
-from .topics import app_settings_root
+from .topics import TopicTree
 from .channels import ChannelTabWidget
-from .interface import StabilizerInterface
 
 from ...stream.fft_scope import FftScope
-from ...mqtt import MqttInterface
-from ...ui_mqtt_bridge import UiMqttConfig, UiMqttBridge, NetworkAddress
+from ...ui_mqtt_bridge import UiMqttConfig, NetworkAddress
 from ... import ui_mqtt_bridge
 from ...iir.filters import FILTERS
 
@@ -74,27 +70,18 @@ class MainWindow(QtWidgets.QMainWindow):
             _iir_settings = self.channel_settings[_ch].iir_settings[_iir]
             _iir_settings.update_transfer_function(ba)
 
+    # I gains in KiloHertz
+    kilo = (
+        lambda w: ui_mqtt_bridge.read(w) * 1e3,
+        lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
+    )
+    # II gains in KiloHertz^2
+    kilo2 = (
+        lambda w: ui_mqtt_bridge.read(w) * 1e3,
+        lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
+    )
 
-    async def update_stabilizer(
-        self: Self,
-        stabilizer_interface: StabilizerInterface,
-        root_topic: str,
-        broker_address: NetworkAddress,
-        stream_target: NetworkAddress,
-    ):
-
-        # I gains in KiloHertz
-        kilo = (
-            lambda w: ui_mqtt_bridge.read(w) * 1e3,
-            lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
-        )
-        # II gains in KiloHertz^2
-        kilo2 = (
-            lambda w: ui_mqtt_bridge.read(w) * 1e3,
-            lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
-        )
-
-        def is_inf_spinbox_checkbox_group():
+    def _is_inf_widgets_readwrite(self):
 
             def read(widgets):
                 """Expects widgets in the form [spinbox, checkbox]."""
@@ -111,8 +98,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     widgets[0].setValue(value)
 
             return read, write
+    
 
-        stabilizer_settings, ui_settings = app_settings_root.get_children(["settings", "ui"])
+    def set_mqtt_configs(self, root_topic: TopicTree, stream_target: NetworkAddress):
+        """ Link the UI widgets to the MQTT topic tree"""
+        stabilizer_settings, ui_settings = root_topic.get_children(["settings", "ui"])
 
         # `ui/#` are only used by the UI, the others by both UI and stabilizer
         stabilizer_settings.get_child("stream_target").set_ui_mqtt_config(
@@ -170,59 +160,14 @@ class MainWindow(QtWidgets.QMainWindow):
                                         widget_attribute("Box"),
                                         widget_attribute("IsInf"),
                                     ],
-                                    *is_inf_spinbox_checkbox_group(),
+                                    *self._is_inf_widgets_readwrite(),
                                 ))
                         elif arg.name in {"f0", "Ki"}:
                             arg.set_ui_mqtt_config(
-                                UiMqttConfig([widget_attribute("Box")], *kilo))
+                                UiMqttConfig([widget_attribute("Box")], *self.kilo))
                         elif arg.name == "Kii":
                             arg.set_ui_mqtt_config(
-                                UiMqttConfig([widget_attribute("Box")], *kilo2))
+                                UiMqttConfig([widget_attribute("Box")], *self.kilo2))
                         else:
                             arg.set_ui_mqtt_config(UiMqttConfig([widget_attribute("Box")]))
-
-        settings_map = {
-            topic.get_path_from_root(): topic._ui_mqtt_config
-            for topic in app_settings_root.get_leaves()
-        }
-        logger.error(settings_map.keys())
-
-        def read_ui():
-            state = {}
-            for key, cfg in settings_map.items():
-                state[key] = cfg.read_handler(cfg.widgets)
-            return state
-
-        try:
-            bridge = await UiMqttBridge.new(broker_address, settings_map)
-            self.comm_status_label.setText(
-                f"Connected to MQTT broker at {broker_address.get_ip()}.")
-            await bridge.load_ui(lambda x: x, root_topic)
-            keys_to_write, ui_updated = bridge.connect_ui()
-
-            #
-            # Relay user input to MQTT.
-            #
-
-            interface = MqttInterface(bridge.client, root_topic, timeout=10.0)
-
-            # Allow relock task to directly request ADC1 updates.
-            stabilizer_interface.set_interface(interface)
-
-            # trigger initial update
-            ui_updated.set()
-            while True:
-                await ui_updated.wait()
-                while keys_to_write:
-                    # Use while/pop instead of for loop, as UI task might push extra
-                    # elements while we are executing requests.
-                    key = keys_to_write.pop()
-                    all_params = read_ui()
-                    await stabilizer_interface.change(key, all_params)
-                    await self.update_transfer_function(key, all_params)
-                ui_updated.clear()
-        except BaseException as e:
-            if isinstance(e, asyncio.CancelledError):
-                return
-            logger.exception("Failure in Stabilizer communication task")
 
