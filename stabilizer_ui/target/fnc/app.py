@@ -10,7 +10,7 @@ from stabilizer.stream import get_local_ip
 
 from .interface import StabilizerInterface
 from .ui import MainWindow
-from .topics import app_settings_root, stabilizer_settings, ui_settings
+from .topics import app_settings_root
 
 from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
@@ -65,7 +65,8 @@ def main():
         
         stabilizer_task = loop.create_task(
             stabilizer_interface.update(
-                stabilizer_settings,
+                ui,
+                app_settings_root,
                 broker_address,
             ))
 

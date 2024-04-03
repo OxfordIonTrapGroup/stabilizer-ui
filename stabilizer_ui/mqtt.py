@@ -145,7 +145,7 @@ class AbstractStabilizerInterface:
         await self._interface_set.wait()
         await self.triage_setting_change(*args, **kwargs)
 
-    async def triage_setting_change(self, setting: Enum, all_values: Dict[Enum, Any]):
+    async def triage_setting_change(self):
         raise NotImplementedError
 
     async def set_pi_gains(self, channel: int, iir_idx: int, p_gain: float,
