@@ -70,7 +70,6 @@ class UiMqttConfig(NamedTuple):
 
 
 class UiMqttBridge:
-
     def __init__(self, client: MqttClient, configs: Dict[Enum, UiMqttConfig]):
         self.client = client
         self.configs = configs
@@ -79,7 +78,13 @@ class UiMqttBridge:
     async def new(cls, broker_address: NetworkAddress, *args, **kwargs):
         client = MqttClient(client_id="")
         host, port = broker_address.get_ip(), broker_address.port
-        await client.connect(host, port=port, keepalive=10)
+        try:
+            await client.connect(host, port=port, keepalive=10)
+            logger.info(f"Connected to MQTT broker at {host}:{port}.")
+        except Exception as connect_exception:
+            logger.error("Failed to connect to MQTT broker: %s", connect_exception)
+            raise connect_exception
+        
         return cls(client, *args, **kwargs)
 
     async def load_ui(self, objectify: Callable, root_topic: str):
@@ -102,6 +107,8 @@ class UiMqttBridge:
             return 0
 
         self.client.on_message = collect_settings
+
+        logger.info(f"Subscribing to all settings at {root_topic}/#")
         all_settings = f"{root_topic}/#"
         self.client.subscribe(all_settings)
         # Based on testing, all the retained messages are sent immediately after
