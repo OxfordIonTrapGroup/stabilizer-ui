@@ -70,6 +70,7 @@ class UiMqttConfig(NamedTuple):
 
 
 class UiMqttBridge:
+
     def __init__(self, client: MqttClient, configs: Dict[Enum, UiMqttConfig]):
         self.client = client
         self.configs = configs
@@ -84,7 +85,7 @@ class UiMqttBridge:
         except Exception as connect_exception:
             logger.error("Failed to connect to MQTT broker: %s", connect_exception)
             raise connect_exception
-        
+
         return cls(client, *args, **kwargs)
 
     async def load_ui(self, objectify: Callable, root_topic: str):

@@ -2,6 +2,7 @@ from typing import Optional, List, Self, Callable
 
 from .ui_mqtt_bridge import UiMqttConfig
 
+
 class TopicTree:
 
     @classmethod
@@ -159,6 +160,6 @@ class TopicTree:
         """Update the value of the node based on the UI MQTT configuration"""
         if self._ui_mqtt_config is not None:
             self.value = self._ui_mqtt_config.read_handler(self._ui_mqtt_config.widgets)
-        else: 
+        else:
             raise ValueError("UI MQTT configuration not set for node")
         return self.value

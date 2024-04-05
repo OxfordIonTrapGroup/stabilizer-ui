@@ -2,7 +2,6 @@ import logging
 from ...topic_tree import TopicTree
 from ...iir.filters import FILTERS
 
-
 logger = logging.getLogger(__name__)
 
 _stabilizer_settings = TopicTree("settings")
@@ -19,8 +18,10 @@ for ch in _iir.create_children(["0", "1"]):
     ch.create_children(["0", "1"])
 
 # Clock settings for stabilizer
-_clock, _dds_in, _dds_out = _pounder.create_children(["clock", "in_channel", "out_channel"])
-_multiplier, _ext_clk, _ref_clk_freq = _clock.create_children(["multiplier", "external_clock", "reference_clock_frequency"])
+_clock, _dds_in, _dds_out = _pounder.create_children(
+    ["clock", "in_channel", "out_channel"])
+_multiplier, _ext_clk, _ref_clk_freq = _clock.create_children(
+    ["multiplier", "external_clock", "reference_clock_frequency"])
 
 # DDS settings for stabilizer.
 # in_channel/0 represents the input DDS for channel 0
@@ -28,8 +29,7 @@ _dds_in_channels = _dds_in.create_children(["0", "1"])
 _dds_out_channels = _dds_out.create_children(["0", "1"])
 
 for dds in _dds_in_channels + _dds_out_channels:
-    dds.create_children(
-        ["attenuation", "dds/amplitude", "dds/frequency"])
+    dds.create_children(["attenuation", "dds/amplitude", "dds/frequency"])
 
 # Create UI settings topics tree
 _ui_clk = _ui_settings.create_child("clock")
@@ -79,6 +79,7 @@ class Stabilizer:
     dds_out = _dds_out
     dds_outs = _dds_out_channels
 
+
 class Ui:
     """Enum wrapping the UI settings topics tree.
     """
@@ -90,7 +91,7 @@ class Ui:
     clk_freq = ui_frequency
     ext_clk = ui_ext_clk
 
-    # Channel topics 
+    # Channel topics
     # Access iirs as iirs[ch_idx][iir_idx]
     channels = _ui_channels
     iirs = [channel.get_children() for channel in _ui_channels]
@@ -100,6 +101,7 @@ class Ui:
     pounder_channels = [channel.get_child("pounder") for channel in _ui_channels]
     dds_ins = [channel.get_child("pounder/ddsIn") for channel in _ui_channels]
     dds_out = [channel.get_child("pounder/ddsOut") for channel in _ui_channels]
+
 
 # Root topic. Not using the method `add_child` because it sets the parent of the child
 # It's unnecessary to see the sinara root when traversed up the tree when getting the

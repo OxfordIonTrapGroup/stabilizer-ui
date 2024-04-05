@@ -25,6 +25,7 @@ SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 DEFAULT_WINDOW_SIZE = (1200, 600)
 
+
 def main():
     logging.basicConfig(level=logging.INFO)
 
@@ -62,7 +63,7 @@ def main():
 
         broker_address = NetworkAddress(list(map(int, args.broker_host.split("."))),
                                         args.broker_port)
-        
+
         stabilizer_task = loop.create_task(
             stabilizer_interface.update(
                 ui,

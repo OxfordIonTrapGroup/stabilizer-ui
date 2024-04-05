@@ -28,9 +28,11 @@ class StabilizerInterface(AbstractStabilizerInterface):
         elif setting_root.name == "ui":
             self.publish_ui_change(setting.get_path_from_root(), setting.value)
 
-            if (ui_iir := setting.get_parent_until(lambda x: x.name.startswith("iir"))) is not None:
+            if (ui_iir := setting.get_parent_until(lambda x: x.name.startswith("iir"))
+                ) is not None:
                 await self._change_filter_setting(ui_iir)
-            elif (pounder := setting.get_parent_until(lambda x: x.name == "pounder")) is not None:
+            elif (pounder :=
+                  setting.get_parent_until(lambda x: x.name == "pounder")) is not None:
                 await self._change_pounder_setting(pounder)
 
     async def update(
@@ -39,7 +41,10 @@ class StabilizerInterface(AbstractStabilizerInterface):
         root_topic: TopicTree,
         broker_address: NetworkAddress,
     ):
-        topics = [topic for topic in root_topic.get_leaves() if topic._ui_mqtt_config is not None]
+        topics = [
+            topic for topic in root_topic.get_leaves()
+            if topic._ui_mqtt_config is not None
+        ]
 
         settings_map = {
             topic.get_path_from_root(): topic._ui_mqtt_config
@@ -58,7 +63,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
             #
             # Relay user input to MQTT.
             #
-            interface = MqttInterface(bridge.client, root_topic.get_path_from_root(), timeout=10.0)
+            interface = MqttInterface(bridge.client,
+                                      root_topic.get_path_from_root(),
+                                      timeout=10.0)
 
             # Allow relock task to directly request ADC1 updates.
             self.set_interface(interface)
@@ -74,7 +81,6 @@ class StabilizerInterface(AbstractStabilizerInterface):
                     key = keys_to_write.pop()
                     setting = root_topic.get_child(key)
 
-                                        
                     await self.change(setting)
                     ui.update_transfer_function(setting)
                 ui_updated.clear()
@@ -85,21 +91,17 @@ class StabilizerInterface(AbstractStabilizerInterface):
         finally:
             logger.info(f"Connecting to MQTT broker at {broker_address.get_ip()}.")
 
-
     async def _change_filter_setting(self, iir_setting):
-        (_ch, _iir_idx) = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
+        (_ch,
+         _iir_idx) = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
 
         filter_type = iir_setting.get_child("filter").value
         filters = iir_setting.get_child(filter_type)
 
-        filter_params = {
-            filter.name: filter.value
-            for filter in filters.get_children()
-        }
+        filter_params = {filter.name: filter.value for filter in filters.get_children()}
 
-        ba = next(
-            filter for filter in FILTERS
-            if filter.filter_type == filter_type).get_coefficients(**filter_params)
+        ba = next(filter for filter in FILTERS
+                  if filter.filter_type == filter_type).get_coefficients(**filter_params)
 
         await self.set_iir(
             channel=_ch,
@@ -115,8 +117,14 @@ class StabilizerInterface(AbstractStabilizerInterface):
         topic = lambda tpc: getattr(topics.Stabilizer, tpc)
 
         key = topics.Stabilizer.pounder.get_path_from_root()
-        clock_topics = { topic(tpc).name: topic(tpc).value for tpc in ["clk_multiplier", "ext_clk", "clk_freq"]
+        clock_topics = {
+            topic(tpc).name: topic(tpc).value
+            for tpc in ["clk_multiplier", "ext_clk", "clk_freq"]
         }
-        dds_topics = {topic.name: topic.value for dds in [topics.Stabilizer.dds_ins[ch], topics.Stabilizer.dds_outs[ch]] for topic in dds.get_children(["dds/amplitude", "dds/frequency", "attenuation"])}
+        dds_topics = {
+            topic.name: topic.value
+            for dds in [topics.Stabilizer.dds_ins[ch], topics.Stabilizer.dds_outs[ch]] for
+            topic in dds.get_children(["dds/amplitude", "dds/frequency", "attenuation"])
+        }
 
         await self.request_settings_change(key, {**clock_topics, **dds_topics})

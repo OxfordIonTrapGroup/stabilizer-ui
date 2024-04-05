@@ -13,6 +13,7 @@ from ...iir.filters import FILTERS
 
 logger = logging.getLogger(__name__)
 
+
 class MainWindow(QtWidgets.QMainWindow):
     """ Main UI window for FNC"""
 
@@ -53,7 +54,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def update_transfer_function(self, setting):
         """Update transfer function plot based on setting change."""
-        if setting.root().name == "ui" and (ui_iir := setting.get_parent_until(lambda x: x.name.startswith("iir"))) is not None:
+        if setting.root().name == "ui" and (
+                ui_iir :=
+                setting.get_parent_until(lambda x: x.name.startswith("iir"))) is not None:
             (_ch, _iir) = (int(ui_iir.get_parent().name[2:]), int(ui_iir.name[3:]))
 
             filter_type = ui_iir.get_child("filter").value
@@ -65,7 +68,7 @@ class MainWindow(QtWidgets.QMainWindow):
             filter_params = {f.name: f.value for f in filter.get_children()}
 
             ba = next(f for f in FILTERS
-                    if f.filter_type == filter_type).get_coefficients(**filter_params)
+                      if f.filter_type == filter_type).get_coefficients(**filter_params)
             _iir_settings = self.channels[_ch].iir_settings[_iir]
             _iir_settings.update_transfer_function(ba)
 
@@ -82,22 +85,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _is_inf_widgets_readwrite(self):
 
-            def read(widgets):
-                """Expects widgets in the form [spinbox, checkbox]."""
-                if widgets[1].isChecked():
-                    return inf
-                else:
-                    return widgets[0].value()
+        def read(widgets):
+            """Expects widgets in the form [spinbox, checkbox]."""
+            if widgets[1].isChecked():
+                return inf
+            else:
+                return widgets[0].value()
 
-            def write(widgets, value):
-                """Expects widgets in the form [spinbox, checkbox]."""
-                if value == inf:
-                    widgets[1].setChecked(True)
-                else:
-                    widgets[0].setValue(value)
+        def write(widgets, value):
+            """Expects widgets in the form [spinbox, checkbox]."""
+            if value == inf:
+                widgets[1].setChecked(True)
+            else:
+                widgets[0].setValue(value)
 
-            return read, write
-    
+        return read, write
 
     def set_mqtt_configs(self, root_topic: TopicTree, stream_target: NetworkAddress):
         """ Link the UI widgets to the MQTT topic tree"""
@@ -121,15 +123,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         logger.info(f"{ext_clk._ui_mqtt_config}")
 
-        for ch_index, afe_ch in enumerate(stabilizer_settings.get_child("afe").get_children()):
-            afe_ch.bridge_mqtt(
-                UiMqttConfig([self.channels[ch_index].afeGainBox]))
+        for ch_index, afe_ch in enumerate(
+                stabilizer_settings.get_child("afe").get_children()):
+            afe_ch.bridge_mqtt(UiMqttConfig([self.channels[ch_index].afeGainBox]))
         for (ch_index, channel) in enumerate(ui_settings.get_children(["ch0", "ch1"])):
             # Pounder settings
             dds_in, dds_out = channel.get_children(["pounder/ddsIn", "pounder/ddsOut"])
 
             widget_attribute = lambda dds, suffix: getattr(self.channels[ch_index],
-                                                        f"{dds.name}{suffix}Box")
+                                                           f"{dds.name}{suffix}Box")
 
             for dds in (dds_in, dds_out):
                 for child in dds.get_children(["attenuation", "amplitude", "frequency"]):
@@ -171,4 +173,3 @@ class MainWindow(QtWidgets.QMainWindow):
                                 UiMqttConfig([widget_attribute("Box")], *self.kilo2))
                         else:
                             arg.bridge_mqtt(UiMqttConfig([widget_attribute("Box")]))
-
