@@ -54,7 +54,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def update_transfer_function(self, setting):
         """Update transfer function plot based on setting change."""
         if setting.root().name == "ui" and (ui_iir := setting.get_parent_until(lambda x: x.name.startswith("iir"))) is not None:
-            # if (ui_iir := setting.get_parent_until(lambda x: x.name.startswith("iir"))) is not None:
             (_ch, _iir) = (int(ui_iir.get_parent().name[2:]), int(ui_iir.name[3:]))
 
             filter_type = ui_iir.get_child("filter").value

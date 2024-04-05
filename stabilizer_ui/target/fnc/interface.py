@@ -71,8 +71,10 @@ class StabilizerInterface(AbstractStabilizerInterface):
                     # Use while/pop instead of for loop, as UI task might push extra
                     # elements while we are executing requests.
                     update_all_topics()
-                    setting = root_topic.get_child(keys_to_write.pop())
-                    
+                    key = keys_to_write.pop()
+                    setting = root_topic.get_child(key)
+
+                                        
                     await self.change(setting)
                     ui.update_transfer_function(setting)
                 ui_updated.clear()

@@ -1,9 +1,8 @@
 import asyncio
 from contextlib import suppress
-from typing import Any, Optional, Dict, Iterable
+from typing import Any, Optional, Iterable
 import logging
 import json
-from enum import Enum
 
 from gmqtt import Client
 import uuid
