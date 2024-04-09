@@ -36,8 +36,8 @@ class ChannelSettings(AbstractChannelSettings):
         self.ddsOutAttenuationBox.valueChanged.connect(self._snapAttenuationValue)
 
     def _linkDdsIoFrequencies(self, _):
-        """Link DDS In frequency to 2x DDS Out frequency if enabled, otherwise allow manual setting.
-        Attached to the stateChanged signal of the ddsIoFreqLinkCheckBox.
+        """Link DDS In frequency to 2x DDS Out frequency if enabled, otherwise allow
+        manual setting. Attached to the stateChanged signal of the ddsIoFreqLinkCheckBox.
         """
         if self.ddsIoFreqLinkCheckBox.isChecked():
             # Disable DDS In frequency and set to 2x DDS Out frequency

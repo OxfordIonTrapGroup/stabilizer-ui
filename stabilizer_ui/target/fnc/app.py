@@ -10,7 +10,7 @@ from stabilizer.stream import get_local_ip
 
 from .interface import StabilizerInterface
 from .ui import MainWindow
-from .topics import app_settings_root
+from . import topics
 
 from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
@@ -42,7 +42,7 @@ def main():
     app.setOrganizationDomain("photonic.link")
     app.setApplicationName("FNC UI")
 
-    app_settings_root.name = f"{fmt_mac(args.stabilizer_mac)}"
+    topics.app_root.name = f"{fmt_mac(args.stabilizer_mac)}"
 
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
@@ -59,7 +59,7 @@ def main():
         local_ip = get_local_ip(args.broker_host)
 
         stream_target = NetworkAddress(local_ip, args.stream_port)
-        ui.set_mqtt_configs(app_settings_root, stream_target)
+        ui.set_mqtt_configs(stream_target)
 
         broker_address = NetworkAddress(list(map(int, args.broker_host.split("."))),
                                         args.broker_port)
@@ -67,7 +67,6 @@ def main():
         stabilizer_task = loop.create_task(
             stabilizer_interface.update(
                 ui,
-                app_settings_root,
                 broker_address,
             ))
 

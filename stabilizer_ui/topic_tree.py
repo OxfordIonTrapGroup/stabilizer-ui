@@ -1,7 +1,5 @@
 from typing import Optional, List, Self, Callable
 
-from .ui_mqtt_bridge import UiMqttConfig
-
 
 class TopicTree:
 
@@ -30,7 +28,7 @@ class TopicTree:
         self.value = None
 
         self._children = []
-        self._ui_mqtt_config = None
+        self.mqtt_config = None
 
     def __repr__(self):
         """Internal string representation, uses path from node"""
@@ -151,15 +149,10 @@ class TopicTree:
                 child.get_leaves(_leaves)
         return _leaves
 
-    def bridge_mqtt(self, ui_mqtt_config: UiMqttConfig):
-        """Set the UI MQTT configuration for the node"""
-        self._ui_mqtt_config = ui_mqtt_config
-        self.update_value()
-
     def update_value(self):
         """Update the value of the node based on the UI MQTT configuration"""
-        if self._ui_mqtt_config is not None:
-            self.value = self._ui_mqtt_config.read_handler(self._ui_mqtt_config.widgets)
+        if self.mqtt_config is not None:
+            self.value = self.mqtt_config.read_handler(self.mqtt_config.widgets)
         else:
             raise ValueError("UI MQTT configuration not set for node")
         return self.value

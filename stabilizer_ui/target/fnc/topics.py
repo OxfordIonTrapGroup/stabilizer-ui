@@ -30,10 +30,6 @@ for ch in _pounder_channels:
     ])
 
 # Create UI settings topics tree
-# Currently unused, but for future use if FNC is expanded to include clock updates
-_ui_clk = _ui_settings.create_child("clock")
-ui_clk_multiplier, ui_ext_clk, ui_frequency = _ui_clk.create_children(
-    ["multiplier", "extClock", "frequency"])
 
 _ui_channels = _ui_settings.create_children(["ch0", "ch1"])
 for ch in _ui_channels:
@@ -61,6 +57,7 @@ class Stabilizer:
     afes = _afe.get_children()
 
     # DDS reference clock
+    clock = _dds_ref_clock
     ext_clk = _ext_clk
     ref_clk_frequency = _ref_clk_frequency
     clk_multiplier = _clk_multiplier
@@ -75,21 +72,16 @@ class Ui:
     """
     root = _ui_settings
 
-    # Clock topics
-    clock = _ui_clk
-    clk_multiplier = ui_clk_multiplier
-    clk_freq = ui_frequency
-    ext_clk = ui_ext_clk
-
     # Channel topics
     # Access iirs as iirs[ch_idx][iir_idx]
     channels = _ui_channels
     iirs = [channel.get_children() for channel in _ui_channels]
 
-    # Pounder and AFE topics.
+    # Pounder, Clock, and AFE topics.
     # These are directly readable, and so are not duplicated in the UI settings
     pounder_channels = _pounder_channels
     afes = _afe.get_children()
+    clock = _dds_ref_clock
 
 
 # Root topic. Not using the method `add_child` because it sets the parent of the child

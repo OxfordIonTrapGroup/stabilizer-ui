@@ -1,6 +1,6 @@
 import asyncio
-from typing import NamedTuple, List, Callable, Dict
-from enum import Enum
+from typing import NamedTuple, List, Callable, Any, Dict
+# from enum import Enum
 import logging
 import json
 
@@ -71,7 +71,7 @@ class UiMqttConfig(NamedTuple):
 
 class UiMqttBridge:
 
-    def __init__(self, client: MqttClient, configs: Dict[Enum, UiMqttConfig]):
+    def __init__(self, client: MqttClient, configs: Dict[Any, UiMqttConfig]):
         self.client = client
         self.configs = configs
 
@@ -132,6 +132,7 @@ class UiMqttBridge:
         def make_queue(key):
 
             def queue(*args):
+                logger.info(f"TEMP: Queueing {key}")
                 keys_to_write.add(key)
                 ui_updated.set()
 
@@ -143,6 +144,7 @@ class UiMqttBridge:
                 if not widget:
                     continue
                 elif hasattr(widget, "valueChanged"):
+                    print(f"Connecting {key}: {widget}")
                     widget.valueChanged.connect(queue)
                 elif hasattr(widget, "toggled"):
                     widget.toggled.connect(queue)

@@ -1,9 +1,9 @@
-import os
-from PyQt5 import QtWidgets, uic
-from math import inf
 import logging
+from PyQt5 import QtWidgets
+from math import inf
 
-from .topics import TopicTree
+from . import topics
+from .clock import ClockWidget
 from .channels import ChannelTabWidget
 
 from ...stream.fft_scope import FftScope
@@ -33,8 +33,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.channelTabWidget = ChannelTabWidget()
         self.channels = self.channelTabWidget.channels
-        self.clockWidget = uic.loadUi(
-            os.path.join(os.path.dirname(os.path.realpath(__file__)), "widgets/clock.ui"))
+        self.clockWidget = ClockWidget()
 
         self.settingsLayout.addWidget(self.clockWidget)
         self.settingsLayout.addWidget(self.channelTabWidget)
@@ -101,54 +100,58 @@ class MainWindow(QtWidgets.QMainWindow):
 
         return read, write
 
-    def set_mqtt_configs(self, root_topic: TopicTree, stream_target: NetworkAddress):
+    def set_mqtt_configs(self, stream_target: NetworkAddress):
         """ Link the UI widgets to the MQTT topic tree"""
-        stabilizer_settings, ui_settings = root_topic.get_children(["settings", "ui"])
+        # stabilizer_settings, ui_settings = root_topic.get_children(["settings", "ui"])
 
         # `ui/#` are only used by the UI, the others by both UI and stabilizer
-        stabilizer_settings.get_child("stream_target").bridge_mqtt(
-            UiMqttConfig(
-                [],
-                lambda _: stream_target._asdict(),
-                lambda _w, _v: stream_target._asdict(),
-            ))
+        topics.Stabilizer.stream_target.mqtt_config = UiMqttConfig(
+            [],
+            lambda _: stream_target._asdict(),
+            lambda _w, _v: stream_target._asdict(),
+        )
 
-        # Clock settings
-        clk_multiplier, ext_clk, clk_freq = ui_settings.get_child("clock").get_children(
-            ["multiplier", "extClock", "frequency"])
+        topics.Stabilizer.ext_clk.mqtt_config = UiMqttConfig(
+            [self.clockWidget.extClkCheckBox])
+        topics.Stabilizer.ref_clk_frequency.mqtt_config = UiMqttConfig(
+            [self.clockWidget.refFrequencyBox])
+        topics.Stabilizer.clk_multiplier.mqtt_config = UiMqttConfig(
+            [self.clockWidget.multiplierBox])
 
-        clk_multiplier.bridge_mqtt(UiMqttConfig([self.clockWidget.multiplierBox]))
-        clk_freq.bridge_mqtt(UiMqttConfig([self.clockWidget.frequencyBox]))
-        ext_clk.bridge_mqtt(UiMqttConfig([self.clockWidget.extClkCheckBox]))
+        for ch_index, (afe_ch, pounder_ch, filter_ch) in enumerate(
+                zip(topics.Stabilizer.afes, topics.Stabilizer.pounder_channels,
+                    topics.Ui.channels)):
+            # AFE settings
+            afe_ch.mqtt_config = UiMqttConfig([self.channels[ch_index].afeGainBox])
 
-        logger.info(f"{ext_clk._ui_mqtt_config}")
-
-        for ch_index, afe_ch in enumerate(
-                stabilizer_settings.get_child("afe").get_children()):
-            afe_ch.bridge_mqtt(UiMqttConfig([self.channels[ch_index].afeGainBox]))
-        for (ch_index, channel) in enumerate(ui_settings.get_children(["ch0", "ch1"])):
             # Pounder settings
-            dds_in, dds_out = channel.get_children(["pounder/ddsIn", "pounder/ddsOut"])
+            pounder_ch.get_child("attenuation_in").mqtt_config = UiMqttConfig(
+                [self.channels[ch_index].ddsInAttenuationBox])
+            pounder_ch.get_child("attenuation_out").mqtt_config = UiMqttConfig(
+                [self.channels[ch_index].ddsOutAttenuationBox])
 
-            widget_attribute = lambda dds, suffix: getattr(self.channels[ch_index],
-                                                           f"{dds.name}{suffix}Box")
+            pounder_ch.get_child("amplitude_dds_in").mqtt_config = UiMqttConfig(
+                [self.channels[ch_index].ddsInAmplitudeBox])
+            pounder_ch.get_child("amplitude_dds_out").mqtt_config = UiMqttConfig(
+                [self.channels[ch_index].ddsOutAmplitudeBox])
 
-            for dds in (dds_in, dds_out):
-                for child in dds.get_children(["attenuation", "amplitude", "frequency"]):
-                    child.bridge_mqtt(
-                        UiMqttConfig([widget_attribute(dds, child.name.capitalize())]))
+            pounder_ch.get_child("frequency_dds_out").mqtt_config = UiMqttConfig(
+                [self.channels[ch_index].ddsOutFrequencyBox])
+            pounder_ch.get_child("frequency_dds_in").mqtt_config = UiMqttConfig(
+                [self.channels[ch_index].ddsInFrequencyBox])
 
-            for (iir_index, iir) in enumerate(channel.get_children(["iir0", "iir1"])):
+            # IIR settings
+            for (iir_index, iir) in enumerate(filter_ch.get_children(["iir0", "iir1"])):
                 iirWidget = self.channels[ch_index].iir_settings[iir_index]
 
-                iir.get_child("filter").bridge_mqtt(
-                    UiMqttConfig([iirWidget.filterComboBox]))
-                iir.get_child("x_offset").bridge_mqtt(
-                    UiMqttConfig([iirWidget.x_offsetBox]))
-                iir.get_child("y_offset").bridge_mqtt(
-                    UiMqttConfig([iirWidget.y_offsetBox]))
-                iir.get_child("y_max").bridge_mqtt(UiMqttConfig([iirWidget.y_maxBox]))
-                iir.get_child("y_min").bridge_mqtt(UiMqttConfig([iirWidget.y_minBox]))
+                iir.get_child("filter").mqtt_config = UiMqttConfig(
+                    [iirWidget.filterComboBox])
+                iir.get_child("x_offset").mqtt_config = UiMqttConfig(
+                    [iirWidget.x_offsetBox])
+                iir.get_child("y_offset").mqtt_config = UiMqttConfig(
+                    [iirWidget.y_offsetBox])
+                iir.get_child("y_max").mqtt_config = UiMqttConfig([iirWidget.y_maxBox])
+                iir.get_child("y_min").mqtt_config = UiMqttConfig([iirWidget.y_minBox])
 
                 for filter in FILTERS:
                     filter_topic = iir.get_child(filter.filter_type)
@@ -157,19 +160,18 @@ class MainWindow(QtWidgets.QMainWindow):
                             iirWidget.widgets[filter.filter_type], f"{arg.name}{suffix}")
 
                         if arg.name.split("_")[-1] == "limit":
-                            arg.bridge_mqtt(
-                                UiMqttConfig(
-                                    [
-                                        widget_attribute("Box"),
-                                        widget_attribute("IsInf"),
-                                    ],
-                                    *self._is_inf_widgets_readwrite(),
-                                ))
+                            arg.mqtt_config = UiMqttConfig(
+                                [
+                                    widget_attribute("Box"),
+                                    widget_attribute("IsInf"),
+                                ],
+                                *self._is_inf_widgets_readwrite(),
+                            )
                         elif arg.name in {"f0", "Ki"}:
-                            arg.bridge_mqtt(
-                                UiMqttConfig([widget_attribute("Box")], *self.kilo))
+                            arg.mqtt_config = UiMqttConfig([widget_attribute("Box")],
+                                                           *self.kilo)
                         elif arg.name == "Kii":
-                            arg.bridge_mqtt(
-                                UiMqttConfig([widget_attribute("Box")], *self.kilo2))
+                            arg.mqtt_config = UiMqttConfig([widget_attribute("Box")],
+                                                           *self.kilo2)
                         else:
-                            arg.bridge_mqtt(UiMqttConfig([widget_attribute("Box")]))
+                            arg.mqtt_config = UiMqttConfig([widget_attribute("Box")])
