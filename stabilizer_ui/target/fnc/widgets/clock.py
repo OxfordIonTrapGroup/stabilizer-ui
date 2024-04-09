@@ -23,7 +23,7 @@ class ClockWidget(QtWidgets.QGroupBox):
         super().__init__()
 
         uic.loadUi(
-            os.path.join(os.path.dirname(os.path.realpath(__file__)), "widgets/clock.ui"),
+            os.path.join(os.path.dirname(os.path.realpath(__file__)), "clock.ui"),
             self)
 
         self.refFrequencyBox.setMinimum(MIN_REFCLK_FREQUENCY_MHZ)

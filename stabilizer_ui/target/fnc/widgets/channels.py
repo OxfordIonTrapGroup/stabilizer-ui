@@ -1,6 +1,6 @@
 import os
 
-from ...iir.channel_settings import AbstractChannelSettings
+from ....iir.channel_settings import AbstractChannelSettings
 from PyQt5 import QtWidgets, uic
 
 NUM_CHANNELS = 2
@@ -14,7 +14,7 @@ class ChannelSettings(AbstractChannelSettings):
 
         uic.loadUi(
             os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                         "widgets/channel.ui"), self)
+                         "channel.ui"), self)
 
         self._add_afe_options()
         self._add_iir_tabWidget()
