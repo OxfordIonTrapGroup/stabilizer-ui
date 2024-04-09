@@ -159,14 +159,20 @@ class StabilizerInterfaceBase:
         channel: int,
         iir_idx: int,
         ba: Iterable,
+        x_offset: float = 0.0,
         y_offset: float = 0.0,
         y_min: float = -Y_MAX,
         y_max: float = Y_MAX,
     ):
+        forward_gain = sum(ba[:3])
+        if forward_gain == 0 and x_offset != 0:
+            logger.warning("Filter has no DC gain but x_offset is non-zero")
         key = f"{self.iir_ch_topic_base}/{channel}/{iir_idx}"
         value = {
             "ba": list(ba),
-            "u": stabilizer.voltage_to_machine_units(y_offset),
+            "u": stabilizer.voltage_to_machine_units(
+                y_offset + forward_gain * x_offset
+            ),
             "min": stabilizer.voltage_to_machine_units(y_min),
             "max": stabilizer.voltage_to_machine_units(y_max),
         }

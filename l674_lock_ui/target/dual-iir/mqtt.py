@@ -43,6 +43,7 @@ class StabilizerInterface(StabilizerInterfaceBase):
                 channel=int(channel),
                 iir_idx=int(iir),
                 ba=ba,
+                x_offset=x_offset,
                 y_offset=y_offset,
                 y_min=y_min,
                 y_max=y_max,
