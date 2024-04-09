@@ -8,8 +8,8 @@ _stabilizer_settings = TopicTree("settings")
 _ui_settings = TopicTree("ui")
 
 # Create stabilizer settings topics tree
-_stream_target, _afe, _iir, _pounder = _stabilizer_settings.create_children(
-    ["stream_target", "afe", "iir_ch", "pounder"])
+_stream_target, _afe, _iir, _pounder, _dds_ref_clock = _stabilizer_settings.create_children(
+    ["stream_target", "afe", "iir_ch", "pounder", "dds_ref_clock"])
 
 _afe.create_children(["0", "1"])
 
@@ -17,21 +17,20 @@ _afe.create_children(["0", "1"])
 for ch in _iir.create_children(["0", "1"]):
     ch.create_children(["0", "1"])
 
-# Clock settings for stabilizer
-_clock, _dds_in, _dds_out = _pounder.create_children(
-    ["clock", "in_channel", "out_channel"])
-_multiplier, _ext_clk, _ref_clk_freq = _clock.create_children(
-    ["multiplier", "external_clock", "reference_clock_frequency"])
+_ext_clk, _ref_clk_frequency, _clk_multiplier = _dds_ref_clock.create_children(
+    ["external_clock", "reference_clock_frequency", "multiplier"])
 
-# DDS settings for stabilizer.
-# in_channel/0 represents the input DDS for channel 0
-_dds_in_channels = _dds_in.create_children(["0", "1"])
-_dds_out_channels = _dds_out.create_children(["0", "1"])
+# Pounder settings
+_pounder_channels = _pounder.create_children(["0", "1"])
 
-for dds in _dds_in_channels + _dds_out_channels:
-    dds.create_children(["attenuation", "dds/amplitude", "dds/frequency"])
+for ch in _pounder_channels:
+    ch.create_children([
+        "frequency_dds_out", "frequency_dds_in", "amplitude_dds_out", "amplitude_dds_in", "attenuation_out",
+        "attenuation_in"
+    ])
 
 # Create UI settings topics tree
+# Currently unused, but for future use if FNC is expanded to include clock updates
 _ui_clk = _ui_settings.create_child("clock")
 ui_clk_multiplier, ui_ext_clk, ui_frequency = _ui_clk.create_children(
     ["multiplier", "extClock", "frequency"])
@@ -43,12 +42,6 @@ for ch in _ui_channels:
         for filter in FILTERS:
             filter_topic = iir.create_child(filter.filter_type)
             filter_topic.create_children(filter.parameters)
-
-    ui_afe, ui_pounder = ch.create_children(["afe", "pounder"])
-    ch_dds_list = ui_pounder.create_children(["ddsIn", "ddsOut"])
-    for dds in ch_dds_list:
-        dds.create_children(["attenuation", "amplitude", "frequency"])
-    ch_dds_list[0].create_child("track_dds_out")
 
 
 class Stabilizer:
@@ -67,17 +60,14 @@ class Stabilizer:
     afe = _afe
     afes = _afe.get_children()
 
+    # DDS reference clock
+    ext_clk = _ext_clk
+    ref_clk_frequency = _ref_clk_frequency
+    clk_multiplier = _clk_multiplier
+
     # Pounder topic
     pounder = _pounder
-    # * Clock topics
-    clk_multiplier = _multiplier
-    clk_freq = _ref_clk_freq
-    ext_clk = _ext_clk
-    # * DDS parent topic group and subtopics
-    dds_in = _dds_in
-    dds_ins = _dds_in_channels
-    dds_out = _dds_out
-    dds_outs = _dds_out_channels
+    pounder_channels = _pounder_channels
 
 
 class Ui:
@@ -95,17 +85,16 @@ class Ui:
     # Access iirs as iirs[ch_idx][iir_idx]
     channels = _ui_channels
     iirs = [channel.get_children() for channel in _ui_channels]
-    afe_channels = [channel.get_child("afe") for channel in _ui_channels]
 
-    # Pounder topics, for both channels
-    pounder_channels = [channel.get_child("pounder") for channel in _ui_channels]
-    dds_ins = [channel.get_child("pounder/ddsIn") for channel in _ui_channels]
-    dds_out = [channel.get_child("pounder/ddsOut") for channel in _ui_channels]
+    # Pounder and AFE topics.
+    # These are directly readable, and so are not duplicated in the UI settings
+    pounder_channels = _pounder_channels
+    afes = _afe.get_children()
 
 
 # Root topic. Not using the method `add_child` because it sets the parent of the child
 # It's unnecessary to see the sinara root when traversed up the tree when getting the
 # path but provides a useful starting point to get all topics when traversing down.
 # The MAC address to the Stabilizer board needs to be changed when the app is launched
-app_settings_root = TopicTree.new("dt/sinara/fnc/<MAC>")
-app_settings_root._children = [_stabilizer_settings, _ui_settings]
+app_root = TopicTree.new("dt/sinara/fnc/<MAC>")
+app_root._children = [_stabilizer_settings, _ui_settings]
