@@ -261,7 +261,7 @@
              <enum>Qt::LeftToRight</enum>
             </property>
             <property name="text">
-             <string>Lock to 2x DDS Out</string>
+             <string>2x DDS Out</string>
             </property>
             <property name="checked">
              <bool>true</bool>

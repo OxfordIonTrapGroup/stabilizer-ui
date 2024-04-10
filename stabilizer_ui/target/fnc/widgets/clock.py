@@ -2,16 +2,7 @@ import os
 import logging
 from PyQt5 import QtWidgets, uic
 
-# Keep these up to date with the firmware
-MIN_REFCLK_FREQUENCY_MHZ = 1
-MIN_MULTIPLIED_REFCLK_FREQUENCY_MHZ = 10
-
-REFCLK_MULTIPLIER_DISABLED = 1
-MIN_REFCLK_ENABLED_MULTIPLIER = 4
-MAX_REFCLK_MULTIPLIER = 20
-
-HIGH_GAIN_VCO_RANGE_MHZ = (255, 500)
-LOW_GAIN_VCO_RANGE_MHZ = (100, 160)
+from ..parameters import *
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +13,8 @@ class ClockWidget(QtWidgets.QGroupBox):
     def __init__(self):
         super().__init__()
 
-        uic.loadUi(
-            os.path.join(os.path.dirname(os.path.realpath(__file__)), "clock.ui"),
-            self)
+        uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)), "clock.ui"),
+                   self)
 
         self.refFrequencyBox.setMinimum(MIN_REFCLK_FREQUENCY_MHZ)
         self.refFrequencyBox.setMaximum(HIGH_GAIN_VCO_RANGE_MHZ[1])
@@ -40,6 +30,9 @@ class ClockWidget(QtWidgets.QGroupBox):
         # Validate frequency and multiplier to avoid panicking the firmware
         self.multiplierBox.valueChanged.connect(self._constrain_dds_ref_clk_multiplier)
         self.refFrequencyBox.valueChanged.connect(self._constrain_dds_ref_clk_frequency)
+
+        self.clkValidationLabel.setStyleSheet("color: red")
+        self._clear_validation_label = False
 
     def _constrain_dds_ref_clk_multiplier(self, multiplier):
         """Constrain the DDS reference clock multiplier to 1 (multiplier disabled) 
@@ -57,10 +50,8 @@ class ClockWidget(QtWidgets.QGroupBox):
 
         # Disable multiplier if reference clock is under MIN_MULTIPLIED_REFCLK_FREQUENCY_MHZ
         if multiplier_enabled and frequency < MIN_MULTIPLIED_REFCLK_FREQUENCY_MHZ:
-            logger.warning(
-                f"Cannot enable multiplier with clock frequency below \
-                    {MIN_MULTIPLIED_REFCLK_FREQUENCY_MHZ:.2f} MHz"
-            )
+            logger.warning(f"Cannot enable multiplier with clock frequency below \
+                    {MIN_MULTIPLIED_REFCLK_FREQUENCY_MHZ:.2f} MHz")
             self.multiplierBox.setValue(REFCLK_MULTIPLIER_DISABLED)
             return
 
@@ -74,8 +65,14 @@ class ClockWidget(QtWidgets.QGroupBox):
             if 1 < multiplier < MIN_REFCLK_ENABLED_MULTIPLIER:
                 multiplier = self._current_multiplier
 
-            logger.warning(
-                f"Invalid multiplier, setting to nearest valid value: {multiplier}")
+            logger.warning(f"Invalid multiplier, setting to: {multiplier}")
+            self.clkValidationLabel.setText(
+                f"Failed validation, setting multiplier: {multiplier}")
+            self._clear_validation_label = False
+        else:
+            if self._clear_validation_label:
+                self.clkValidationLabel.setText("")
+            self._clear_validation_label = True
 
         self.multiplierBox.setValue(multiplier)
         self._current_multiplier = multiplier
@@ -108,9 +105,14 @@ class ClockWidget(QtWidgets.QGroupBox):
         frequency = multiplied_frequency / multiplier
 
         if value_changed:
-            logger.warning(
-                f"Invalid frequency, setting to nearest valid value: {frequency:.2f} MHz"
-            )
+            logger.warning(f"Invalid frequency, setting to: {frequency:.2f} MHz")
+            self.clkValidationLabel.setText(
+                f"Failed validation, setting frequency: {frequency:.2f} MHz")
+            self._clear_validation_label = False
+        else:
+            if self._clear_validation_label:
+                self.clkValidationLabel.setText("")
+            self._clear_validation_label = True
 
         self.refFrequencyBox.setValue(frequency)
 
@@ -122,18 +124,16 @@ class ClockWidget(QtWidgets.QGroupBox):
         value_changed = True
         if multiplied_frequency > HIGH_GAIN_VCO_RANGE_MHZ[1]:
             multiplied_frequency = HIGH_GAIN_VCO_RANGE_MHZ[1]
-            logger.warning("Reference clock frequency too high for PLL")
         # Lower limit
         elif multiplier_enabled and multiplied_frequency < LOW_GAIN_VCO_RANGE_MHZ[0]:
             multiplied_frequency = LOW_GAIN_VCO_RANGE_MHZ[0]
-            logger.warning("Reference clock frequency too low for PLL")
         # In between low and high gain VCOs
         elif LOW_GAIN_VCO_RANGE_MHZ[1] < multiplied_frequency < HIGH_GAIN_VCO_RANGE_MHZ[0]:
-            if self._current_frequency * self._current_multiplier <= LOW_GAIN_VCO_RANGE_MHZ[0]:
+            if self._current_frequency * self._current_multiplier <= LOW_GAIN_VCO_RANGE_MHZ[
+                    0]:
                 multiplied_frequency = HIGH_GAIN_VCO_RANGE_MHZ[1]
             else:
                 multiplied_frequency = LOW_GAIN_VCO_RANGE_MHZ[0]
-                logger.warning("Multiplied frequency between VCO ranges")
         else:
             value_changed = False
 
