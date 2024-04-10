@@ -12,5 +12,7 @@ ignore =
     F403, F405,
     # Do not use bare 'except'
     E722,
+    # Do not use lambda expressions
+    E731,
 
 max-line-length=90

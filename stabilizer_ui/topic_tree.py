@@ -27,7 +27,7 @@ class TopicTree:
         self.name = name
         self.value = None
 
-        self._children = []
+        self.children = []
         self.mqtt_config = None
 
     def __repr__(self):
@@ -63,7 +63,7 @@ class TopicTree:
         """Remove the parent of the node"""
         if self._parent is None:
             return
-        self._parent._children.remove(self)
+        self._parent.children.remove(self)
         self._parent = None
 
     def create_child(self, subtopic_name: str) -> Self:
@@ -79,7 +79,7 @@ class TopicTree:
     def add_child(self, child: Self) -> None:
         """Add an existing node as a child of the current node"""
         child._parent = self
-        self._children.append(child)
+        self.children.append(child)
         self._value = None
 
     def add_children(self, children: List[Self]) -> None:
@@ -90,7 +90,7 @@ class TopicTree:
     def get_child(self, path: str) -> Self:
         """Get a child node at the given path. Raises ValueError if the child does not exist."""
         path = path.split("/")
-        child = next((child for child in self._children if child.name == path[0]), None)
+        child = next((child for child in self.children if child.name == path[0]), None)
 
         if len(path) == 1:
             return child
@@ -102,24 +102,24 @@ class TopicTree:
     def get_children(self, paths: Optional[List[str]] = None) -> List[Self]:
         """Get a list of child nodes at the given paths. If no paths are given, returns all children."""
         if paths is None:
-            return self._children
+            return self.children
         else:
             return [self.get_child(path) for path in paths]
 
     def has_children(self) -> bool:
         """Check if the node has children"""
-        return bool(self._children)
+        return bool(self.children)
 
     def remove_children(self) -> None:
         """Remove all children of the node"""
-        for child in self._children:
+        for child in self.children:
             child._parent = None
-        self._children = []
+        self.children = []
 
     def get_or_create_child(self, path: str) -> Self:
         """Get a child node at the given path. If the child does not exist, create it and any intermediate nodes."""
         path = path.split("/")
-        child = next((child for child in self._children if child.name == path[0]), None)
+        child = next((child for child in self.children if child.name == path[0]), None)
 
         if child is None:
             return self.create_child("/".join(path))
@@ -142,10 +142,10 @@ class TopicTree:
 
     def get_leaves(self, _leaves=[]) -> list[Self]:
         """Get all leaf nodes of the tree"""
-        if not self._children:
+        if not self.children:
             _leaves.append(self)
         else:
-            for child in self._children:
+            for child in self.children:
                 child.get_leaves(_leaves)
         return _leaves
 

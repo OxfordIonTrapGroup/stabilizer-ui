@@ -59,16 +59,14 @@ def main():
         local_ip = get_local_ip(args.broker_host)
 
         stream_target = NetworkAddress(local_ip, args.stream_port)
-        ui.set_mqtt_configs(stream_target)
+        # settings_map = ui.set_mqtt_configs(stream_target)
 
         broker_address = NetworkAddress(list(map(int, args.broker_host.split("."))),
                                         args.broker_port)
 
         stabilizer_task = loop.create_task(
-            stabilizer_interface.update(
-                ui,
-                broker_address,
-            ))
+            stabilizer_interface.update(ui, broker_address,
+                                        ui.set_mqtt_configs(stream_target)))
 
         stream_thread = StreamThread(
             ui.update_stream,

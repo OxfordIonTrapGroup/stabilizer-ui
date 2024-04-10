@@ -6,7 +6,7 @@ from .topics import app_root
 
 from .ui import MainWindow
 from ...mqtt import AbstractStabilizerInterface, MqttInterface
-from ...ui_mqtt_bridge import UiMqttBridge, NetworkAddress
+from ...ui_mqtt_bridge import UiMqttBridge, NetworkAddress, UiMqttConfig
 from ...iir.filters import FILTERS
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
     """
     Interface for the FNC stabilizer.
     """
-    iir_ch_topic_base = topics.Stabilizer.iir.get_path_from_root()
+    iir_ch_topic_base = topics.stabilizer.iir_root.get_path_from_root()
 
     async def triage_setting_change(self, setting):
         logger.info(f"Changing setting {setting.get_path_from_root()}'")
@@ -36,16 +36,12 @@ class StabilizerInterface(AbstractStabilizerInterface):
         self,
         ui: MainWindow,
         broker_address: NetworkAddress,
+        settings_map: dict[str, UiMqttConfig],
     ):
-        topics = [
-            topic for topic in app_root.get_leaves() if topic.mqtt_config is not None
-        ]
-
-        settings_map = {topic.get_path_from_root(): topic.mqtt_config for topic in topics}
 
         def update_all_topics():
-            for topic in topics:
-                topic.update_value()
+            for key, cfg in settings_map.items():
+                key.value = cfg.read_handler(cfg.widgets)
 
         try:
             bridge = await UiMqttBridge.new(broker_address, settings_map)
@@ -70,11 +66,10 @@ class StabilizerInterface(AbstractStabilizerInterface):
                     # Use while/pop instead of for loop, as UI task might push extra
                     # elements while we are executing requests.
                     update_all_topics()
-                    key = keys_to_write.pop()
-                    setting = app_root.get_child(key)
+                    settings = keys_to_write.pop()
 
-                    await self.change(setting)
-                    ui.update_transfer_function(setting)
+                    await self.change(settings)
+                    ui.update_transfer_function(settings)
                 ui_updated.clear()
         except BaseException as e:
             if isinstance(e, asyncio.CancelledError):
