@@ -1,5 +1,6 @@
 from typing import Optional, List, Self, Callable
 
+from .ui_mqtt_bridge import UiMqttConfig
 
 class TopicTree:
 
@@ -156,3 +157,8 @@ class TopicTree:
         else:
             raise ValueError("UI MQTT configuration not set for node")
         return self.value
+
+    def bridge_mqtt(self, mqtt_config: UiMqttConfig):
+        """Set the UI MQTT configuration for the node"""
+        self.mqtt_config = mqtt_config
+        self.update_value()

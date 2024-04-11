@@ -73,4 +73,4 @@ class ChannelTabWidget(QtWidgets.QTabWidget):
 
         self.channels = [ChannelSettings() for _ in range(NUM_CHANNELS)]
         for i in range(NUM_CHANNELS):
-            self.addTab(ChannelSettings(), f"Channel {i}")
+            self.addTab(self.channels[i], f"Channel {i}")

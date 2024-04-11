@@ -151,101 +151,35 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
-                iirWidget = lambda: self.channels[ch].iir_settings[iir]
+                iirWidget = self.channels[ch].iir_settings[iir]
+                # iir_root = stabilizer.iirs[ch][iir]
 
-                topic = lambda name: getattr(ui, name)[ch][iir]
-                # ui_topic = lambda name: getattr(ui, name)[ch][iir]
+                for child in ui.iirs[ch][iir].get_children(["y_offset", "y_min", "y_max", "x_offset"]):
+                    settings_map[child] = UiMqttConfig([getattr(iirWidget, child.name + "Box")])
 
-                settings_map[topic("filters")] = UiMqttConfig([iirWidget().filterComboBox])
-                settings_map[topic("x_offsets")] = UiMqttConfig([iirWidget().x_offsetBox])
-                settings_map[topic("y_offsets")] = UiMqttConfig([iirWidget().y_offsetBox])
-                settings_map[topic("y_maxs")] = UiMqttConfig([iirWidget().y_maxBox])
-                settings_map[topic("y_mins")] = UiMqttConfig([iirWidget().y_minBox])
-
+                settings_map[ui.iirs[ch][iir].get_child("filter")] = UiMqttConfig([iirWidget.filterComboBox])
                 for filter in FILTERS:
-                    filter_topic = topic(f"{filter.filter_type}s")
-
-                    for param in filter.parameters:
-                        filter_attribute = getattr(filter_topic, param)
-
+                    filter_topic = ui.iirs[ch][iir].get_child(filter.filter_type)
+                    for param in filter_topic.get_children():
                         widget_attribute = lambda suffix: getattr(
-                            iirWidget().widgets[filter.filter_type], f"{filter_attribute.name}{suffix}"
-                        )
+                            iirWidget.widgets[filter.filter_type], f"{param.name}{suffix}")
 
-                        if filter_attribute.name.split("_")[-1] == "limit":
-                            settings_map[filter_attribute] = UiMqttConfig(
+                        if param.name.split("_")[-1] == "limit":
+                            settings_map[param] = UiMqttConfig(
                                 [
                                     widget_attribute("Box"),
                                     widget_attribute("IsInf"),
                                 ],
                                 *self._is_inf_widgets_readwrite(),
                             )
-                        elif filter_attribute.name in {"f0", "Ki"}:
-                            settings_map[filter_attribute] = UiMqttConfig(
+                        elif param.name in {"f0", "Ki"}:
+                            settings_map[param] = UiMqttConfig(
                                 [widget_attribute("Box")], *self.kilo)
-                        elif filter_attribute.name == "Kii":
-                            settings_map[filter_attribute] = UiMqttConfig(
+                        elif param.name == "Kii":
+                            settings_map[param] = UiMqttConfig(
                                 [widget_attribute("Box")], *self.kilo2)
                         else:
-                            settings_map[filter_attribute] = UiMqttConfig(
+                            settings_map[param] = UiMqttConfig(
                                 [widget_attribute("Box")])
-
-        # for ch_index, (afe_ch, pounder_ch, filter_ch) in enumerate(
-        #         zip(stabilizer.afes, stabilizer.pounder_channels,
-        #             topics.ui.channels)):
-        #     # AFE settings
-        #     settings_map[afe_ch] = UiMqttConfig([self.channels[ch_index].afeGainBox])
-
-        #     # Pounder settings
-        #     settings_map[pounder_ch.get_child("attenuation_in")] = UiMqttConfig(
-        #         [self.channels[ch_index].ddsInAttenuationBox])
-        #     settings_map[pounder_ch.get_child("attenuation_out")] = UiMqttConfig(
-        #         [self.channels[ch_index].ddsOutAttenuationBox])
-
-        #     settings_map[pounder_ch.get_child("amplitude_dds_in")] = UiMqttConfig(
-        #         [self.channels[ch_index].ddsInAmplitudeBox])
-        #     settings_map[pounder_ch.get_child("amplitude_dds_out")] = UiMqttConfig(
-        #         [self.channels[ch_index].ddsOutAmplitudeBox])
-
-        #     settings_map[pounder_ch.get_child("frequency_dds_out")] = UiMqttConfig(
-        #         [self.channels[ch_index].ddsOutFrequencyBox])
-        #     settings_map[pounder_ch.get_child("frequency_dds_in")] = UiMqttConfig(
-        #         [self.channels[ch_index].ddsInFrequencyBox])
-
-        # IIR settings
-        # for (iir_index, iir) in enumerate(filter_ch.get_children(["iir0", "iir1"])):
-        #     iirWidget = self.channels[ch_index].iir_settings[iir_index]
-
-        #     settings_map[iir.get_child("filter")] = UiMqttConfig(
-        #         [iirWidget.filterComboBox])
-        #     settings_map[iir.get_child("x_offset")] = UiMqttConfig(
-        #         [iirWidget.x_offsetBox])
-        #     settings_map[iir.get_child("y_offset")] = UiMqttConfig(
-        #         [iirWidget.y_offsetBox])
-        #     settings_map[iir.get_child("y_max")] = UiMqttConfig([iirWidget.y_maxBox])
-        #     settings_map[iir.get_child("y_min")] = UiMqttConfig([iirWidget.y_minBox])
-
-        #     for filter in FILTERS:
-        #         filter_topic = iir.get_child(filter.filter_type)
-        #         for arg in filter_topic.get_children():
-        #             widget_attribute = lambda suffix: getattr(
-        #                 iirWidget.widgets[filter.filter_type], f"{arg.name}{suffix}")
-
-        #             if arg.name.split("_")[-1] == "limit":
-        #                 settings_map[arg] = UiMqttConfig(
-        #                     [
-        #                         widget_attribute("Box"),
-        #                         widget_attribute("IsInf"),
-        #                     ],
-        #                     *self._is_inf_widgets_readwrite(),
-        #                 )
-        #             elif arg.name in {"f0", "Ki"}:
-        #                 settings_map[arg] = UiMqttConfig([widget_attribute("Box")],
-        #                                                  *self.kilo)
-        #             elif arg.name == "Kii":
-        #                 settings_map[arg] = UiMqttConfig([widget_attribute("Box")],
-        #                                                  *self.kilo2)
-        #             else:
-        #                 settings_map[arg] = UiMqttConfig([widget_attribute("Box")])
 
         return settings_map
