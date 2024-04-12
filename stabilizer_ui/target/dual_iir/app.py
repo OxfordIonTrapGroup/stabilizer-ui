@@ -159,9 +159,7 @@ async def update_stabilizer(
 
     try:
         bridge = await UiMqttBridge.new(broker_address, settings_map)
-        # ui.comm_status_label.setText(
-        #     f"Connected to MQTT broker at {broker_address.get_ip()}.")
-        await bridge.load_ui(lambda x: x, root_topic)
+        await bridge.load_ui(lambda x: x, root_topic, ui)
         keys_to_write, ui_updated = bridge.connect_ui()
 
         #

@@ -4,7 +4,7 @@ import asyncio
 from . import topics
 from .topics import app_root
 
-from .ui import MainWindow
+from .ui import UiWindow
 from ...mqtt import AbstractStabilizerInterface, MqttInterface
 from ...ui_mqtt_bridge import UiMqttBridge, NetworkAddress, UiMqttConfig
 from ...iir.filters import FILTERS
@@ -19,7 +19,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
     iir_ch_topic_base = topics.stabilizer.iir_root.get_path_from_root()
 
     async def triage_setting_change(self, setting):
-        logger.info(f"Changing setting {setting.get_path_from_root()}'")
+        logger.info(f"Changing setting {setting.get_path_from_root()}': {setting.value}")
 
         setting_root = setting.root()
         if setting_root.name == "settings":
@@ -34,18 +34,18 @@ class StabilizerInterface(AbstractStabilizerInterface):
 
     async def update(
         self,
-        ui: MainWindow,
+        ui: UiWindow,
         broker_address: NetworkAddress,
         settings_map: dict[str, UiMqttConfig],
     ):
 
         def update_all_topics():
             for key, cfg in settings_map.items():
-                key.value = cfg.read_handler(cfg.widgets)
+                app_root.get_child(key).value = cfg.read_handler(cfg.widgets)
 
         try:
             bridge = await UiMqttBridge.new(broker_address, settings_map)
-            await bridge.load_ui(lambda x: x, app_root.get_path_from_root())
+            await bridge.load_ui(lambda x: x, app_root.get_path_from_root(), ui)
             keys_to_write, ui_updated = bridge.connect_ui()
 
             #
@@ -65,11 +65,11 @@ class StabilizerInterface(AbstractStabilizerInterface):
                 while keys_to_write:
                     # Use while/pop instead of for loop, as UI task might push extra
                     # elements while we are executing requests.
+                    # key = keys_to_write.pop()
+                    setting = app_root.get_child(keys_to_write.pop())
                     update_all_topics()
-                    settings = keys_to_write.pop()
-
-                    await self.change(settings)
-                    ui.update_transfer_function(settings)
+                    await self.change(setting)
+                    await ui.update_transfer_function(setting)
                 ui_updated.clear()
         except BaseException as e:
             if isinstance(e, asyncio.CancelledError):

@@ -1,11 +1,11 @@
 import asyncio
 from typing import NamedTuple, List, Callable, Any, Dict
-# from enum import Enum
 import logging
 import json
 
 from PyQt5 import QtWidgets
 from gmqtt import Client as MqttClient
+from .widgets.ui import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def read(widgets):
     ):
         return widget.isChecked()
 
-    if isinstance(widget, QtWidgets.QDoubleSpinBox):
+    if isinstance(widget, (QtWidgets.QDoubleSpinBox, QtWidgets.QSpinBox)):
         return widget.value()
 
     if isinstance(widget, QtWidgets.QComboBox):
@@ -74,6 +74,7 @@ class UiMqttBridge:
     def __init__(self, client: MqttClient, configs: Dict[Any, UiMqttConfig]):
         self.client = client
         self.configs = configs
+        self.panicked = False
 
     @classmethod
     async def new(cls, broker_address: NetworkAddress, *args, **kwargs):
@@ -88,9 +89,19 @@ class UiMqttBridge:
 
         return cls(client, *args, **kwargs)
 
-    async def load_ui(self, objectify: Callable, root_topic: str):
+    async def load_ui(self, objectify: Callable, root_topic: str, ui: AbstractUiWindow):
         """Load current settings from MQTT"""
         retained_settings = {}
+
+        def panic_handler(value):
+            self.panicked = (json.loads(value) is None)
+            ui.onPanicStatusChange(value)
+            logger.info(f"Stabilizer {'panicked' if self.panicked else 'recovered'}")
+
+        def alive_handler(value, is_initial_subscription=False):
+            is_alive = bool(json.loads(value))
+            ui.onlineStatusChange(is_alive, self.panicked)
+            logger.info(f"Stabilizer {"alive" if is_alive else "offline"}")
 
         def collect_settings(_client, topic, value, _qos, _properties):
             subtopic = topic[len(root_topic) + 1:]
@@ -103,6 +114,10 @@ class UiMqttBridge:
                     subtopic,
                     decoded_value,
                 )
+                if subtopic == "meta/panic":
+                    panic_handler(value)
+                elif subtopic == "alive":
+                    alive_handler(value)
             except ValueError:
                 logger.info("Ignoring message topic '%s'", subtopic)
             return 0
@@ -116,7 +131,9 @@ class UiMqttBridge:
         # subscribing, but add some delay in case this is actually a race condition.
         await asyncio.sleep(1)
         self.client.unsubscribe(all_settings)
-        self.client.on_message = lambda *a: 0
+
+        self.client.subscribe(f"{root_topic}/meta/panic")
+        self.client.subscribe(f"{root_topic}/alive")
 
         for retained_key, retained_value in retained_settings.items():
             if retained_key in self.configs:
@@ -144,7 +161,6 @@ class UiMqttBridge:
                 if not widget:
                     continue
                 elif hasattr(widget, "valueChanged"):
-                    print(f"Connecting {key}: {widget}")
                     widget.valueChanged.connect(queue)
                 elif hasattr(widget, "toggled"):
                     widget.toggled.connect(queue)
@@ -155,3 +171,4 @@ class UiMqttBridge:
 
             keys_to_write.add(key)  # write once at startup
         return keys_to_write, ui_updated
+

@@ -9,7 +9,7 @@ from qasync import QEventLoop
 from stabilizer.stream import get_local_ip
 
 from .interface import StabilizerInterface
-from .ui import MainWindow
+from .ui import UiWindow
 from . import topics
 
 from ...stream.fft_scope import FftScope
@@ -47,7 +47,7 @@ def main():
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
 
-        ui = MainWindow()
+        ui = UiWindow()
         ui.setWindowTitle(args.name + f" [{fmt_mac(args.stabilizer_mac)}]")
         ui.resize(*DEFAULT_WINDOW_SIZE)
         ui.show()
@@ -59,7 +59,6 @@ def main():
         local_ip = get_local_ip(args.broker_host)
 
         stream_target = NetworkAddress(local_ip, args.stream_port)
-        # settings_map = ui.set_mqtt_configs(stream_target)
 
         broker_address = NetworkAddress(list(map(int, args.broker_host.split("."))),
                                         args.broker_port)

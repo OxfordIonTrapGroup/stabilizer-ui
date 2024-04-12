@@ -6,41 +6,6 @@ from .parameters import *
 
 logger = logging.getLogger(__name__)
 
-# _stabilizer_settings = TopicTree("settings")
-# _ui_settings = TopicTree("ui")
-
-# # Create stabilizer settings topics tree
-# _stream_target, _afe, _iir, _pounder, _dds_ref_clock = _stabilizer_settings.create_children(
-#     ["stream_target", "afe", "iir_ch", "pounder", "dds_ref_clock"])
-
-# _afe.create_children(["0", "1"])
-
-# # iir_ch/0/1 represents the IIR filter 1 for channel 0
-# for ch in _iir.create_children(["0", "1"]):
-#     ch.create_children(["0", "1"])
-
-# _ext_clk, _ref_clk_frequency, _clk_multiplier = _dds_ref_clock.create_children(
-#     ["external_clock", "reference_clock_frequency", "multiplier"])
-
-# # Pounder settings
-# _pounder_channels = _pounder.create_children(["0", "1"])
-
-# for ch in _pounder_channels:
-#     ch.create_children([
-#         "frequency_dds_out", "frequency_dds_in", "amplitude_dds_out", "amplitude_dds_in",
-#         "attenuation_out", "attenuation_in"
-#     ])
-
-# # Create UI settings topics tree
-# _ui_channels = _ui_settings.create_children(["ch0", "ch1"])
-# for ch in _ui_channels:
-#     for iir in ch.create_children(["iir0", "iir1"]):
-#         iir.create_children(["filter", "y_offset", "y_min", "y_max", "x_offset"])
-#         for filter in FILTERS:
-#             filter_topic = iir.create_child(filter.filter_type)
-#             filter_topic.create_children(filter.parameters)
-
-
 class Stabilizer:
     """Enum wrapping the stabilizer settings topics tree.
     Topics in an array have separate entries for the parent topic and the subtopics
@@ -107,4 +72,6 @@ ui = Ui()
 # The MAC address to the Stabilizer board needs to be changed when the app is launched
 global app_root
 app_root = TopicTree.new("dt/sinara/fnc/<MAC>")
-app_root._children = [stabilizer.root, ui.root]
+app_root.children = [stabilizer.root, ui.root]
+
+app_root.create_children(["meta", "alive"])

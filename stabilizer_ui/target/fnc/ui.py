@@ -11,11 +11,12 @@ from ...stream.fft_scope import FftScope
 from ...ui_mqtt_bridge import UiMqttConfig, NetworkAddress
 from ... import ui_mqtt_bridge
 from ...iir.filters import FILTERS
+from ...widgets.ui import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
 
 
-class MainWindow(QtWidgets.QMainWindow):
+class UiWindow(AbstractUiWindow):
     """ Main UI window for FNC"""
 
     def __init__(self):
@@ -52,7 +53,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def update_stream(self, payload):
         self.streamWidget.update(payload)
 
-    def update_transfer_function(self, setting):
+    async def update_transfer_function(self, setting):
         """Update transfer function plot based on setting change."""
         if setting.root().name == "ui" and (
                 ui_iir :=
@@ -112,41 +113,41 @@ class MainWindow(QtWidgets.QMainWindow):
 
         settings_map = {}
 
-        settings_map[stabilizer.stream_target] = UiMqttConfig(
+        settings_map[stabilizer.stream_target.get_path_from_root()] = UiMqttConfig(
             [],
             lambda _: stream_target._asdict(),
             lambda _w, _v: stream_target._asdict(),
         )
         # `ui/#` are only used by the UI, the others by both UI and stabilizer
-        settings_map[stabilizer.stream_target] = UiMqttConfig(
+        settings_map[stabilizer.stream_target.get_path_from_root()] = UiMqttConfig(
             [],
             lambda _: stream_target._asdict(),
             lambda _w, _v: stream_target._asdict(),
         )
 
-        settings_map[stabilizer.ext_clk] = UiMqttConfig([self.clockWidget.extClkCheckBox])
-        settings_map[stabilizer.ref_clk_frequency] = UiMqttConfig(
+        settings_map[stabilizer.ext_clk.get_path_from_root()] = UiMqttConfig([self.clockWidget.extClkCheckBox])
+        settings_map[stabilizer.ref_clk_frequency.get_path_from_root()] = UiMqttConfig(
             [self.clockWidget.refFrequencyBox], *self.mega)
-        settings_map[stabilizer.clk_multiplier] = UiMqttConfig(
+        settings_map[stabilizer.clk_multiplier.get_path_from_root()] = UiMqttConfig(
             [self.clockWidget.multiplierBox])
 
         for ch in range(NUM_CHANNELS):
-            settings_map[stabilizer.afes[ch]] = UiMqttConfig(
+            settings_map[stabilizer.afes[ch].get_path_from_root()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])
 
-            settings_map[stabilizer.attenuation_ins[ch]] = UiMqttConfig(
+            settings_map[stabilizer.attenuation_ins[ch].get_path_from_root()] = UiMqttConfig(
                 [self.channels[ch].ddsInAttenuationBox])
-            settings_map[stabilizer.attenuation_outs[ch]] = UiMqttConfig(
+            settings_map[stabilizer.attenuation_outs[ch].get_path_from_root()] = UiMqttConfig(
                 [self.channels[ch].ddsOutAttenuationBox])
 
-            settings_map[stabilizer.amplitude_dds_ins[ch]] = UiMqttConfig(
+            settings_map[stabilizer.amplitude_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
                 [self.channels[ch].ddsInAmplitudeBox])
-            settings_map[stabilizer.amplitude_dds_outs[ch]] = UiMqttConfig(
+            settings_map[stabilizer.amplitude_dds_outs[ch].get_path_from_root()] = UiMqttConfig(
                 [self.channels[ch].ddsOutAmplitudeBox])
 
-            settings_map[stabilizer.frequency_dds_outs[ch]] = UiMqttConfig(
+            settings_map[stabilizer.frequency_dds_outs[ch].get_path_from_root()] = UiMqttConfig(
                 [self.channels[ch].ddsOutFrequencyBox])
-            settings_map[stabilizer.frequency_dds_ins[ch]] = UiMqttConfig(
+            settings_map[stabilizer.frequency_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
                 [self.channels[ch].ddsInFrequencyBox])
 
             # IIR settings
@@ -155,9 +156,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 # iir_root = stabilizer.iirs[ch][iir]
 
                 for child in ui.iirs[ch][iir].get_children(["y_offset", "y_min", "y_max", "x_offset"]):
-                    settings_map[child] = UiMqttConfig([getattr(iirWidget, child.name + "Box")])
+                    settings_map[child.get_path_from_root()] = UiMqttConfig([getattr(iirWidget, child.name + "Box")])
 
-                settings_map[ui.iirs[ch][iir].get_child("filter")] = UiMqttConfig([iirWidget.filterComboBox])
+                settings_map[ui.iirs[ch][iir].get_child("filter").get_path_from_root()] = UiMqttConfig([iirWidget.filterComboBox])
                 for filter in FILTERS:
                     filter_topic = ui.iirs[ch][iir].get_child(filter.filter_type)
                     for param in filter_topic.get_children():
@@ -165,7 +166,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             iirWidget.widgets[filter.filter_type], f"{param.name}{suffix}")
 
                         if param.name.split("_")[-1] == "limit":
-                            settings_map[param] = UiMqttConfig(
+                            settings_map[param.get_path_from_root()] = UiMqttConfig(
                                 [
                                     widget_attribute("Box"),
                                     widget_attribute("IsInf"),
@@ -173,13 +174,13 @@ class MainWindow(QtWidgets.QMainWindow):
                                 *self._is_inf_widgets_readwrite(),
                             )
                         elif param.name in {"f0", "Ki"}:
-                            settings_map[param] = UiMqttConfig(
+                            settings_map[param.get_path_from_root()] = UiMqttConfig(
                                 [widget_attribute("Box")], *self.kilo)
                         elif param.name == "Kii":
-                            settings_map[param] = UiMqttConfig(
+                            settings_map[param.get_path_from_root()] = UiMqttConfig(
                                 [widget_attribute("Box")], *self.kilo2)
                         else:
-                            settings_map[param] = UiMqttConfig(
+                            settings_map[param.get_path_from_root()] = UiMqttConfig(
                                 [widget_attribute("Box")])
 
         return settings_map
