@@ -115,6 +115,9 @@
               <height>0</height>
              </size>
             </property>
+            <property name="toolTip">
+             <string>Proportional (P) gain</string>
+            </property>
             <property name="text">
              <string>Kp: </string>
             </property>
@@ -143,7 +146,7 @@
         </widget>
        </item>
        <item>
-        <spacer name="verticalSpacer">
+        <spacer name="verticalSpacerPI">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
@@ -183,6 +186,9 @@
               <width>60</width>
               <height>0</height>
              </size>
+            </property>
+            <property name="toolTip">
+             <string>Integral (I) gain</string>
             </property>
             <property name="text">
              <string>Ki: </string>
@@ -224,6 +230,9 @@
               <width>60</width>
               <height>0</height>
              </size>
+            </property>
+            <property name="toolTip">
+             <string/>
             </property>
             <property name="text">
              <string>Ki limit: </string>
@@ -272,6 +281,9 @@
               <width>60</width>
               <height>0</height>
              </size>
+            </property>
+            <property name="toolTip">
+             <string>Second-order integral (I^2) gain</string>
             </property>
             <property name="text">
              <string>Kii: </string>
@@ -395,7 +407,7 @@
         </widget>
        </item>
        <item>
-        <spacer name="verticalSpacer_2">
+        <spacer name="verticalSpacerID">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
@@ -411,7 +423,7 @@
         </spacer>
        </item>
        <item>
-        <widget class="QGroupBox" name="groupBox_3">
+        <widget class="QGroupBox" name="KdGroup">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
            <horstretch>0</horstretch>
@@ -506,6 +518,9 @@
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label_7">
+            <property name="toolTip">
+             <string>Derivative (D) gain</string>
+            </property>
             <property name="text">
              <string>Kd: </string>
             </property>
@@ -545,6 +560,9 @@
           </item>
           <item row="5" column="0">
            <widget class="QLabel" name="label_9">
+            <property name="toolTip">
+             <string>Second-order derivative (D^2) gain</string>
+            </property>
             <property name="text">
              <string>Kdd: </string>
             </property>
