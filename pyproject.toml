@@ -16,7 +16,7 @@ pyqtgraph = "^0.13.4"
 numpy = "^1.21.0"
 stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
 
-# The PyQt5-Qt5 package on PyPi only has MacOS wheels, and as of 2024-04-16, 5.10.2 is
+# The PyQt5-Qt5 package on PyPi only has MacOS wheels, and as of 2024-04-16, 5.15.2 is
 # the latest version with other builds.
 PyQt5 = "^5.15.9"
 PyQt5-Qt5 = "=5.15.2"
