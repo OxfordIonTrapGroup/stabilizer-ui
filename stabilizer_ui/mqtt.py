@@ -127,7 +127,7 @@ class MqttInterface:
         return 0
 
 
-class StabilizerInterfaceBase:
+class AbstractStabilizerInterface:
     """
     Shim for controlling stabilizer over MQTT
     """

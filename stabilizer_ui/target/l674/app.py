@@ -14,7 +14,7 @@ from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
 from stabilizer.stream import get_local_ip
 
-from .mqtt import StabilizerInterface, Settings
+from .interface import StabilizerInterface, Settings
 from .solstis import EnsureSolstis
 
 from ...mqtt import MqttInterface
@@ -22,7 +22,8 @@ from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
 from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import ui_mqtt_bridge
-from ...ui_utils import link_slider_to_spinbox
+from ...ui_utils import link_slider_to_spinbox, fmt_mac
+
 
 logger = logging.getLogger(__name__)
 
@@ -674,11 +675,11 @@ def main():
                                         args.broker_port)
 
         stabilizer_topic = f"dt/sinara/l674/{fmt_mac(args.stabilizer_mac)}"
-        stabilizer_task = asyncio.create_task(
+        stabilizer_task = loop.create_task(
             update_stabilizer(ui, stabilizer_interface, stabilizer_topic,
                               broker_address, stream_target))
 
-        monitor_lock_task = asyncio.create_task(
+        monitor_lock_task = loop.create_task(
             monitor_lock_state(ui, stabilizer_interface, args.wand_host, args.wand_port,
                                args.wand_channel, args.solstis_host))
 
