@@ -19,6 +19,7 @@ from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import ui_mqtt_bridge
 from ...ui_utils import fmt_mac
 from ...iir.filters import FILTERS
+from ...widgets.ui import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,7 @@ logger = logging.getLogger(__name__)
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 
-class UI(QtWidgets.QMainWindow):
-
+class UI(AbstractUiWindow):
     def __init__(self):
         super().__init__()
 

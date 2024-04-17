@@ -94,13 +94,14 @@ class UiMqttBridge:
         retained_settings = {}
 
         def panic_handler(value):
-            self.panicked = (json.loads(value) is None)
-            ui.onPanicStatusChange(value)
-            logger.info(f"Stabilizer {'panicked' if self.panicked else 'recovered'}")
+            has_panicked = (json.loads(value) is not None)
+            ui.onPanicStatusChange(has_panicked, value)
+            if has_panicked:
+                logger.error("Stabilizer had panicked, but has restarted")
 
         def alive_handler(value, is_initial_subscription=False):
             is_alive = bool(json.loads(value))
-            ui.onlineStatusChange(is_alive, self.panicked)
+            ui.onlineStatusChange(is_alive)
             logger.info(f"Stabilizer {"alive" if is_alive else "offline"}")
 
         def collect_settings(_client, topic, value, _qos, _properties):

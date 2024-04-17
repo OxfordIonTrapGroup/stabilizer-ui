@@ -14,17 +14,12 @@ class AbstractUiWindow(QMainWindow):
         stylesheet_str = ";".join([f"{key}: {value}" for key, value in self.stylesheet.items()])
         self.setStyleSheet(stylesheet_str)
 
-    def _offlineMessageBox(self, hasPanicked: bool):
+    def _offlineMessageBox(self):
         messageBox = QMessageBox()
 
-        if hasPanicked:
-            messageBox.setText("Stabilizer panicked!")
-            messageBox.setInformativeText("Please restart the stabilizer. You may need to change some settings before restart to prevent the issue from reoccuring.")
-            messageBox.setIcon(QMessageBox.Critical)
-        else:
-            messageBox.setText("Stabilizer offline")
-            messageBox.setInformativeText("Check the stabilizer's network connection.")
-            messageBox.setIcon(QMessageBox.Warning)
+        messageBox.setText("Stabilizer offline")
+        messageBox.setInformativeText("Check the stabilizer's network connection.")
+        messageBox.setIcon(QMessageBox.Warning)
 
         messageBox.setStandardButtons(QMessageBox.Ok)
 
@@ -39,39 +34,17 @@ class AbstractUiWindow(QMainWindow):
         panicMessageBox = QMessageBox()
         panicMessageBox.setText("Stabilizer panicked!")
         panicMessageBox.setIcon(QMessageBox.Critical)
-        panicMessageBox.setInformativeText(f"Stabilizer might be panicked. "\
-            "Please check and restart if necessary. " \
-            "You may need to change some settings to prevent the issue from reoccuring.")
+        panicMessageBox.setInformativeText(f"Stabilizer had panicked, but has since restarted. "\
+            "You may need to change some settings if the issue persists.")
         panicMessageBox.setDescriptiveText(f"Diagnostic information: \n{value}")
 
-        panicMessageBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        panicMessageBox.setStandardButtons(QMessageBox.Ok)
         panicMessageBox.setDefaultButton(QMessageBox.Ok)
-        panicMessageBox.setEscapeButton(QMessageBox.Cancel)
+        panicMessageBox.setEscapeButton(QMessageBox.Ok)
 
-        overrideButton = panicMessageBox.button(QMessageBox.Cancel)
-        overrideButton.setText("Override")
-        overrideButton.setToolTip("The stabilizer is not actually panicked, override")
+        panicMessageBox.exec()
 
-        acceptButton = panicMessageBox.button(QMessageBox.Ok)
-        acceptButton.setText("Accept Panic")
-        acceptButton.setToolTip("The stabilizer is indeed panicked")
-
-        userInput = panicMessageBox.exec()
-
-        match userInput:
-            case QMessageBox.Ok:
-                self.stylesheet["background-color"] = "mistyrose"
-                self.setWindowTitle(f"{self._windowTitle} [PANICKED]")
-            case QMessageBox.Cancel:
-                self.stylesheet.pop("background-color", None)
-                self.setWindowTitle(self._windowTitle)
-        self._setStyleSheet()
-
-    def onlineStatusChange(self, isOnline: bool, hasPanicked: bool):
-        if hasPanicked:
-            self.onPanicStatusChange(hasPanicked)
-            return
-
+    def onlineStatusChange(self, isOnline: bool):
         if self.stabilizerOnline == isOnline:
             return
 
@@ -82,7 +55,7 @@ class AbstractUiWindow(QMainWindow):
             self.setWindowTitle(self._windowTitle)
         else:
             self.stylesheet["background-color"] = "mistyrose"
-            self._offlineMessageBox(hasPanicked).exec()
+            self._offlineMessageBox().exec()
 
             self._windowTitle = self.windowTitle()
             self.setWindowTitle(f"{self._windowTitle} [OFFLINE]")
