@@ -102,7 +102,7 @@ class UiMqttBridge:
         def alive_handler(value, is_initial_subscription=False):
             is_alive = bool(json.loads(value))
             ui.onlineStatusChange(is_alive)
-            logger.info(f"Stabilizer {"alive" if is_alive else "offline"}")
+            logger.info(f"Stabilizer {'alive' if is_alive else 'offline'}")
 
         def collect_settings(_client, topic, value, _qos, _properties):
             subtopic = topic[len(root_topic) + 1:]
