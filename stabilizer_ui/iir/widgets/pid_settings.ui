@@ -1,525 +1,653 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Form</class>
- <widget class="QWidget" name="Form">
+ <class>pidWidget</class>
+ <widget class="QWidget" name="pidWidget">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>285</width>
-    <height>535</height>
+    <width>205</width>
+    <height>534</height>
    </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>205</width>
+    <height>0</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>16777215</width>
+    <height>16777215</height>
+   </size>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <widget class="QGroupBox" name="iGainBox">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>60</y>
-     <width>141</width>
-     <height>171</height>
-    </rect>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>0</number>
    </property>
-   <property name="minimumSize">
-    <size>
-     <width>141</width>
-     <height>171</height>
-    </size>
+   <property name="topMargin">
+    <number>0</number>
    </property>
-   <property name="maximumSize">
-    <size>
-     <width>141</width>
-     <height>171</height>
-    </size>
+   <property name="rightMargin">
+    <number>0</number>
    </property>
-   <property name="title">
-    <string>I Gain</string>
+   <property name="bottomMargin">
+    <number>0</number>
    </property>
-   <widget class="QDoubleSpinBox" name="KiBox">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>21</y>
-      <width>101</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="suffix">
-     <string> kHz</string>
-    </property>
-    <property name="decimals">
-     <number>4</number>
-    </property>
-    <property name="minimum">
-     <double>-1000.000000000000000</double>
-    </property>
-    <property name="maximum">
-     <double>1000.000000000000000</double>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_3">
-    <property name="geometry">
-     <rect>
-      <x>11</x>
-      <y>21</y>
-      <width>19</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Ki: </string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_4">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>50</y>
-      <width>41</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Ki limit: </string>
-    </property>
-   </widget>
-   <widget class="QDoubleSpinBox" name="Ki_limitBox">
-    <property name="enabled">
-     <bool>false</bool>
-    </property>
-    <property name="geometry">
-     <rect>
-      <x>50</x>
-      <y>50</y>
-      <width>81</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="maximum">
-     <double>100000.000000000000000</double>
-    </property>
-    <property name="value">
-     <double>10000.000000000000000</double>
-    </property>
-   </widget>
-   <widget class="Line" name="line">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>90</y>
-      <width>118</width>
-      <height>3</height>
-     </rect>
-    </property>
-    <property name="orientation">
-     <enum>Qt::Horizontal</enum>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_5">
-    <property name="geometry">
-     <rect>
-      <x>11</x>
-      <y>100</y>
-      <width>19</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Kii: </string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_6">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>130</y>
-      <width>41</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Kii limit: </string>
-    </property>
-   </widget>
-   <widget class="QDoubleSpinBox" name="Kii_limitBox">
-    <property name="enabled">
-     <bool>false</bool>
-    </property>
-    <property name="geometry">
-     <rect>
-      <x>50</x>
-      <y>130</y>
-      <width>81</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="maximum">
-     <double>100000.000000000000000</double>
-    </property>
-    <property name="value">
-     <double>10000.000000000000000</double>
-    </property>
-   </widget>
-   <widget class="QDoubleSpinBox" name="KiiBox">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>100</y>
-      <width>101</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="suffix">
-     <string> kHz^2</string>
-    </property>
-    <property name="decimals">
-     <number>4</number>
-    </property>
-    <property name="minimum">
-     <double>-1.000000000000000</double>
-    </property>
-    <property name="maximum">
-     <double>1.000000000000000</double>
-    </property>
-    <property name="singleStep">
-     <double>0.001000000000000</double>
-    </property>
-   </widget>
-   <widget class="QCheckBox" name="Ki_limitIsInf">
-    <property name="geometry">
-     <rect>
-      <x>50</x>
-      <y>70</y>
-      <width>81</width>
-      <height>17</height>
-     </rect>
-    </property>
-    <property name="layoutDirection">
-     <enum>Qt::RightToLeft</enum>
-    </property>
-    <property name="text">
-     <string>Inf</string>
-    </property>
-    <property name="checked">
-     <bool>true</bool>
-    </property>
-   </widget>
-   <widget class="QCheckBox" name="Kii_limitIsInf">
-    <property name="geometry">
-     <rect>
-      <x>50</x>
-      <y>150</y>
-      <width>81</width>
-      <height>17</height>
-     </rect>
-    </property>
-    <property name="layoutDirection">
-     <enum>Qt::RightToLeft</enum>
-    </property>
-    <property name="text">
-     <string>Inf</string>
-    </property>
-    <property name="checked">
-     <bool>true</bool>
-    </property>
-   </widget>
-  </widget>
-  <widget class="QGroupBox" name="pGainBox">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>141</width>
-     <height>51</height>
-    </rect>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>141</width>
-     <height>51</height>
-    </size>
-   </property>
-   <property name="maximumSize">
-    <size>
-     <width>141</width>
-     <height>51</height>
-    </size>
-   </property>
-   <property name="title">
-    <string>P Gain</string>
-   </property>
-   <widget class="QDoubleSpinBox" name="KpBox">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>21</y>
-      <width>101</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="minimum">
-     <double>-100000.000000000000000</double>
-    </property>
-    <property name="maximum">
-     <double>100000.000000000000000</double>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label">
-    <property name="geometry">
-     <rect>
-      <x>11</x>
-      <y>21</y>
-      <width>19</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Kp: </string>
-    </property>
-   </widget>
-  </widget>
-  <widget class="QGroupBox" name="dGainBox">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>240</y>
-     <width>141</width>
-     <height>171</height>
-    </rect>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>141</width>
-     <height>171</height>
-    </size>
-   </property>
-   <property name="maximumSize">
-    <size>
-     <width>141</width>
-     <height>171</height>
-    </size>
-   </property>
-   <property name="title">
-    <string>D Gain</string>
-   </property>
-   <widget class="QDoubleSpinBox" name="KdBox">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>21</y>
-      <width>101</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="suffix">
-     <string> s</string>
-    </property>
-    <property name="decimals">
-     <number>4</number>
-    </property>
-    <property name="minimum">
-     <double>-100000.000000000000000</double>
-    </property>
-    <property name="maximum">
-     <double>100000.000000000000000</double>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_7">
-    <property name="geometry">
-     <rect>
-      <x>11</x>
-      <y>21</y>
-      <width>19</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Kd: </string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_8">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>50</y>
-      <width>41</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Kd limit: </string>
-    </property>
-   </widget>
-   <widget class="QDoubleSpinBox" name="Kd_limitBox">
-    <property name="enabled">
-     <bool>false</bool>
-    </property>
-    <property name="geometry">
-     <rect>
-      <x>50</x>
-      <y>50</y>
-      <width>81</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="maximum">
-     <double>100000.000000000000000</double>
-    </property>
-    <property name="value">
-     <double>10000.000000000000000</double>
-    </property>
-   </widget>
-   <widget class="Line" name="line_2">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>90</y>
-      <width>118</width>
-      <height>3</height>
-     </rect>
-    </property>
-    <property name="orientation">
-     <enum>Qt::Horizontal</enum>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_9">
-    <property name="geometry">
-     <rect>
-      <x>11</x>
-      <y>100</y>
-      <width>19</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Kdd: </string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_10">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>130</y>
-      <width>41</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Kdd limit: </string>
-    </property>
-   </widget>
-   <widget class="QDoubleSpinBox" name="Kdd_limitBox">
-    <property name="enabled">
-     <bool>false</bool>
-    </property>
-    <property name="geometry">
-     <rect>
-      <x>60</x>
-      <y>130</y>
-      <width>71</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="maximum">
-     <double>100000.000000000000000</double>
-    </property>
-    <property name="value">
-     <double>10000.000000000000000</double>
-    </property>
-   </widget>
-   <widget class="QDoubleSpinBox" name="KddBox">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>100</y>
-      <width>101</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="suffix">
-     <string> s^2</string>
-    </property>
-    <property name="decimals">
-     <number>4</number>
-    </property>
-    <property name="minimum">
-     <double>-100000.000000000000000</double>
-    </property>
-    <property name="maximum">
-     <double>100000.000000000000000</double>
-    </property>
-   </widget>
-   <widget class="QCheckBox" name="Kd_limitIsInf">
-    <property name="geometry">
-     <rect>
-      <x>50</x>
-      <y>70</y>
-      <width>81</width>
-      <height>17</height>
-     </rect>
-    </property>
-    <property name="layoutDirection">
-     <enum>Qt::RightToLeft</enum>
-    </property>
-    <property name="text">
-     <string>Inf</string>
-    </property>
-    <property name="checked">
-     <bool>true</bool>
-    </property>
-   </widget>
-   <widget class="QCheckBox" name="Kdd_limitIsInf">
-    <property name="geometry">
-     <rect>
-      <x>60</x>
-      <y>150</y>
-      <width>70</width>
-      <height>17</height>
-     </rect>
-    </property>
-    <property name="layoutDirection">
-     <enum>Qt::RightToLeft</enum>
-    </property>
-    <property name="text">
-     <string>Inf</string>
-    </property>
-    <property name="checked">
-     <bool>true</bool>
-    </property>
-    <property name="tristate">
-     <bool>false</bool>
-    </property>
-   </widget>
-  </widget>
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+     <property name="horizontalScrollBarPolicy">
+      <enum>Qt::ScrollBarAsNeeded</enum>
+     </property>
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>203</width>
+        <height>541</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <property name="leftMargin">
+        <number>6</number>
+       </property>
+       <property name="topMargin">
+        <number>6</number>
+       </property>
+       <property name="rightMargin">
+        <number>6</number>
+       </property>
+       <property name="bottomMargin">
+        <number>6</number>
+       </property>
+       <item>
+        <widget class="QGroupBox" name="KpGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title">
+          <string>P Gain</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_2">
+          <item row="0" column="0">
+           <widget class="QLabel" name="KpLabel">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>51</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Proportional (P) gain</string>
+            </property>
+            <property name="text">
+             <string>Kp: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QDoubleSpinBox" name="KpBox">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="minimum">
+             <double>-100000.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacerPI">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Fixed</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>10</width>
+           <height>10</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="KiGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="contextMenuPolicy">
+          <enum>Qt::DefaultContextMenu</enum>
+         </property>
+         <property name="title">
+          <string>I Gain</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout">
+          <property name="horizontalSpacing">
+           <number>0</number>
+          </property>
+          <item row="0" column="0">
+           <widget class="QLabel" name="KiLabel">
+            <property name="minimumSize">
+             <size>
+              <width>60</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Integral (I) gain</string>
+            </property>
+            <property name="text">
+             <string>Ki: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QDoubleSpinBox" name="KiBox">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="styleSheet">
+             <string notr="true"/>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="suffix">
+             <string> kHz</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="minimum">
+             <double>-1000.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="KiLimitLabel">
+            <property name="minimumSize">
+             <size>
+              <width>60</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string/>
+            </property>
+            <property name="text">
+             <string>Ki limit: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QDoubleSpinBox" name="Ki_limitBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">anchors.fill:parent</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>10000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0" colspan="3">
+           <widget class="Line" name="line">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="KiiLabel">
+            <property name="minimumSize">
+             <size>
+              <width>60</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Second-order integral (I^2) gain</string>
+            </property>
+            <property name="text">
+             <string>Kii: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="2">
+           <widget class="QDoubleSpinBox" name="KiiBox">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">anchors.fill:parent</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="suffix">
+             <string> kHz^2</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="minimum">
+             <double>-1.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.001000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="KiiLimitLabel">
+            <property name="minimumSize">
+             <size>
+              <width>60</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Kii limit: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QDoubleSpinBox" name="Kii_limitBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>10000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0" colspan="3">
+           <widget class="QCheckBox" name="Ki_limitIsInf">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="layoutDirection">
+             <enum>Qt::RightToLeft</enum>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">spacing: 5px</string>
+            </property>
+            <property name="text">
+             <string>Inf</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0" colspan="3">
+           <widget class="QCheckBox" name="Kii_limitIsInf">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="layoutDirection">
+             <enum>Qt::RightToLeft</enum>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">spacing: 5px</string>
+            </property>
+            <property name="text">
+             <string>Inf</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacerID">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Fixed</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>10</width>
+           <height>10</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="KdGroup">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="title">
+          <string>D Gain</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_3">
+          <property name="horizontalSpacing">
+           <number>0</number>
+          </property>
+          <item row="3" column="0" colspan="2">
+           <widget class="QCheckBox" name="Kd_limitIsInf">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="layoutDirection">
+             <enum>Qt::RightToLeft</enum>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">spacing: 5px</string>
+            </property>
+            <property name="text">
+             <string>Inf</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QDoubleSpinBox" name="Kdd_limitBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>10000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="label_10">
+            <property name="text">
+             <string>Kdd limit: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QDoubleSpinBox" name="Kd_limitBox">
+            <property name="enabled">
+             <bool>false</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>10000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_7">
+            <property name="toolTip">
+             <string>Derivative (D) gain</string>
+            </property>
+            <property name="text">
+             <string>Kd: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QDoubleSpinBox" name="KdBox">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="suffix">
+             <string> s</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="minimum">
+             <double>-100000.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0" colspan="2">
+           <widget class="Line" name="line_2">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="label_9">
+            <property name="toolTip">
+             <string>Second-order derivative (D^2) gain</string>
+            </property>
+            <property name="text">
+             <string>Kdd: </string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QDoubleSpinBox" name="KddBox">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+            </property>
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="suffix">
+             <string> s^2</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="minimum">
+             <double>-100000.000000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100000.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0" colspan="2">
+           <widget class="QCheckBox" name="Kdd_limitIsInf">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="layoutDirection">
+             <enum>Qt::RightToLeft</enum>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">spacing: 5px</string>
+            </property>
+            <property name="text">
+             <string>Inf</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+            <property name="tristate">
+             <bool>false</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_8">
+            <property name="text">
+             <string>Kd limit:</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
  </widget>
  <resources/>
  <connections>

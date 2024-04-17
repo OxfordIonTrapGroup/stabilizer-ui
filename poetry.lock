@@ -779,7 +779,7 @@ scipy = "*"
 type = "git"
 url = "https://github.com/OxfordIonTrapGroup/stabilizer.git"
 reference = "HEAD"
-resolved_reference = "26dc82550912005deca2f74780a7d84408176461"
+resolved_reference = "5e4bbb699e964356c21b34c268623564e37af9a0"
 subdirectory = "py"
 
 [[package]]

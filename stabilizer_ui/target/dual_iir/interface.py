@@ -1,5 +1,4 @@
 import logging
-from enum import Enum, unique
 
 from ...mqtt import AbstractStabilizerInterface
 from ...iir.filters import FILTERS
@@ -9,10 +8,7 @@ logger = logging.getLogger(__name__)
 
 class StabilizerInterface(AbstractStabilizerInterface):
     """
-    Shim for controlling `l674` stabilizer over MQTT; for the relock task to have something
-    to hold on to before the Stabilizer write task has finished initial bringup of the
-    MQTT connection. (Could potentially just use two MQTT connections instead, although
-    that seems a bit wasteful.)
+    Shim for controlling `dual-iir` stabilizer over MQTT
     """
 
     iir_ch_topic_base = "settings/iir_ch"
@@ -25,10 +21,10 @@ class StabilizerInterface(AbstractStabilizerInterface):
             self.publish_ui_change(setting, all_values[setting])
             channel, iir = setting.split("/")[1:3]
             path_root = f"ui/{channel}/{iir}/"
-            x_offset = all_values[path_root + "x_offset"]
             y_offset = all_values[path_root + "y_offset"]
             y_min = all_values[path_root + "y_min"]
             y_max = all_values[path_root + "y_max"]
+            x_offset = all_values[path_root + "x_offset"]
 
             filter_type = all_values[path_root + "filter"]
             filter_idx = [f.filter_type for f in FILTERS].index(filter_type)

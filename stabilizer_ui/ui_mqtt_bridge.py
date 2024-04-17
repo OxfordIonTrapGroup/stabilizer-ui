@@ -1,11 +1,11 @@
 import asyncio
-from typing import NamedTuple, List, Callable, Dict
-from enum import Enum
+from typing import NamedTuple, List, Callable, Any, Dict
 import logging
 import json
 
 from PyQt5 import QtWidgets
 from gmqtt import Client as MqttClient
+from .widgets.ui import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def read(widgets):
     widget = widgets[0]
 
     if isinstance(
-        widget,
+            widget,
         (
             QtWidgets.QCheckBox,
             QtWidgets.QRadioButton,
@@ -32,7 +32,7 @@ def read(widgets):
     ):
         return widget.isChecked()
 
-    if isinstance(widget, QtWidgets.QDoubleSpinBox):
+    if isinstance(widget, (QtWidgets.QDoubleSpinBox, QtWidgets.QSpinBox)):
         return widget.value()
 
     if isinstance(widget, QtWidgets.QComboBox):
@@ -46,7 +46,7 @@ def write(widgets, value):
     widget = widgets[0]
 
     if isinstance(
-        widget,
+            widget,
         (
             QtWidgets.QCheckBox,
             QtWidgets.QRadioButton,
@@ -70,23 +70,42 @@ class UiMqttConfig(NamedTuple):
 
 
 class UiMqttBridge:
-    def __init__(self, client: MqttClient, configs: Dict[Enum, UiMqttConfig]):
+
+    def __init__(self, client: MqttClient, configs: Dict[Any, UiMqttConfig]):
         self.client = client
         self.configs = configs
+        self.panicked = False
 
     @classmethod
     async def new(cls, broker_address: NetworkAddress, *args, **kwargs):
         client = MqttClient(client_id="")
         host, port = broker_address.get_ip(), broker_address.port
-        await client.connect(host, port=port, keepalive=10)
+        try:
+            await client.connect(host, port=port, keepalive=10)
+            logger.info(f"Connected to MQTT broker at {host}:{port}.")
+        except Exception as connect_exception:
+            logger.error("Failed to connect to MQTT broker: %s", connect_exception)
+            raise connect_exception
+
         return cls(client, *args, **kwargs)
 
-    async def load_ui(self, objectify: Callable, root_topic: str):
+    async def load_ui(self, objectify: Callable, root_topic: str, ui: AbstractUiWindow):
         """Load current settings from MQTT"""
         retained_settings = {}
 
+        def panic_handler(value):
+            has_panicked = (json.loads(value) is not None)
+            ui.onPanicStatusChange(has_panicked, value)
+            if has_panicked:
+                logger.error("Stabilizer had panicked, but has restarted")
+
+        def alive_handler(value, is_initial_subscription=False):
+            is_alive = bool(json.loads(value))
+            ui.onlineStatusChange(is_alive)
+            logger.info(f"Stabilizer {'alive' if is_alive else 'offline'}")
+
         def collect_settings(_client, topic, value, _qos, _properties):
-            subtopic = topic[len(root_topic) + 1 :]
+            subtopic = topic[len(root_topic) + 1:]
             try:
                 key = objectify(subtopic)
                 decoded_value = json.loads(value)
@@ -96,18 +115,26 @@ class UiMqttBridge:
                     subtopic,
                     decoded_value,
                 )
+                if subtopic == "meta/panic":
+                    panic_handler(value)
+                elif subtopic == "alive":
+                    alive_handler(value)
             except ValueError:
                 logger.info("Ignoring message topic '%s'", subtopic)
             return 0
 
         self.client.on_message = collect_settings
+
+        logger.info(f"Subscribing to all settings at {root_topic}/#")
         all_settings = f"{root_topic}/#"
         self.client.subscribe(all_settings)
         # Based on testing, all the retained messages are sent immediately after
         # subscribing, but add some delay in case this is actually a race condition.
         await asyncio.sleep(1)
         self.client.unsubscribe(all_settings)
-        self.client.on_message = lambda *a: 0
+
+        self.client.subscribe(f"{root_topic}/meta/panic")
+        self.client.subscribe(f"{root_topic}/alive")
 
         for retained_key, retained_value in retained_settings.items():
             if retained_key in self.configs:
@@ -121,6 +148,7 @@ class UiMqttBridge:
 
         # Capture loop variable.
         def make_queue(key):
+
             def queue(*args):
                 keys_to_write.add(key)
                 ui_updated.set()
@@ -143,3 +171,4 @@ class UiMqttBridge:
 
             keys_to_write.add(key)  # write once at startup
         return keys_to_write, ui_updated
+

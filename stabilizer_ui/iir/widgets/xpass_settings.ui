@@ -1,116 +1,210 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Form</class>
- <widget class="QWidget" name="Form">
+ <class>xpassWidget</class>
+ <widget class="QWidget" name="xpassWidget">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
-    <height>300</height>
+    <width>251</width>
+    <height>248</height>
    </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>205</width>
+    <height>0</height>
+   </size>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <widget class="QGroupBox" name="groupBox_3">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>141</width>
-     <height>81</height>
-    </rect>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>0</number>
    </property>
-   <property name="minimumSize">
-    <size>
-     <width>141</width>
-     <height>81</height>
-    </size>
+   <property name="topMargin">
+    <number>0</number>
    </property>
-   <property name="maximumSize">
-    <size>
-     <width>141</width>
-     <height>81</height>
-    </size>
+   <property name="rightMargin">
+    <number>0</number>
    </property>
-   <property name="title">
-    <string>Parameters</string>
+   <property name="bottomMargin">
+    <number>0</number>
    </property>
-   <widget class="QDoubleSpinBox" name="f0Box">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>21</y>
-      <width>101</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="suffix">
-     <string> kHz</string>
-    </property>
-    <property name="maximum">
-     <double>1000.000000000000000</double>
-    </property>
-    <property name="stepType">
-     <enum>QAbstractSpinBox::DefaultStepType</enum>
-    </property>
-    <property name="value">
-     <double>1.000000000000000</double>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_5">
-    <property name="geometry">
-     <rect>
-      <x>11</x>
-      <y>21</y>
-      <width>19</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>f0: </string>
-    </property>
-   </widget>
-   <widget class="QLabel" name="label_6">
-    <property name="geometry">
-     <rect>
-      <x>10</x>
-      <y>50</y>
-      <width>41</width>
-      <height>16</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>K:</string>
-    </property>
-   </widget>
-   <widget class="QDoubleSpinBox" name="KBox">
-    <property name="geometry">
-     <rect>
-      <x>30</x>
-      <y>50</y>
-      <width>101</width>
-      <height>20</height>
-     </rect>
-    </property>
-    <property name="keyboardTracking">
-     <bool>false</bool>
-    </property>
-    <property name="minimum">
-     <double>0.010000000000000</double>
-    </property>
-    <property name="maximum">
-     <double>100.000000000000000</double>
-    </property>
-    <property name="value">
-     <double>1.000000000000000</double>
-    </property>
-   </widget>
-  </widget>
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents_2">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>249</width>
+        <height>246</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <property name="leftMargin">
+        <number>6</number>
+       </property>
+       <property name="topMargin">
+        <number>6</number>
+       </property>
+       <property name="rightMargin">
+        <number>6</number>
+       </property>
+       <property name="bottomMargin">
+        <number>6</number>
+       </property>
+       <item>
+        <widget class="QGroupBox" name="groupBox_3">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>100</height>
+          </size>
+         </property>
+         <property name="title">
+          <string>Parameters</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout">
+          <item row="1" column="1">
+           <widget class="QDoubleSpinBox" name="KBox">
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="minimum">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>100.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="Klabel">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>20</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Gain</string>
+            </property>
+            <property name="text">
+             <string>K:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QDoubleSpinBox" name="f0Box">
+            <property name="minimumSize">
+             <size>
+              <width>80</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>90</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="keyboardTracking">
+             <bool>false</bool>
+            </property>
+            <property name="suffix">
+             <string> kHz</string>
+            </property>
+            <property name="maximum">
+             <double>1000.000000000000000</double>
+            </property>
+            <property name="stepType">
+             <enum>QAbstractSpinBox::DefaultStepType</enum>
+            </property>
+            <property name="value">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="f0Label">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>25</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>Filter centre/cutoff frequency</string>
+            </property>
+            <property name="text">
+             <string>f&lt;sub&gt;0&lt;/sub&gt;: </string>
+            </property>
+            <property name="textFormat">
+             <enum>Qt::RichText</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <spacer name="horizontalSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>10</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>10</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
  </widget>
  <resources/>
  <connections/>
