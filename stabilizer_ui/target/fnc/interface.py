@@ -94,6 +94,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
             channel=_ch,
             iir_idx=_iir_idx,
             ba=ba,
+            x_offset=iir_setting.get_child("x_offset").value,
             y_offset=iir_setting.get_child("y_offset").value,
             y_min=iir_setting.get_child("y_min").value,
             y_max=iir_setting.get_child("y_max").value,

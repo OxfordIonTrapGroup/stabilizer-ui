@@ -24,6 +24,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
             y_offset = all_values[path_root + "y_offset"]
             y_min = all_values[path_root + "y_min"]
             y_max = all_values[path_root + "y_max"]
+            x_offset = all_values[path_root + "x_offset"]
 
             filter_type = all_values[path_root + "filter"]
             filter_idx = [f.filter_type for f in FILTERS].index(filter_type)
@@ -37,6 +38,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
                 channel=int(channel),
                 iir_idx=int(iir),
                 ba=ba,
+                x_offset=x_offset,
                 y_offset=y_offset,
                 y_min=y_min,
                 y_max=y_max,

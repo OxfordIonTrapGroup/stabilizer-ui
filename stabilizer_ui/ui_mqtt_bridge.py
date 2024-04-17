@@ -149,7 +149,6 @@ class UiMqttBridge:
         def make_queue(key):
 
             def queue(*args):
-                logger.info(f"TEMP: Queueing {key}")
                 keys_to_write.add(key)
                 ui_updated.set()
 
