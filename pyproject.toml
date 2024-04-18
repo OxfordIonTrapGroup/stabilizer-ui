@@ -14,7 +14,7 @@ qasync = "^0.27.1"
 websockets = "^12.0"
 pyqtgraph = "^0.13.4"
 numpy = "^1.21.0"
-stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py", branch = "sandbox-stream" }
+stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py", branch = "refactor/py_stream" }
 
 # The PyQt5-Qt5 package on PyPi only has MacOS wheels, and as of 2024-04-16, 5.15.2 is
 # the latest version with other builds. However, 5.15.2. does not support MacOS arm builds,
