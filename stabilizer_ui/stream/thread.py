@@ -7,16 +7,14 @@ from typing import Callable
 from . import MAX_BUFFER_PERIOD
 from ..ui_mqtt_bridge import NetworkAddress
 
-from stabilizer.stream import StabilizerStream
-from stabilizer.stream import AdcDac, wrap
+from stabilizer.stream import StabilizerStream, AdcDecoder, DacDecoder, Parser, AbstractDecoder, wrap
 from stabilizer import DAC_VOLTS_PER_LSB, SAMPLE_PERIOD
 import numpy as np
 
 # Order is consistent with `AdcDac.to_mu()`.
-StreamData = namedtuple("StreamData", "ADC0 ADC1 DAC0 DAC1")
+# StreamData = namedtuple("StreamData", "ADC0 ADC1 DAC0 DAC1")
 
 CallbackPayload = namedtuple("CallbackPayload", "values download loss")
-
 
 class StreamThread:
 
@@ -29,13 +27,16 @@ class StreamThread:
         broker_address: NetworkAddress,
         main_event_loop: asyncio.AbstractEventLoop,
         max_buffer_period: float = MAX_BUFFER_PERIOD,
+        parser: Parser = Parser([AdcDecoder(), DacDecoder()])
     ):
-        self._terminate = threading.Event()
         maxlen = int(max_buffer_period / SAMPLE_PERIOD)
+
+        self._terminate = threading.Event()
         self._thread = threading.Thread(
             target=stream_worker,
             args=(
                 ui_callback,
+                parser,
                 precondition_data,
                 callback_interval,
                 stream_target,
@@ -69,7 +70,7 @@ class StreamStats:
         self._stat = deque(maxlen=maxlen)
         self._stat.append(_StatPoint(time.monotonic_ns(), 0, 0, 0))
 
-    def update(self, frame: AdcDac):
+    def update(self, frame: Parser):
         sequence = frame.header.sequence
         lost = 0 if self._expect is None else wrap(sequence - self._expect)
         batch_count = frame.header.batches
@@ -95,6 +96,7 @@ class StreamStats:
 
 def stream_worker(
     ui_callback: Callable,
+    parser: Parser,
     precondition_data: Callable,
     callback_interval: float,
     stream_target: NetworkAddress,
@@ -109,19 +111,19 @@ def stream_worker(
     Also, it is not possible to change the Qt event loop. Therefore, we
     have to handle the stream in a separate thread running this function.
     """
-    buffer = [deque(maxlen=maxlen) for _ in range(4)]
+    buffer = [deque(maxlen=maxlen) for _ in range(parser.n_sources)]
     stat = StreamStats()
 
     async def handle_stream():
         """This coroutine doesn't run in the main thread's loop!"""
         transport, stream = await StabilizerStream.open(stream_target.get_ip(),
                                                         stream_target.port,
-                                                        broker_address.get_ip(), 1)
+                                                        broker_address.get_ip(), [parser], maxsize=1)
         try:
             while not terminate.is_set():
                 frame = await stream.queue.get()
                 stat.update(frame)
-                for buf, values in zip(buffer, frame.to_mu()):
+                for buf, values in zip(buffer, frame.to_si()):
                     buf.extend(values)
         finally:
             transport.close()
@@ -132,9 +134,8 @@ def stream_worker(
             while not all(map(len, buffer)):
                 await asyncio.sleep(callback_interval)
 
-            volts = [np.array(buf) * DAC_VOLTS_PER_LSB for buf in buffer]
             payload = CallbackPayload(
-                precondition_data(StreamData(*volts)),
+                precondition_data(parser.StreamData(*buffer)),
                 stat.download,
                 stat.loss,
             )

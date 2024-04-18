@@ -623,6 +623,17 @@ files = [
 ]
 
 [[package]]
+name = "pyqt5-qt5"
+version = "5.15.13"
+description = "The subset of a Qt installation needed by PyQt5."
+optional = false
+python-versions = "*"
+files = [
+    {file = "PyQt5_Qt5-5.15.13-py3-none-macosx_10_13_x86_64.whl", hash = "sha256:92575a9e96a27c4ed67c56c7048ded7461a1655d5d21f0e05064664e6e9fcbdf"},
+    {file = "PyQt5_Qt5-5.15.13-py3-none-macosx_11_0_arm64.whl", hash = "sha256:141859f2ffe04cc6c5db970e2b6ad9f98897805d886a14c52614e3799daab6d6"},
+]
+
+[[package]]
 name = "pyqt5-sip"
 version = "12.13.0"
 description = "The sip module support for PyQt5"
@@ -778,8 +789,8 @@ scipy = "*"
 [package.source]
 type = "git"
 url = "https://github.com/OxfordIonTrapGroup/stabilizer.git"
-reference = "HEAD"
-resolved_reference = "5e4bbb699e964356c21b34c268623564e37af9a0"
+reference = "sandbox-stream"
+resolved_reference = "50fb0e69f325feb6cd02d8c00319f24325cf06ac"
 subdirectory = "py"
 
 [[package]]
@@ -914,4 +925,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "d137c24f7638ba8ea7846a713feab8196bb3e07b5c2bda79ae9e165a2d44a0f2"
+content-hash = "d42e9c62612461b633f7c54bd089054a078bc56fa71846a0905656bced59f423"

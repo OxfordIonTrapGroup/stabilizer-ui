@@ -7,7 +7,7 @@ from math import inf
 
 from PyQt5 import QtWidgets
 from qasync import QEventLoop
-from stabilizer.stream import get_local_ip
+from stabilizer.stream import get_local_ip, Parser, AdcDecoder, DacDecoder
 
 from .interface import StabilizerInterface
 
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
+parser = Parser([AdcDecoder(), DacDecoder()])
 
 class UI(AbstractUiWindow):
     def __init__(self):
@@ -45,7 +46,7 @@ class UI(AbstractUiWindow):
         layout.addWidget(self.tab_channel_settings)
 
         # Create UI for FFT scope.
-        self.fft_scope = FftScope()
+        self.fft_scope = FftScope(parser.StreamData)
         layout.addWidget(self.fft_scope)
 
         # Set main window layout

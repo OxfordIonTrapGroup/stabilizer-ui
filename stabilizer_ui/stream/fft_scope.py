@@ -1,15 +1,18 @@
 import os
 from PyQt5 import QtWidgets, uic
 from stabilizer import SAMPLE_PERIOD
+from collections import namedtuple
+from stabilizer.stream import Parser
 import numpy as np
 import numpy.fft
-from .thread import CallbackPayload, StreamData
+from .thread import CallbackPayload
+
 from . import MAX_BUFFER_PERIOD, SCOPE_TIME_SCALE
 
 
 class FftScope(QtWidgets.QWidget):
 
-    def __init__(self):
+    def __init__(self, StreamData: namedtuple):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scope.ui")
         uic.loadUi(ui_path, self)
@@ -68,7 +71,7 @@ class FftScope(QtWidgets.QWidget):
             plot.setData(*data)
 
     @staticmethod
-    def precondition_data(data: StreamData):
+    def precondition_data(data: namedtuple):
         """Transforms data into payload values recognised by `update()`"""
         traces = [(
             np.linspace(-len(buf) * SAMPLE_PERIOD, 0, len(buf)) / SCOPE_TIME_SCALE,
