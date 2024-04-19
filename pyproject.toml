@@ -16,9 +16,15 @@ pyqtgraph = "^0.13.4"
 numpy = "^1.21.0"
 stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py", branch = "refactor/py_stream" }
 
+<<<<<<< HEAD
 # The PyQt5-Qt5 package on PyPi only has MacOS wheels, and as of 2024-04-16, 5.15.2 is
 # the latest version with other builds. However, 5.15.2. does not support MacOS arm builds,
 # so need ^5.15.11 for MacOS.
+=======
+# As of 2024-04-19, the newer releases of PyQt5-Qt5 on PyPi only have MacOS wheels.
+# 5.15.2 is the latest release to support other platforms, but MacOS ARM builds 
+# are only supported 5.15.11 onwards, so we pin platform-dependent dependencies.
+>>>>>>> da01bb965bd3de2a2034a534bdf66d71d5cdd83c
 PyQt5 = "^5.15.9"
 PyQt5-Qt5 = [
     { platform = "darwin", version = "^5.15.11" },
