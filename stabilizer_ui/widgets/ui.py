@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QMainWindow, QMessageBox
 from typing import Optional
 
+
 class AbstractUiWindow(QMainWindow):
     """Abstract class for main UI window"""
 
@@ -11,7 +12,8 @@ class AbstractUiWindow(QMainWindow):
         self.stylesheet = {}
 
     def _setStyleSheet(self):
-        stylesheet_str = ";".join([f"{key}: {value}" for key, value in self.stylesheet.items()])
+        stylesheet_str = ";".join(
+            [f"{key}: {value}" for key, value in self.stylesheet.items()])
         self.setStyleSheet(stylesheet_str)
 
     def _offlineMessageBox(self):
@@ -30,7 +32,7 @@ class AbstractUiWindow(QMainWindow):
             self.stylesheet.pop("background-color")
             self.setWindowTitle(self._windowTitle)
             return
-        
+
         panicMessageBox = QMessageBox()
         panicMessageBox.setText("Stabilizer panicked!")
         panicMessageBox.setIcon(QMessageBox.Critical)

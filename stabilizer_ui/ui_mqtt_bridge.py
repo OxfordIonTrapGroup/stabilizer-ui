@@ -171,4 +171,3 @@ class UiMqttBridge:
 
             keys_to_write.add(key)  # write once at startup
         return keys_to_write, ui_updated
-

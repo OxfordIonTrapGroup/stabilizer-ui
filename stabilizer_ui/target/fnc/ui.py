@@ -1,6 +1,7 @@
 import logging
 from PyQt5 import QtWidgets
 from math import inf
+from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
 
 from .topics import stabilizer, ui
 from .widgets.clock import ClockWidget
@@ -29,7 +30,9 @@ class UiWindow(AbstractUiWindow):
 
         # Add FFT scope next to a vertical layout for settings
         self.settingsLayout = QtWidgets.QVBoxLayout()
-        self.fftScopeWidget = FftScope()
+
+        fftParser = Parser([AdcDecoder(), PhaseOffsetDecoder()])
+        self.fftScopeWidget = FftScope(fftParser)
         self.centralWidgetLayout.addLayout(self.settingsLayout)
         self.centralWidgetLayout.addWidget(self.fftScopeWidget)
 
@@ -51,7 +54,7 @@ class UiWindow(AbstractUiWindow):
         self.setStatusBar(self.statusbar)
 
     def update_stream(self, payload):
-        self.streamWidget.update(payload)
+        self.fftScopeWidget.update(payload)
 
     async def update_transfer_function(self, setting):
         """Update transfer function plot based on setting change."""
@@ -125,7 +128,8 @@ class UiWindow(AbstractUiWindow):
             lambda _w, _v: stream_target._asdict(),
         )
 
-        settings_map[stabilizer.ext_clk.get_path_from_root()] = UiMqttConfig([self.clockWidget.extClkCheckBox])
+        settings_map[stabilizer.ext_clk.get_path_from_root()] = UiMqttConfig(
+            [self.clockWidget.extClkCheckBox])
         settings_map[stabilizer.ref_clk_frequency.get_path_from_root()] = UiMqttConfig(
             [self.clockWidget.refFrequencyBox], *self.mega)
         settings_map[stabilizer.clk_multiplier.get_path_from_root()] = UiMqttConfig(
@@ -135,35 +139,46 @@ class UiWindow(AbstractUiWindow):
             settings_map[stabilizer.afes[ch].get_path_from_root()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])
 
-            settings_map[stabilizer.attenuation_ins[ch].get_path_from_root()] = UiMqttConfig(
-                [self.channels[ch].ddsInAttenuationBox])
-            settings_map[stabilizer.attenuation_outs[ch].get_path_from_root()] = UiMqttConfig(
-                [self.channels[ch].ddsOutAttenuationBox])
+            settings_map[
+                stabilizer.attenuation_ins[ch].get_path_from_root()] = UiMqttConfig(
+                    [self.channels[ch].ddsInAttenuationBox])
+            settings_map[
+                stabilizer.attenuation_outs[ch].get_path_from_root()] = UiMqttConfig(
+                    [self.channels[ch].ddsOutAttenuationBox])
 
-            settings_map[stabilizer.amplitude_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
-                [self.channels[ch].ddsInAmplitudeBox])
-            settings_map[stabilizer.amplitude_dds_outs[ch].get_path_from_root()] = UiMqttConfig(
-                [self.channels[ch].ddsOutAmplitudeBox])
+            settings_map[
+                stabilizer.amplitude_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
+                    [self.channels[ch].ddsInAmplitudeBox])
+            settings_map[
+                stabilizer.amplitude_dds_outs[ch].get_path_from_root()] = UiMqttConfig(
+                    [self.channels[ch].ddsOutAmplitudeBox])
 
-            settings_map[stabilizer.frequency_dds_outs[ch].get_path_from_root()] = UiMqttConfig(
-                [self.channels[ch].ddsOutFrequencyBox])
-            settings_map[stabilizer.frequency_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
-                [self.channels[ch].ddsInFrequencyBox])
+            settings_map[
+                stabilizer.frequency_dds_outs[ch].get_path_from_root()] = UiMqttConfig(
+                    [self.channels[ch].ddsOutFrequencyBox])
+            settings_map[
+                stabilizer.frequency_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
+                    [self.channels[ch].ddsInFrequencyBox])
 
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
                 iirWidget = self.channels[ch].iir_settings[iir]
                 # iir_root = stabilizer.iirs[ch][iir]
 
-                for child in ui.iirs[ch][iir].get_children(["y_offset", "y_min", "y_max", "x_offset"]):
-                    settings_map[child.get_path_from_root()] = UiMqttConfig([getattr(iirWidget, child.name + "Box")])
+                for child in ui.iirs[ch][iir].get_children(
+                    ["y_offset", "y_min", "y_max", "x_offset"]):
+                    settings_map[child.get_path_from_root()] = UiMqttConfig(
+                        [getattr(iirWidget, child.name + "Box")])
 
-                settings_map[ui.iirs[ch][iir].get_child("filter").get_path_from_root()] = UiMqttConfig([iirWidget.filterComboBox])
+                settings_map[ui.iirs[ch][iir].get_child(
+                    "filter").get_path_from_root()] = UiMqttConfig(
+                        [iirWidget.filterComboBox])
                 for filter in FILTERS:
                     filter_topic = ui.iirs[ch][iir].get_child(filter.filter_type)
                     for param in filter_topic.get_children():
                         widget_attribute = lambda suffix: getattr(
-                            iirWidget.widgets[filter.filter_type], f"{param.name}{suffix}")
+                            iirWidget.widgets[filter.filter_type], f"{param.name}{suffix}"
+                        )
 
                         if param.name.split("_")[-1] == "limit":
                             settings_map[param.get_path_from_root()] = UiMqttConfig(

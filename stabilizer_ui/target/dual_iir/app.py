@@ -7,7 +7,7 @@ from math import inf
 
 from PyQt5 import QtWidgets
 from qasync import QEventLoop
-from stabilizer.stream import get_local_ip
+from stabilizer.stream import get_local_ip, Parser, AdcDecoder, DacDecoder
 
 from .interface import StabilizerInterface
 
@@ -26,9 +26,13 @@ logger = logging.getLogger(__name__)
 #: Interval between scope plot updates, in seconds.
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
+DEFAULT_WINDOW_SIZE = (1200, 600)
+
+parser = Parser([AdcDecoder(), DacDecoder()])
 
 
 class UI(AbstractUiWindow):
+
     def __init__(self):
         super().__init__()
 
@@ -45,7 +49,7 @@ class UI(AbstractUiWindow):
         layout.addWidget(self.tab_channel_settings)
 
         # Create UI for FFT scope.
-        self.fft_scope = FftScope()
+        self.fft_scope = FftScope(parser.StreamData)
         layout.addWidget(self.fft_scope)
 
         # Set main window layout
@@ -197,19 +201,21 @@ def main():
     parser.add_argument("--broker-port", default=1883, type=int)
     parser.add_argument("--stabilizer-mac", default="80-34-28-5f-59-0b")
     parser.add_argument("--stream-port", default=9293, type=int)
+    parser.add_argument("--name", default="Dual IIR")
     args = parser.parse_args()
 
     app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")
     app.setOrganizationDomain("photonic.link")
-    app.setApplicationName("Dual IIR UI")
+    app.setApplicationName(f"{args.name} UI")
 
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
 
         ui = UI()
-        ui.resize(1200, 600)
+        ui.resize(*DEFAULT_WINDOW_SIZE)
         ui.show()
+        ui.setWindowTitle(args.name + f" [{fmt_mac(args.stabilizer_mac)}]")
 
         stabilizer_interface = StabilizerInterface()
 
@@ -233,7 +239,7 @@ def main():
 
         stream_thread = StreamThread(
             ui.update_stream,
-            FftScope.precondition_data,
+            ui.fft_scope.precondition_data(),
             SCOPE_UPDATE_PERIOD,
             stream_target,
             broker_address,

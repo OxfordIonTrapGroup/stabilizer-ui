@@ -12,7 +12,6 @@ from .interface import StabilizerInterface
 from .ui import UiWindow
 from . import topics
 
-from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
 from ...ui_mqtt_bridge import NetworkAddress
 from ...ui_utils import fmt_mac
@@ -69,7 +68,7 @@ def main():
 
         stream_thread = StreamThread(
             ui.update_stream,
-            FftScope.precondition_data,
+            ui.fftScopeWidget.precondition_data(),
             SCOPE_UPDATE_PERIOD,
             stream_target,
             broker_address,
