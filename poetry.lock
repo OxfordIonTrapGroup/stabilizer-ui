@@ -790,7 +790,7 @@ scipy = "*"
 type = "git"
 url = "https://github.com/OxfordIonTrapGroup/stabilizer.git"
 reference = "refactor/py_stream"
-resolved_reference = "2f0ed9976c5e32e5d3ca5e76628c3e2bf1b1af7a"
+resolved_reference = "3bd1601772e029267e2d6c2d1e3cb814cf8bfe2f"
 subdirectory = "py"
 
 [[package]]

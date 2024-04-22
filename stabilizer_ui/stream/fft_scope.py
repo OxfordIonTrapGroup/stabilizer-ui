@@ -13,7 +13,12 @@ from . import MAX_BUFFER_PERIOD, SCOPE_TIME_SCALE
 
 
 class FftScope(QtWidgets.QWidget):
-    def __init__(self, StreamData: namedtuple):
+    DEFAULT_Y_RANGE = (-11, 11)
+    DEFAULT_X_RANGE = (-MAX_BUFFER_PERIOD / SCOPE_TIME_SCALE, 0)
+    DEFAULT_FFT_Y_RANGE = (-7, -1)
+    DEFAULT_FFT_X_RANGE = (-0.5, -np.log10(0.5 * SCOPE_TIME_SCALE / SAMPLE_PERIOD))
+
+    def __init__(self, parser: Parser):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scope.ui")
         uic.loadUi(ui_path, self)
@@ -29,30 +34,30 @@ class FftScope(QtWidgets.QWidget):
         # Create the objects holding the data to plot.
         self._scope_plot_data_items = [plt.plot() for plt in scope_plot_items]
         for legend, item, title in zip(legends, self._scope_plot_data_items,
-                                       StreamData._fields):
+                                       parser.StreamData._fields):
             legend.addItem(item, title)
 
         # Maps `self.en_fft_box.isChecked()` to a dictionary of axis settings.
-        self.scope_config = {
-            True: {
-                "ylabel": "ASD / (V/sqrt(Hz))",
+        self.scope_config = [{
+            True: [{
+                "ylabel": f"ASD / ({unit}/sqrt(Hz))",
                 "xlabel": "Frequency / kHz",
                 "log": [True, True],
-                "xrange": [0.5, np.log10(0.5 * SCOPE_TIME_SCALE / SAMPLE_PERIOD)],
-                "yrange": [-7, -1],
-            },
+                "xrange": self.DEFAULT_FFT_X_RANGE,
+                "yrange": self.DEFAULT_FFT_Y_RANGE,
+            }],
             False: {
-                "ylabel": "Amplitude / V",
+                "ylabel": f"Amplitude / {unit}",
                 "xlabel": "Time / ms",
                 "log": [False, False],
-                "xrange": [-MAX_BUFFER_PERIOD / SCOPE_TIME_SCALE, 0],
-                "yrange": [-11, 11],
+                "xrange": self.DEFAULT_FFT_X_RANGE,
+                "yrange": self.DEFAULT_Y_RANGE,
             },
-        }
+        } for unit in parser.units()]
 
         def update_axes(button_checked):
-            cfg = self.scope_config[bool(button_checked)]
-            for plt in scope_plot_items:
+            for (i, plt) in enumerate(scope_plot_items):
+                cfg = self.scope_config[i][bool(button_checked)]
                 plt.setLogMode(*cfg["log"])
                 plt.setRange(xRange=cfg["xrange"], yRange=cfg["yrange"], update=False)
                 plt.setLabels(left=cfg["ylabel"], bottom=cfg["xlabel"])

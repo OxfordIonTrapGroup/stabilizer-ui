@@ -1,6 +1,7 @@
 import logging
 from PyQt5 import QtWidgets
 from math import inf
+from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
 
 from .topics import stabilizer, ui
 from .widgets.clock import ClockWidget
@@ -29,7 +30,9 @@ class UiWindow(AbstractUiWindow):
 
         # Add FFT scope next to a vertical layout for settings
         self.settingsLayout = QtWidgets.QVBoxLayout()
-        self.fftScopeWidget = FftScope()
+
+        fftParser = Parser([AdcDecoder(), PhaseOffsetDecoder()])
+        self.fftScopeWidget = FftScope(fftParser)
         self.centralWidgetLayout.addLayout(self.settingsLayout)
         self.centralWidgetLayout.addWidget(self.fftScopeWidget)
 
@@ -51,7 +54,7 @@ class UiWindow(AbstractUiWindow):
         self.setStatusBar(self.statusbar)
 
     def update_stream(self, payload):
-        self.streamWidget.update(payload)
+        self.fftScopeWidget.update(payload)
 
     async def update_transfer_function(self, setting):
         """Update transfer function plot based on setting change."""

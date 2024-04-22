@@ -123,7 +123,7 @@ def stream_worker(
             while not terminate.is_set():
                 frame = await stream.queue.get()
                 stat.update(frame)
-                for buf, values in zip(buffer, frame.to_mu()):
+                for buf, values in zip(buffer, frame.to_si()):
                     buf.extend(values)
         finally:
             transport.close()

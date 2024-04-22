@@ -69,7 +69,7 @@ def main():
 
         stream_thread = StreamThread(
             ui.update_stream,
-            FftScope.precondition_data,
+            ui.fftScopeWidget.precondition_data(),
             SCOPE_UPDATE_PERIOD,
             stream_target,
             broker_address,
