@@ -665,13 +665,13 @@ files = [
 
 [[package]]
 name = "pyqtgraph"
-version = "0.13.4"
+version = "0.13.6"
 description = "Scientific Graphics and GUI Library for Python"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "pyqtgraph-0.13.4-py3-none-any.whl", hash = "sha256:1dc9a786aa43cd787114366058dc3b4b8cb96a0e318f334720c7e6cc6c285940"},
-    {file = "pyqtgraph-0.13.4.tar.gz", hash = "sha256:67b0d371405c4fd5f35afecfeb37d4b73bc118f187c52a965ed68d62f59b67b3"},
+    {file = "pyqtgraph-0.13.6-py3-none-any.whl", hash = "sha256:35740eb7e5908e490c6e06ef6ef15738dfba27ee35b0b0417638d515da6f9226"},
+    {file = "pyqtgraph-0.13.6.tar.gz", hash = "sha256:2397a2197e7ac66920329bf28fb346b038d85a351f8988ccc806ffb79d11573d"},
 ]
 
 [package.dependencies]
@@ -789,8 +789,8 @@ scipy = "*"
 [package.source]
 type = "git"
 url = "https://github.com/OxfordIonTrapGroup/stabilizer.git"
-reference = "sandbox-stream"
-resolved_reference = "50fb0e69f325feb6cd02d8c00319f24325cf06ac"
+reference = "refactor/py_stream"
+resolved_reference = "2f0ed9976c5e32e5d3ca5e76628c3e2bf1b1af7a"
 subdirectory = "py"
 
 [[package]]
@@ -925,4 +925,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "d42e9c62612461b633f7c54bd089054a078bc56fa71846a0905656bced59f423"
+content-hash = "2d8c9f23bf0ed0958083d5383fa2d3212e9cc2a9557012c05cf06697ee597510"

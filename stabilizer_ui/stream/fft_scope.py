@@ -5,13 +5,14 @@ from collections import namedtuple
 from stabilizer.stream import Parser
 import numpy as np
 import numpy.fft
+from math import floor
+from typing import Iterable
 from .thread import CallbackPayload
 
 from . import MAX_BUFFER_PERIOD, SCOPE_TIME_SCALE
 
 
 class FftScope(QtWidgets.QWidget):
-
     def __init__(self, StreamData: namedtuple):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scope.ui")
@@ -56,6 +57,11 @@ class FftScope(QtWidgets.QWidget):
                 plt.setRange(xRange=cfg["xrange"], yRange=cfg["yrange"], update=False)
                 plt.setLabels(left=cfg["ylabel"], bottom=cfg["xlabel"])
 
+        self.buf_len = int(MAX_BUFFER_PERIOD / SAMPLE_PERIOD)
+        self.sample_times = np.linspace(-self.buf_len * SAMPLE_PERIOD, 0, self.buf_len) / SCOPE_TIME_SCALE
+        self.hamming = np.hamming(self.buf_len)
+        self.spectrum_frequencies = np.linspace(0, 0.5 / SAMPLE_PERIOD, floor((self.buf_len+1)/2)) * SCOPE_TIME_SCALE
+
         self.en_fft_box.stateChanged.connect(update_axes)
         update_axes(self.en_fft_box.isChecked())
 
@@ -65,22 +71,16 @@ class FftScope(QtWidgets.QWidget):
             payload.download / 1e6, 100 * payload.loss)
         self.status_line.setText(message)
 
-        traces, spectra = payload.values
-        data_to_show = spectra if self.en_fft_box.isChecked() else traces
+        data_to_show = payload.values
         for plot, data in zip(self._scope_plot_data_items, data_to_show):
             plot.setData(*data)
 
-    @staticmethod
-    def precondition_data(data: namedtuple):
+    def precondition_data(self):
         """Transforms data into payload values recognised by `update()`"""
-        traces = [(
-            np.linspace(-len(buf) * SAMPLE_PERIOD, 0, len(buf)) / SCOPE_TIME_SCALE,
-            buf,
-        ) for buf in data]
-        transforms = [
-            np.abs(numpy.fft.rfft(buf * np.hamming(len(buf)))) *
-            np.sqrt(2 * SAMPLE_PERIOD / len(buf)) for buf in data
-        ]
-        spectra = [(np.linspace(0, 0.5 / SAMPLE_PERIOD, len(fbuf)) * SCOPE_TIME_SCALE,
-                    fbuf) for fbuf in transforms]
-        return traces, spectra
+        def _preconditioner(data: Iterable):
+            if self.en_fft_box.isChecked():
+                return [(self.spectrum_frequencies, np.abs(np.fft.rfft(buf * self.hamming)) * np.sqrt(2 * SAMPLE_PERIOD / self.buf_len)) for buf in data]
+            else:
+                return [(self.sample_times, buf) for buf in data]
+
+        return _preconditioner

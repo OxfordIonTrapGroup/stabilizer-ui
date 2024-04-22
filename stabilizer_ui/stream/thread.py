@@ -7,8 +7,8 @@ from typing import Callable
 from . import MAX_BUFFER_PERIOD
 from ..ui_mqtt_bridge import NetworkAddress
 
-from stabilizer.stream import StabilizerStream, AdcDecoder, DacDecoder, Parser, AbstractDecoder, wrap
-from stabilizer import DAC_VOLTS_PER_LSB, SAMPLE_PERIOD
+from stabilizer.stream import StabilizerStream, AdcDecoder, DacDecoder, Parser, wrap
+from stabilizer import SAMPLE_PERIOD
 import numpy as np
 
 # Order is consistent with `AdcDac.to_mu()`.
@@ -111,7 +111,7 @@ def stream_worker(
     Also, it is not possible to change the Qt event loop. Therefore, we
     have to handle the stream in a separate thread running this function.
     """
-    buffer = [deque(maxlen=maxlen) for _ in range(parser.n_sources)]
+    buffer = [deque(np.zeros(maxlen), maxlen=maxlen) for _ in range(parser.n_sources)]
     stat = StreamStats()
 
     async def handle_stream():
@@ -123,7 +123,7 @@ def stream_worker(
             while not terminate.is_set():
                 frame = await stream.queue.get()
                 stat.update(frame)
-                for buf, values in zip(buffer, frame.to_si()):
+                for buf, values in zip(buffer, frame.to_mu()):
                     buf.extend(values)
         finally:
             transport.close()
