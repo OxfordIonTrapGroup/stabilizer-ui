@@ -30,7 +30,9 @@ DEFAULT_WINDOW_SIZE = (1200, 600)
 
 parser = Parser([AdcDecoder(), DacDecoder()])
 
+
 class UI(AbstractUiWindow):
+
     def __init__(self):
         super().__init__()
 

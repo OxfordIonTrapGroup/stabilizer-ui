@@ -40,21 +40,6 @@ class ChannelSettings(AbstractChannelSettings):
         self._add_iir_tabWidget()
 
 
-class ChannelSettings(AbstractChannelSettings):
-    """ Minimal channel settings widget for a dual-iir-like application
-    """
-
-    def __init__(self):
-        super().__init__()
-
-        uic.loadUi(
-            os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                         "widgets/channel_settings.ui"), self)
-
-        self._add_afe_options()
-        self._add_iir_tabWidget()
-
-
 class _IIRWidget(QtWidgets.QWidget):
 
     def __init__(self):

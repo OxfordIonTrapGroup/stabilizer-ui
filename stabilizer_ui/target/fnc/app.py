@@ -12,7 +12,6 @@ from .interface import StabilizerInterface
 from .ui import UiWindow
 from . import topics
 
-from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
 from ...ui_mqtt_bridge import NetworkAddress
 from ...ui_utils import fmt_mac

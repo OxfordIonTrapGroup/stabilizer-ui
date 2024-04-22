@@ -2,6 +2,7 @@ from typing import Optional, List, Self, Callable
 
 from .ui_mqtt_bridge import UiMqttConfig
 
+
 class TopicTree:
 
     @classmethod

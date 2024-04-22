@@ -16,19 +16,18 @@ import numpy as np
 
 CallbackPayload = namedtuple("CallbackPayload", "values download loss")
 
+
 class StreamThread:
 
-    def __init__(
-        self,
-        ui_callback: Callable,
-        precondition_data: Callable,
-        callback_interval: float,
-        stream_target: NetworkAddress,
-        broker_address: NetworkAddress,
-        main_event_loop: asyncio.AbstractEventLoop,
-        max_buffer_period: float = MAX_BUFFER_PERIOD,
-        parser: Parser = Parser([AdcDecoder(), DacDecoder()])
-    ):
+    def __init__(self,
+                 ui_callback: Callable,
+                 precondition_data: Callable,
+                 callback_interval: float,
+                 stream_target: NetworkAddress,
+                 broker_address: NetworkAddress,
+                 main_event_loop: asyncio.AbstractEventLoop,
+                 max_buffer_period: float = MAX_BUFFER_PERIOD,
+                 parser: Parser = Parser([AdcDecoder(), DacDecoder()])):
         maxlen = int(max_buffer_period / SAMPLE_PERIOD)
 
         self._terminate = threading.Event()
@@ -118,7 +117,8 @@ def stream_worker(
         """This coroutine doesn't run in the main thread's loop!"""
         transport, stream = await StabilizerStream.open(stream_target.get_ip(),
                                                         stream_target.port,
-                                                        broker_address.get_ip(), [parser], maxsize=1)
+                                                        broker_address.get_ip(), [parser],
+                                                        maxsize=1)
         try:
             while not terminate.is_set():
                 frame = await stream.queue.get()

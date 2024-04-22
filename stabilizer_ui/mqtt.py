@@ -169,9 +169,7 @@ class AbstractStabilizerInterface:
         key = f"{self.iir_ch_topic_base}/{channel}/{iir_idx}"
         value = {
             "ba": list(ba),
-            "u": stabilizer.voltage_to_machine_units(
-                y_offset + forward_gain * x_offset
-            ),
+            "u": stabilizer.voltage_to_machine_units(y_offset + forward_gain * x_offset),
             "min": stabilizer.voltage_to_machine_units(y_min),
             "max": stabilizer.voltage_to_machine_units(y_max),
         }

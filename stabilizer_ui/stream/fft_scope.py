@@ -1,7 +1,6 @@
 import os
 from PyQt5 import QtWidgets, uic
 from stabilizer import SAMPLE_PERIOD
-from collections import namedtuple
 from stabilizer.stream import Parser
 import numpy as np
 import numpy.fft
@@ -63,9 +62,11 @@ class FftScope(QtWidgets.QWidget):
                 plt.setLabels(left=cfg["ylabel"], bottom=cfg["xlabel"])
 
         self.buf_len = int(MAX_BUFFER_PERIOD / SAMPLE_PERIOD)
-        self.sample_times = np.linspace(-self.buf_len * SAMPLE_PERIOD, 0, self.buf_len) / SCOPE_TIME_SCALE
+        self.sample_times = np.linspace(-self.buf_len * SAMPLE_PERIOD, 0,
+                                        self.buf_len) / SCOPE_TIME_SCALE
         self.hamming = np.hamming(self.buf_len)
-        self.spectrum_frequencies = np.linspace(0, 0.5 / SAMPLE_PERIOD, floor((self.buf_len+1)/2)) * SCOPE_TIME_SCALE
+        self.spectrum_frequencies = np.linspace(
+            0, 0.5 / SAMPLE_PERIOD, floor((self.buf_len + 1) / 2)) * SCOPE_TIME_SCALE
 
         self.en_fft_box.stateChanged.connect(update_axes)
         update_axes(self.en_fft_box.isChecked())
@@ -82,9 +83,13 @@ class FftScope(QtWidgets.QWidget):
 
     def precondition_data(self):
         """Transforms data into payload values recognised by `update()`"""
+
         def _preconditioner(data: Iterable):
             if self.en_fft_box.isChecked():
-                return [(self.spectrum_frequencies, np.abs(np.fft.rfft(buf * self.hamming)) * np.sqrt(2 * SAMPLE_PERIOD / self.buf_len)) for buf in data]
+                return [
+                    (self.spectrum_frequencies, np.abs(np.fft.rfft(buf * self.hamming)) *
+                     np.sqrt(2 * SAMPLE_PERIOD / self.buf_len)) for buf in data
+                ]
             else:
                 return [(self.sample_times, buf) for buf in data]
 
