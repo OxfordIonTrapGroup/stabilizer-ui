@@ -45,4 +45,6 @@ def link_slider_to_spinbox(slider: QtWidgets.QSlider,
 
 def fmt_mac(mac: str) -> str:
     mac_nosep = "".join(c for c in mac if c.isalnum()).lower()
+    if len(mac_nosep) != 12 or any(char not in "abcdef" for char in mac_nosep):
+        raise ValueError(f"Invalid MAC address: {mac}")
     return "-".join(textwrap.wrap(mac_nosep, 2))

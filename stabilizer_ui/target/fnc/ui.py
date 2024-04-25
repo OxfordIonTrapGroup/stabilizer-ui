@@ -40,6 +40,10 @@ class UiWindow(AbstractUiWindow):
         self.channels = self.channelTabWidget.channels
         self.clockWidget = ClockWidget()
 
+        # As of 23/04/2024, updating the clock at runtime causes timing issues.
+        # Disable the clock widget until this is resolved.
+        self.clockWidget.setEnabled(False)
+
         self.settingsLayout.addWidget(self.clockWidget)
         self.settingsLayout.addWidget(self.channelTabWidget)
 
@@ -155,10 +159,10 @@ class UiWindow(AbstractUiWindow):
 
             settings_map[
                 stabilizer.frequency_dds_outs[ch].get_path_from_root()] = UiMqttConfig(
-                    [self.channels[ch].ddsOutFrequencyBox])
+                    [self.channels[ch].ddsOutFrequencyBox], *self.mega)
             settings_map[
                 stabilizer.frequency_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
-                    [self.channels[ch].ddsInFrequencyBox])
+                    [self.channels[ch].ddsInFrequencyBox], *self.mega)
 
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
