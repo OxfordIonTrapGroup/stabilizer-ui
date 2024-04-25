@@ -38,13 +38,13 @@ class FftScope(QtWidgets.QWidget):
 
         # Maps `self.en_fft_box.isChecked()` to a dictionary of axis settings.
         self.scope_config = [{
-            True: [{
+            True: {
                 "ylabel": f"ASD / ({unit}/sqrt(Hz))",
                 "xlabel": "Frequency / kHz",
                 "log": [True, True],
                 "xrange": self.DEFAULT_FFT_X_RANGE,
                 "yrange": self.DEFAULT_FFT_Y_RANGE,
-            }],
+            },
             False: {
                 "ylabel": f"Amplitude / {unit}",
                 "xlabel": "Time / ms",
