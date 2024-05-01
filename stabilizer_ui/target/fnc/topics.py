@@ -61,6 +61,9 @@ class Ui:
                 [f"iir{iir}" for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])
             for ch in range(NUM_CHANNELS)
         ]
+        self.dds_io_link_checkboxes = [
+            ui_channels[ch].create_child("dds_in_checkbox") for ch in range(NUM_CHANNELS)
+        ]
 
         for ch in range(NUM_CHANNELS):
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
