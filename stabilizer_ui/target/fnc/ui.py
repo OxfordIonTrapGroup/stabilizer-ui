@@ -76,8 +76,8 @@ class UiWindow(AbstractUiWindow):
                 filter_params = {setting.name: setting.value for setting in filter.get_children()}
                 ba = get_filter(filter_type).get_coefficients(**filter_params)
 
-            _iir_settings = self.channels[_ch].iir_settings[_iir]
-            _iir_settings.update_transfer_function(ba)
+            _iir_widgets = self.channels[_ch].iir_widgets[_iir]
+            _iir_widgets.update_transfer_function(ba)
 
     # I gains in KiloHertz
     kilo = (
@@ -169,7 +169,7 @@ class UiWindow(AbstractUiWindow):
 
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
-                iirWidget = self.channels[ch].iir_settings[iir]
+                iirWidget = self.channels[ch].iir_widgets[iir]
 
                 for child in ui.iirs[ch][iir].get_children(
                     ["y_offset", "y_min", "y_max", "x_offset"]):

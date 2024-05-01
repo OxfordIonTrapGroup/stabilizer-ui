@@ -20,8 +20,8 @@ class AbstractChannelSettings(QtWidgets.QWidget):
         self.afeGainBox.addItems(self.afe_options)
 
     def _add_iir_tabWidget(self):
-        self.iir_settings = [_IIRWidget(), _IIRWidget()]
-        for i, iir in enumerate(self.iir_settings):
+        self.iir_widgets = [_IIRWidget(), _IIRWidget()]
+        for i, iir in enumerate(self.iir_widgets):
             self.IIRTabs.addTab(iir, f"Filter {i}")
 
 
