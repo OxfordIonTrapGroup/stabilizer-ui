@@ -86,7 +86,8 @@ class UiMqttBridge:
         self.panicked = False
 
     @classmethod
-    async def new(cls, broker_address: NetworkAddress, will_message: Optional[MqttMessage] = None, *args, **kwargs):
+    async def new(cls, broker_address: NetworkAddress, *args, **kwargs):
+        will_message = kwargs.pop("will_message", None)
         client = MqttClient(client_id="", will_message=will_message)
         host, port = broker_address.get_ip(), broker_address.port
         try:
