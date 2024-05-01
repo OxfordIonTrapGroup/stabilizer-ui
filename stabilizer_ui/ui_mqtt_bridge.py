@@ -1,10 +1,10 @@
 import asyncio
-from typing import NamedTuple, List, Callable, Any, Dict
+from typing import NamedTuple, List, Callable, Any, Dict, Optional
 import logging
 import json
 
 from PyQt5 import QtWidgets
-from gmqtt import Client as MqttClient
+from gmqtt import Client as MqttClient, Message as MqttMessage
 from .widgets.ui import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
@@ -13,6 +13,15 @@ logger = logging.getLogger(__name__)
 class NetworkAddress(NamedTuple):
     ip: List[int]
     port: int = 9293
+
+    @classmethod
+    def unspecified(cls):
+        return cls.from_str_ip("0.0.0.0", 0)
+
+    @classmethod
+    def from_str_ip(cls, ip: str, port: int):
+        _ip = list(map(int, ip.split(".")))
+        return cls(_ip, port)
 
     def get_ip(self) -> str:
         return ".".join(map(str, self.ip))
@@ -77,8 +86,8 @@ class UiMqttBridge:
         self.panicked = False
 
     @classmethod
-    async def new(cls, broker_address: NetworkAddress, *args, **kwargs):
-        client = MqttClient(client_id="")
+    async def new(cls, broker_address: NetworkAddress, will_message: Optional[MqttMessage] = None, *args, **kwargs):
+        client = MqttClient(client_id="", will_message=will_message)
         host, port = broker_address.get_ip(), broker_address.port
         try:
             await client.connect(host, port=port, keepalive=10)
