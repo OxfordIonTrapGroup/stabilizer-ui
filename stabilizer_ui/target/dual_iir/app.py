@@ -33,8 +33,10 @@ parser = Parser([AdcDecoder(), DacDecoder()])
 
 class UI(AbstractUiWindow):
 
-    def __init__(self):
+    def __init__(self, title: str = "Dual IIR"):
         super().__init__()
+
+        self.setWindowTitle(title)
 
         wid = QtWidgets.QWidget(self)
         self.setCentralWidget(wid)
@@ -49,7 +51,7 @@ class UI(AbstractUiWindow):
         layout.addWidget(self.tab_channel_settings)
 
         # Create UI for FFT scope.
-        self.fft_scope = FftScope(parser.StreamData)
+        self.fft_scope = FftScope(parser)
         layout.addWidget(self.fft_scope)
 
         # Set main window layout
@@ -212,10 +214,9 @@ def main():
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
 
-        ui = UI()
+        ui = UI(f"{args.name} [{fmt_mac(args.stabilizer_mac)}]")
         ui.resize(*DEFAULT_WINDOW_SIZE)
         ui.show()
-        ui.setWindowTitle(args.name + f" [{fmt_mac(args.stabilizer_mac)}]")
 
         stabilizer_interface = StabilizerInterface()
 

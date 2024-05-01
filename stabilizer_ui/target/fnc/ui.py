@@ -20,8 +20,9 @@ logger = logging.getLogger(__name__)
 class UiWindow(AbstractUiWindow):
     """ Main UI window for FNC"""
 
-    def __init__(self):
+    def __init__(self, title: str = "FNC"):
         super().__init__()
+        self.setWindowTitle(title)
 
         # Set up main window with Horizontal layout
         self.setCentralWidget(QtWidgets.QWidget(self))
@@ -31,8 +32,8 @@ class UiWindow(AbstractUiWindow):
         # Add FFT scope next to a vertical layout for settings
         self.settingsLayout = QtWidgets.QVBoxLayout()
 
-        fftParser = Parser([AdcDecoder(), PhaseOffsetDecoder()])
-        self.fftScopeWidget = FftScope(fftParser)
+        streamParser = Parser([AdcDecoder(), PhaseOffsetDecoder()])
+        self.fftScopeWidget = FftScope(streamParser)
         self.centralWidgetLayout.addLayout(self.settingsLayout)
         self.centralWidgetLayout.addWidget(self.fftScopeWidget)
 

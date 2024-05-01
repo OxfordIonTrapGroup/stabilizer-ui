@@ -126,11 +126,12 @@ class TextEditLogHandler(logging.Handler):
 class UI(QtWidgets.QMainWindow):
     afe_options = ["G1", "G2", "G5", "G10"]
 
-    def __init__(self):
+    def __init__(self, title: str = "Laser lock"):
         super().__init__()
 
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "app.ui")
         uic.loadUi(ui_path, self)
+        self.setWindowTitle(title)
 
         self._link_paired_widgets()
 
@@ -663,6 +664,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Interface for the Vescent + Stabilizer 674 laser lock setup")
     parser.add_argument("-b", "--broker-host", default="10.255.6.4")
+    parser.add_argument("-n", "--name", default="674-lock-ui")
     parser.add_argument("--broker-port", default=1883, type=int)
     parser.add_argument("--stabilizer-mac", default="80-1f-12-5d-47-df")
     parser.add_argument("--stream-port", default=9293, type=int)
@@ -681,7 +683,7 @@ def main():
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
 
-        ui = UI()
+        ui = UI(f"{args.name} [{fmt_mac(args.stabilizer_mac)}]")
         ui.show()
 
         stabilizer_interface = StabilizerInterface()
