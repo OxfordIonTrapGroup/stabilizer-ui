@@ -11,7 +11,7 @@ from .parameters import *
 from ...stream.fft_scope import FftScope
 from ...ui_mqtt_bridge import UiMqttConfig, NetworkAddress
 from ... import ui_mqtt_bridge
-from ...iir.filters import FILTERS
+from ...iir.filters import FILTERS, get_filter
 from ...widgets.ui import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
@@ -70,15 +70,14 @@ class UiWindow(AbstractUiWindow):
             filter_type = ui_iir.get_child("filter").value
             filter = ui_iir.get_child(filter_type)
 
-            # require parameters to be set by application
-            if not filter.has_children():
-                raise ValueError(f"Filter {filter_type} parameter messsages not created.")
-            filter_params = {f.name: f.value for f in filter.get_children()}
+            if filter_type == "none":
+                ba = get_filter("none").get_coefficients()
+            else:
+                filter_params = {setting.name: setting.value for setting in filter.get_children()}
+                ba = get_filter(filter_type).get_coefficients(**filter_params)
 
-            ba = next(f for f in FILTERS
-                      if f.filter_type == filter_type).get_coefficients(**filter_params)
-            _iir_settings = self.channels[_ch].iir_settings[_iir]
-            _iir_settings.update_transfer_function(ba)
+            _iir_widgets = self.channels[_ch].iir_widgets[_iir]
+            _iir_widgets.update_transfer_function(ba)
 
     # I gains in KiloHertz
     kilo = (
@@ -170,7 +169,7 @@ class UiWindow(AbstractUiWindow):
 
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
-                iirWidget = self.channels[ch].iir_settings[iir]
+                iirWidget = self.channels[ch].iir_widgets[iir]
 
                 for child in ui.iirs[ch][iir].get_children(
                     ["y_offset", "y_min", "y_max", "x_offset"]):

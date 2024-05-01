@@ -71,8 +71,8 @@ class UI(AbstractUiWindow):
                 for param in FILTERS[filter_idx].parameters
             }
             ba = FILTERS[filter_idx].get_coefficients(**kwargs)
-            _iir_settings = self.channel_settings[int(channel)].iir_settings[int(iir)]
-            _iir_settings.update_transfer_function(ba)
+            _iir_widget = self.channel_settings[int(channel)].iir_widgets[int(iir)]
+            _iir_widget.update_transfer_function(ba)
 
 
 async def update_stabilizer(
@@ -124,7 +124,7 @@ async def update_stabilizer(
             [ui.channel_settings[c].afeGainBox])
         for iir in range(2):
             name_root = f"ui/{c}/{iir}/"
-            iir_ui = ui.channel_settings[c].iir_settings[iir]
+            iir_ui = ui.channel_settings[c].iir_widgets[iir]
             settings_map[name_root + "filter"] = UiMqttConfig([iir_ui.filterComboBox])
             settings_map[name_root + "x_offset"] = UiMqttConfig([iir_ui.x_offsetBox])
             settings_map[name_root + "y_offset"] = UiMqttConfig([iir_ui.y_offsetBox])
