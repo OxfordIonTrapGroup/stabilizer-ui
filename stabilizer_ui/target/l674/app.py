@@ -215,7 +215,7 @@ def main():
                                "Publishes the state of the l674-lock-ui")
 
         stream_thread = StreamThread(ui.update_stream, FftScope.precondition_data,
-                                     SCOPE_UPDATE_PERIOD, stream_target)
+                                     SCOPE_UPDATE_PERIOD, stream_target, broker_address, loop)
         stream_thread.start()
 
         loop.run_until_complete(
