@@ -108,7 +108,7 @@ async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterf
 
     try:
         bridge = await UiMqttBridge.new(broker_address, settings_map)
-        ui.comm_status_label.setText(
+        ui.set_comm_status(
             f"Connected to MQTT broker at {broker_address.get_ip()}.")
         await bridge.load_ui(Settings, root_topic)
         keys_to_write, ui_updated = bridge.connect_ui()
@@ -150,7 +150,7 @@ async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterf
         if not text:
             # Show message for things like timeout errors.
             text = repr(e)
-        ui.comm_status_label.setText(f"Stabilizer connection error: {text}")
+        ui.set_comm_status(f"Stabilizer connection error: {text}")
         raise e
 
 
@@ -193,7 +193,7 @@ def main():
 
         stabilizer_interface = StabilizerInterface()
 
-        ui.comm_status_label.setText(f"Connecting to MQTT broker at {args.broker_host}…")
+        ui.set_comm_status(f"Connecting to MQTT broker at {args.broker_host}…")
 
         # Find out which local IP address we are going to direct the stream to.
         # Assume the local IP address is the same for the broker and the stabilizer.

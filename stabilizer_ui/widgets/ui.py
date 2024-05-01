@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMainWindow, QMessageBox
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QLabel, QStatusBar
 from typing import Optional
 
 
@@ -10,6 +10,17 @@ class AbstractUiWindow(QMainWindow):
 
         self.stabilizerOnline = True
         self.stylesheet = {}
+
+        self.statusbar = QStatusBar(self)
+        self.statusbar.setObjectName("statusbar")
+        self.setStatusBar(self.statusbar)
+
+        # Add a label to the status bar to show the connection status
+        self.comm_status_label = QLabel()
+        self.statusbar.addPermanentWidget(self.comm_status_label)
+
+    def set_comm_status(self, status: str):
+        self.comm_status_label.setText(status)
 
     def _setStyleSheet(self):
         stylesheet_str = ";".join(

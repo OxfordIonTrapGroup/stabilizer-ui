@@ -45,6 +45,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
 
         try:
             bridge = await UiMqttBridge.new(broker_address, settings_map)
+            ui.set_comm_status(
+                f"Connected to MQTT broker at {broker_address.get_ip()}.")
+
             await bridge.load_ui(lambda x: x, app_root.get_path_from_root(), ui)
             keys_to_write, ui_updated = bridge.connect_ui()
 
@@ -74,7 +77,13 @@ class StabilizerInterface(AbstractStabilizerInterface):
         except BaseException as e:
             if isinstance(e, asyncio.CancelledError):
                 return
-            logger.exception("Failure in Stabilizer communication task")
+            err_msg = str(e)
+            if not err_msg:
+                # Show message for things like timeout errors.
+                err_msg = repr(e)
+            ui.set_comm_status(f"Stabilizer connection error: {err_msg}")
+            logger.exception(f"Stabilizer communication failure: {err_msg}")
+
         finally:
             logger.info(f"Connecting to MQTT broker at {broker_address.get_ip()}.")
 

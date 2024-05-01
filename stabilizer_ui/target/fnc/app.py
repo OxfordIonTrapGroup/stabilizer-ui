@@ -34,7 +34,14 @@ def main():
     parser.add_argument("--stabilizer-mac", default="80-34-28-5f-4f-5d", help="MAC address of the stabilizer")
     parser.add_argument("--stream-port", default=9293, type=int)
     parser.add_argument("--name", default="FNC", help="Application name")
+    parser.add_argument(
+        "--log",
+        default="INFO",
+        choices=["DEBUG, INFO, WARNING, ERROR, CRITICAL"],
+        help="Logging level")
     args = parser.parse_args()
+
+    logger.setLevel(logging.getLevelName(args.log))
 
     app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")
@@ -50,6 +57,8 @@ def main():
         ui.setWindowTitle(args.name + f" [{fmt_mac(args.stabilizer_mac)}]")
         ui.resize(*DEFAULT_WINDOW_SIZE)
         ui.show()
+
+        ui.set_comm_status(f"Connecting to MQTT broker at {args.broker_host}…")
 
         stabilizer_interface = StabilizerInterface()
 

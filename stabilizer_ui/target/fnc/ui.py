@@ -54,10 +54,6 @@ class UiWindow(AbstractUiWindow):
         self.fftScopeWidget.setSizePolicy(fftScopeSizePolicy)
         self.fftScopeWidget.setMinimumSize(400, 200)
 
-        self.statusbar = QtWidgets.QStatusBar(self)
-        self.statusbar.setObjectName("statusbar")
-        self.setStatusBar(self.statusbar)
-
     def update_stream(self, payload):
         self.fftScopeWidget.update(payload)
 
