@@ -1,10 +1,10 @@
 import os
 import numpy as np
 from scipy import signal
-
 from PyQt5 import QtWidgets, uic
 from stabilizer import SAMPLE_PERIOD
-from stabilizer.iir_coefficients import get_filters
+
+from . import filters
 
 
 class AbstractChannelSettings(QtWidgets.QWidget):
@@ -49,7 +49,7 @@ class _IIRWidget(QtWidgets.QWidget):
         uic.loadUi(ui_path, self)
 
         # Obtains dict of filters from stabilizer.py module
-        self.filters = (get_filters())
+        self.filters = (filters.filters())
         self.widgets = {}
 
         # Add filter parameter widgets to filterParamsStack
@@ -61,6 +61,8 @@ class _IIRWidget(QtWidgets.QWidget):
                 _widget = _NotchWidget()
             elif _filter in ["lowpass", "highpass", "allpass"]:
                 _widget = _XPassWidget()
+            elif _filter == "none":
+                _widget = QtWidgets.QWidget()
             else:
                 raise ValueError()
             self.widgets[_filter] = _widget
