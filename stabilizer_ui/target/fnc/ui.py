@@ -163,11 +163,14 @@ class UiWindow(AbstractUiWindow):
             settings_map[
                 stabilizer.frequency_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
                     [self.channels[ch].ddsInFrequencyBox], *self.mega)
+            
+            settings_map[
+                ui.dds_io_link_checkboxes[ch].get_path_from_root()] = UiMqttConfig(
+                    [self.channels[ch].ddsIoFreqLinkCheckBox])
 
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
                 iirWidget = self.channels[ch].iir_settings[iir]
-                # iir_root = stabilizer.iirs[ch][iir]
 
                 for child in ui.iirs[ch][iir].get_children(
                     ["y_offset", "y_min", "y_max", "x_offset"]):
