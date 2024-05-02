@@ -18,12 +18,15 @@ from ...ui_utils import fmt_mac
 
 logger = logging.getLogger(__name__)
 
+#
+# Parameters for the FNC ui.
+#
+
 #: Interval between scope plot updates, in seconds.
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 DEFAULT_WINDOW_SIZE = (1200, 600)
-
 
 def main():
     logging.basicConfig(level=logging.INFO)

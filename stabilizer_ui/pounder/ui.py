@@ -2,9 +2,26 @@ import os
 import logging
 from PyQt5 import QtWidgets, uic
 
-from ..parameters import *
-
 logger = logging.getLogger(__name__)
+
+# 
+# Parameters defining the AD9959 DDS REFCLK settings
+# 
+
+# AD9959 DDS REFCLK SETTINGS
+# Keep these up to date with the firmware
+MIN_REFCLK_FREQUENCY_MHZ = 1
+MIN_MULTIPLIED_REFCLK_FREQUENCY_MHZ = 10
+
+# PLL multiplier settings
+REFCLK_MULTIPLIER_DISABLED = 1
+MIN_REFCLK_ENABLED_MULTIPLIER = 4
+MAX_REFCLK_MULTIPLIER = 20
+
+# The AD9959 DDS VCO can either work in low or high gain mode
+# A portion of the frequency spectrum is inaccessible by either gain
+HIGH_GAIN_VCO_RANGE_MHZ = (255, 500)
+LOW_GAIN_VCO_RANGE_MHZ = (100, 160)
 
 
 class ClockWidget(QtWidgets.QGroupBox):
