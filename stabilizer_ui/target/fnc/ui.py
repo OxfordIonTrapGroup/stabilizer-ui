@@ -10,11 +10,10 @@ from .parameters import *
 from ...pounder.ui import ClockWidget
 from ...stream.fft_scope import FftScope
 from ...mqtt import UiMqttConfig, NetworkAddress
-from ... import mqtt
 from ...iir.filters import FILTERS, get_filter
 from ...iir.channel_settings import AbstractChannelSettings
 from ...widgets import AbstractUiWindow
-
+from ...ui_utils import kilo, kilo2, mega, link_spinbox_to_is_inf_checkbox
 
 logger = logging.getLogger(__name__)
 
@@ -148,23 +147,6 @@ class UiWindow(AbstractUiWindow):
             _iir_widgets = self.channels[_ch].iir_widgets[_iir]
             _iir_widgets.update_transfer_function(ba)
 
-    # I gains in KiloHertz
-    kilo = (
-        lambda w: mqtt.read(w) * 1e3,
-        lambda w, v: mqtt.write(w, v / 1e3),
-    )
-    # II gains in KiloHertz^2
-    kilo2 = (
-        lambda w: mqtt.read(w) * 1e3,
-        lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
-    )
-
-    # Clock in MegaHertz
-    mega = (
-        lambda widgets: mqtt.read(widgets) * 1e6,
-        lambda widgets, value: mqtt.write(widgets, value / 1e6),
-    )
-
     def _is_inf_widgets_readwrite(self):
 
         def read(widgets):
@@ -203,7 +185,7 @@ class UiWindow(AbstractUiWindow):
         settings_map[stabilizer.ext_clk.get_path_from_root()] = UiMqttConfig(
             [self.clockWidget.extClkCheckBox])
         settings_map[stabilizer.ref_clk_frequency.get_path_from_root()] = UiMqttConfig(
-            [self.clockWidget.refFrequencyBox], *self.mega)
+            [self.clockWidget.refFrequencyBox], *mega)
         settings_map[stabilizer.clk_multiplier.get_path_from_root()] = UiMqttConfig(
             [self.clockWidget.multiplierBox])
 
@@ -227,10 +209,10 @@ class UiWindow(AbstractUiWindow):
 
             settings_map[
                 stabilizer.frequency_dds_outs[ch].get_path_from_root()] = UiMqttConfig(
-                    [self.channels[ch].ddsOutFrequencyBox], *self.mega)
+                    [self.channels[ch].ddsOutFrequencyBox], *mega)
             settings_map[
                 stabilizer.frequency_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
-                    [self.channels[ch].ddsInFrequencyBox], *self.mega)
+                    [self.channels[ch].ddsInFrequencyBox], *mega)
             
             settings_map[
                 ui.dds_io_link_checkboxes[ch].get_path_from_root()] = UiMqttConfig(
@@ -261,14 +243,14 @@ class UiWindow(AbstractUiWindow):
                                     widget_attribute("Box"),
                                     widget_attribute("IsInf"),
                                 ],
-                                *self._is_inf_widgets_readwrite(),
+                                *link_spinbox_to_is_inf_checkbox(),
                             )
                         elif param.name in {"f0", "Ki"}:
                             settings_map[param.get_path_from_root()] = UiMqttConfig(
-                                [widget_attribute("Box")], *self.kilo)
+                                [widget_attribute("Box")], *kilo)
                         elif param.name == "Kii":
                             settings_map[param.get_path_from_root()] = UiMqttConfig(
-                                [widget_attribute("Box")], *self.kilo2)
+                                [widget_attribute("Box")], *kilo2)
                         else:
                             settings_map[param.get_path_from_root()] = UiMqttConfig(
                                 [widget_attribute("Box")])

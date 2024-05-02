@@ -1,5 +1,8 @@
 import logging
+import asyncio
 
+from .ui import UiWindow
+from ...mqtt import UiMqttConfig, NetworkAddress, UiMqttBridge, MqttInterface
 from ...interface import AbstractStabilizerInterface
 from ...iir.filters import FILTERS
 
@@ -43,3 +46,55 @@ class StabilizerInterface(AbstractStabilizerInterface):
                 y_min=y_min,
                 y_max=y_max,
             )
+
+    async def update(
+        self,
+        ui: UiWindow,
+        root_topic: str,
+        broker_address: NetworkAddress,
+        stream_target: NetworkAddress,
+    ):
+        settings_map = ui.set_mqtt_configs(stream_target)
+
+        def read_ui():
+            state = {}
+            for key, cfg in settings_map.items():
+                state[key] = cfg.read_handler(cfg.widgets)
+            return state
+
+        try:
+            bridge = await UiMqttBridge.new(broker_address, settings_map)
+            ui.set_comm_status(f"Connected to MQTT broker at {broker_address.get_ip()}.")
+            await bridge.load_ui(lambda x: x, root_topic, ui)
+            keys_to_write, ui_updated = bridge.connect_ui()
+
+            #
+            # Relay user input to MQTT.
+            #
+
+            interface = MqttInterface(bridge.client, root_topic, timeout=10.0)
+
+            # Allow relock task to directly request ADC1 updates.
+            self.set_interface(interface)
+
+            # keys_to_write.update(set(Settings))
+            ui_updated.set()  # trigger initial update
+            while True:
+                await ui_updated.wait()
+                while keys_to_write:
+                    # Use while/pop instead of for loop, as UI task might push extra
+                    # elements while we are executing requests.
+                    key = keys_to_write.pop()
+                    all_params = read_ui()
+                    await self.change(key, all_params)
+                    await ui.update_transfer_function(key, all_params)
+                ui_updated.clear()
+        except BaseException as e:
+            if isinstance(e, asyncio.CancelledError):
+                return
+            err_msg = str(e)
+            if not err_msg:
+                # Show message for things like timeout errors.
+                err_msg = repr(e)
+            ui.set_comm_status(f"Stabilizer connection error: {err_msg}")
+            logger.exception("Failure in Stabilizer communication task")

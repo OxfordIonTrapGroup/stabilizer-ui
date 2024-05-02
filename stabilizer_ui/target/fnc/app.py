@@ -74,7 +74,7 @@ def main():
 
         stabilizer_task = loop.create_task(
             stabilizer_interface.update(ui, broker_address,
-                                        ui.set_mqtt_configs(stream_target)))
+                                        stream_target))
 
         stream_thread = StreamThread(
             ui.update_stream,

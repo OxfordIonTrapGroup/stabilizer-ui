@@ -36,8 +36,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
         self,
         ui: UiWindow,
         broker_address: NetworkAddress,
-        settings_map: dict[str, UiMqttConfig],
+        stream_target: NetworkAddress,
     ):
+        settings_map = ui.set_mqtt_configs(stream_target)
 
         def update_all_topics():
             for key, cfg in settings_map.items():
