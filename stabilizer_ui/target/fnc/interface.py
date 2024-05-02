@@ -1,5 +1,6 @@
 import logging
 import asyncio
+from gmqtt import Message as MqttMessage
 
 from . import topics
 from .topics import app_root
@@ -43,8 +44,12 @@ class StabilizerInterface(AbstractStabilizerInterface):
             for key, cfg in settings_map.items():
                 app_root.get_child(key).value = cfg.read_handler(cfg.widgets)
 
+        # Close the stream upon bad disconnect
+        stream_topic = f"{app_root.get_path_from_root()}/{topics.stabilizer.stream_target.get_path_from_root()}"
+        will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=10)
+
         try:
-            bridge = await UiMqttBridge.new(broker_address, settings_map)
+            bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
             await bridge.load_ui(lambda x: x, app_root.get_path_from_root(), ui)
             keys_to_write, ui_updated = bridge.connect_ui()
 

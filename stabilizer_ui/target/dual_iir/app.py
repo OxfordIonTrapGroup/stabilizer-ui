@@ -8,6 +8,7 @@ from math import inf
 from PyQt5 import QtWidgets
 from qasync import QEventLoop
 from stabilizer.stream import get_local_ip, Parser, AdcDecoder, DacDecoder
+from gmqtt import Message as MqttMessage
 
 from .interface import StabilizerInterface
 
@@ -49,7 +50,7 @@ class UI(AbstractUiWindow):
         layout.addWidget(self.tab_channel_settings)
 
         # Create UI for FFT scope.
-        self.fft_scope = FftScope(parser.StreamData)
+        self.fft_scope = FftScope(parser)
         layout.addWidget(self.fft_scope)
 
         # Set main window layout
@@ -161,8 +162,12 @@ async def update_stabilizer(
             state[key] = cfg.read_handler(cfg.widgets)
         return state
 
+    # Close the stream upon bad disconnect
+    stream_topic = f"{root_topic}/settings/stream_target"
+    will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=10)
+
     try:
-        bridge = await UiMqttBridge.new(broker_address, settings_map)
+        bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
         await bridge.load_ui(lambda x: x, root_topic, ui)
         keys_to_write, ui_updated = bridge.connect_ui()
 
@@ -224,8 +229,7 @@ def main():
         local_ip = get_local_ip(args.broker_host)
         stream_target = NetworkAddress(local_ip, args.stream_port)
 
-        broker_address = NetworkAddress(list(map(int, args.broker_host.split("."))),
-                                        args.broker_port)
+        broker_address = NetworkAddress.from_str_ip(args.broker_host, args.broker_port)
 
         stabilizer_topic = f"dt/sinara/dual-iir/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(

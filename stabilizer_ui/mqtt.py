@@ -4,7 +4,7 @@ from typing import Any, Optional, Iterable
 import logging
 import json
 
-from gmqtt import Client
+from gmqtt import Client as MqttClient
 import uuid
 import stabilizer
 import numpy as np
@@ -32,7 +32,7 @@ class MqttInterface:
     """
 
     def __init__(self,
-                 client: Client,
+                 client: MqttClient,
                  topic_base: str,
                  timeout: float,
                  maxsize: int = 512):

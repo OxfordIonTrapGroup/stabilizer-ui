@@ -58,9 +58,7 @@ def main():
         local_ip = get_local_ip(args.broker_host)
 
         stream_target = NetworkAddress(local_ip, args.stream_port)
-
-        broker_address = NetworkAddress(list(map(int, args.broker_host.split("."))),
-                                        args.broker_port)
+        broker_address = NetworkAddress.from_str_ip(args.broker_host, args.broker_port)
 
         stabilizer_task = loop.create_task(
             stabilizer_interface.update(ui, broker_address,
