@@ -11,7 +11,7 @@ from typing import Callable, Awaitable
 
 from .interface import StabilizerInterface
 from .solstis import EnsureSolstis
-from .wavemeter import WavemeterInterface
+from ...interface import WavemeterInterface
 
 #
 # Parameters for auto-relocking algorithm.

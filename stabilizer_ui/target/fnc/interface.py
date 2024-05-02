@@ -5,8 +5,8 @@ from . import topics
 from .topics import app_root
 
 from .ui import UiWindow
-from ...mqtt import AbstractStabilizerInterface, MqttInterface
-from ...ui_mqtt_bridge import UiMqttBridge, NetworkAddress, UiMqttConfig
+from ...interface import AbstractStabilizerInterface
+from ...mqtt import MqttInterface, UiMqttBridge, NetworkAddress, UiMqttConfig
 from ...iir.filters import FILTERS
 
 logger = logging.getLogger(__name__)

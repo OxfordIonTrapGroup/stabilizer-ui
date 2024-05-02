@@ -1,7 +1,7 @@
 from PyQt5 import QtWidgets
 from stabilizer.stream import Parser, AdcDecoder, DacDecoder
 
-from ...widgets.ui import AbstractUiWindow
+from ...widgets import AbstractUiWindow
 from ...iir.channel_settings import ChannelSettings
 from ...stream.fft_scope import FftScope
 from ...iir.filters import FILTERS

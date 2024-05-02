@@ -1,6 +1,6 @@
 from typing import Optional, List, Self, Callable
 
-from .ui_mqtt_bridge import UiMqttConfig
+from .mqtt import UiMqttConfig
 
 
 class TopicTree:

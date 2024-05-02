@@ -4,7 +4,7 @@ from enum import Enum, unique
 import numpy as np
 from stabilizer import SAMPLE_PERIOD
 
-from ...mqtt import AbstractStabilizerInterface
+from ...interface import AbstractStabilizerInterface
 
 logger = logging.getLogger(__name__)
 

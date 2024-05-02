@@ -9,10 +9,10 @@ from .widgets.channels import ChannelTabWidget
 from .parameters import *
 
 from ...stream.fft_scope import FftScope
-from ...ui_mqtt_bridge import UiMqttConfig, NetworkAddress
-from ... import ui_mqtt_bridge
+from ...mqtt import UiMqttConfig, NetworkAddress
+from ... import mqtt
 from ...iir.filters import FILTERS, get_filter
-from ...widgets.ui import AbstractUiWindow
+from ...widgets import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
 
@@ -78,19 +78,19 @@ class UiWindow(AbstractUiWindow):
 
     # I gains in KiloHertz
     kilo = (
-        lambda w: ui_mqtt_bridge.read(w) * 1e3,
-        lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
+        lambda w: mqtt.read(w) * 1e3,
+        lambda w, v: mqtt.write(w, v / 1e3),
     )
     # II gains in KiloHertz^2
     kilo2 = (
-        lambda w: ui_mqtt_bridge.read(w) * 1e3,
+        lambda w: mqtt.read(w) * 1e3,
         lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
     )
 
     # Clock in MegaHertz
     mega = (
-        lambda widgets: ui_mqtt_bridge.read(widgets) * 1e6,
-        lambda widgets, value: ui_mqtt_bridge.write(widgets, value / 1e6),
+        lambda widgets: mqtt.read(widgets) * 1e6,
+        lambda widgets, value: mqtt.write(widgets, value / 1e6),
     )
 
     def _is_inf_widgets_readwrite(self):

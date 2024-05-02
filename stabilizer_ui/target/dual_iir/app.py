@@ -7,15 +7,15 @@ from math import inf
 
 from PyQt5 import QtWidgets
 from qasync import QEventLoop
-from stabilizer.stream import get_local_ip, Parser, AdcDecoder, DacDecoder
+from stabilizer.stream import get_local_ip
 
 from .ui import UiWindow
 from .interface import StabilizerInterface
 
 from ...mqtt import MqttInterface
 from ...stream.thread import StreamThread
-from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
-from ... import ui_mqtt_bridge
+from ...mqtt import NetworkAddress, UiMqttConfig, UiMqttBridge
+from ... import mqtt
 from ...ui_utils import fmt_mac
 from ...iir.filters import FILTERS
 
@@ -26,8 +26,6 @@ logger = logging.getLogger(__name__)
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 DEFAULT_WINDOW_SIZE = (1200, 600)
 
-parser = Parser([AdcDecoder(), DacDecoder()])
-
 
 async def update_stabilizer(
     ui: UiWindow,
@@ -37,12 +35,12 @@ async def update_stabilizer(
     stream_target: NetworkAddress,
 ):
     kilo = (
-        lambda w: ui_mqtt_bridge.read(w) * 1e3,
-        lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
+        lambda w: mqtt.read(w) * 1e3,
+        lambda w, v: mqtt.write(w, v / 1e3),
     )
     kilo2 = (
-        lambda w: ui_mqtt_bridge.read(w) * 1e3,
-        lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
+        lambda w: mqtt.read(w) * 1e3,
+        lambda w, v: mqtt.write(w, v / 1e3),
     )
 
     def spinbox_checkbox_group():

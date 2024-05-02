@@ -13,7 +13,7 @@ from .ui import UiWindow
 from . import topics
 
 from ...stream.thread import StreamThread
-from ...ui_mqtt_bridge import NetworkAddress
+from ...mqtt import NetworkAddress
 from ...ui_utils import fmt_mac
 
 logger = logging.getLogger(__name__)

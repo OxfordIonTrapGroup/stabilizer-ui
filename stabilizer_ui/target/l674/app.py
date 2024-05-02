@@ -16,8 +16,8 @@ from .lock import monitor_lock_state
 from ...mqtt import MqttInterface
 from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
-from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
-from ... import ui_mqtt_bridge
+from ...mqtt import NetworkAddress, UiMqttConfig, UiMqttBridge
+from ... import mqtt
 from ...ui_utils import fmt_mac
 
 logger = logging.getLogger(__name__)
@@ -31,10 +31,10 @@ async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterf
                             root_topic: str, broker_address: NetworkAddress,
                             stream_target: NetworkAddress):
 
-    invert = (lambda w: not ui_mqtt_bridge.read(w),
-              lambda w, v: ui_mqtt_bridge.write(w, not v))
-    kilo = (lambda w: ui_mqtt_bridge.read(w) * 1e3,
-            lambda w, v: ui_mqtt_bridge.write(w, v / 1e3))
+    invert = (lambda w: not mqtt.read(w),
+              lambda w, v: mqtt.write(w, not v))
+    kilo = (lambda w: mqtt.read(w) * 1e3,
+            lambda w, v: mqtt.write(w, v / 1e3))
 
     def radio_group(choices):
 

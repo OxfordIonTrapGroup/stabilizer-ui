@@ -5,7 +5,7 @@ from collections import deque, namedtuple
 from typing import Callable
 
 from . import MAX_BUFFER_PERIOD
-from ..ui_mqtt_bridge import NetworkAddress
+from ..mqtt import NetworkAddress
 
 from stabilizer.stream import StabilizerStream, AdcDecoder, DacDecoder, Parser, wrap
 from stabilizer import SAMPLE_PERIOD

@@ -7,7 +7,7 @@ from stabilizer.stream import Parser, AdcDecoder, DacDecoder
 from .lock import LockState
 from ...ui_utils import link_slider_to_spinbox
 from ...stream.fft_scope import FftScope
-from ...widgets.ui import AbstractUiWindow
+from ...widgets import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
 
