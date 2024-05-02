@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import queue
 from gmqtt import Message as MqttMessage
 
 from . import topics
@@ -37,8 +38,29 @@ class StabilizerInterface(AbstractStabilizerInterface):
         self,
         ui: UiWindow,
         broker_address: NetworkAddress,
-        settings_map: dict[str, UiMqttConfig],
+        stream_target_queue: asyncio.Queue
     ):
+        # Blocking wait until StreamThread reads the requested stream_target
+        # and queues the target to be used.
+        logger.info("TEMP: Waiting for stream target.")
+        logger.info(f"TEMP: id in main {id(stream_target_queue)}")
+        try:
+            await asyncio.sleep(2)
+            logger.info("TEMP: asyncio awaited.")
+            # await stream_target_queue.join()
+            # logger.info("TEMP: Stream target received.")
+        except queue.Empty:
+            logger.error("Timeout waiting for stream target.")
+            raise RuntimeError("Timeout waiting for stream target.")
+
+        stream_target = await stream_target_queue.get()
+        logger.info(f"TEMP: Stream target received: {stream_target}")
+        stream_target_queue.task_done()
+        logger.info(f"TEMP: Stream target task done.")
+
+        stream_target = NetworkAddress(stream_target.ip, stream_target.port)
+
+        settings_map = ui.set_mqtt_configs(stream_target)
 
         def update_all_topics():
             for key, cfg in settings_map.items():
@@ -46,11 +68,13 @@ class StabilizerInterface(AbstractStabilizerInterface):
 
         # Close the stream upon bad disconnect
         stream_topic = f"{app_root.get_path_from_root()}/{topics.stabilizer.stream_target.get_path_from_root()}"
-        will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=10)
+        will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=3)
 
         try:
             bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
+            logger.info(f"TEMP: new bridge made")
             await bridge.load_ui(lambda x: x, app_root.get_path_from_root(), ui)
+            logger.info(f"TEMP: loaded UI")
             keys_to_write, ui_updated = bridge.connect_ui()
 
             #

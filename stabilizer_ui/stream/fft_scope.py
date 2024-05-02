@@ -22,6 +22,8 @@ class FftScope(QtWidgets.QWidget):
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scope.ui")
         uic.loadUi(ui_path, self)
 
+        self.parser = parser
+
         scope_plot_items = [
             self.graphics_view.addPlot(row=i, col=j) for i in range(2) for j in range(2)
         ]

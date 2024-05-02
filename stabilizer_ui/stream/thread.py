@@ -1,6 +1,8 @@
 import asyncio
 import time
 import threading
+import queue
+import logging
 from collections import deque, namedtuple
 from typing import Callable
 
@@ -11,6 +13,9 @@ from stabilizer.stream import StabilizerStream, AdcDecoder, DacDecoder, Parser, 
 from stabilizer import SAMPLE_PERIOD
 import numpy as np
 
+
+logger = logging.getLogger(__name__)
+
 # Order is consistent with `AdcDac.to_mu()`.
 # StreamData = namedtuple("StreamData", "ADC0 ADC1 DAC0 DAC1")
 
@@ -19,15 +24,16 @@ CallbackPayload = namedtuple("CallbackPayload", "values download loss")
 
 class StreamThread:
 
-    def __init__(self,
-                 ui_callback: Callable,
-                 precondition_data: Callable,
-                 callback_interval: float,
-                 stream_target: NetworkAddress,
-                 broker_address: NetworkAddress,
-                 main_event_loop: asyncio.AbstractEventLoop,
-                 max_buffer_period: float = MAX_BUFFER_PERIOD,
-                 parser: Parser = Parser([AdcDecoder(), DacDecoder()])):
+    def __init__(
+            self,
+            ui_callback: Callable,
+            precondition_data: Callable,
+            callback_interval: float,
+            stream_target_queue: queue.Queue[NetworkAddress],
+            broker_address: NetworkAddress,
+            parser: Parser,
+            main_event_loop: asyncio.AbstractEventLoop,
+            max_buffer_period: float = MAX_BUFFER_PERIOD):
         maxlen = int(max_buffer_period / SAMPLE_PERIOD)
 
         self._terminate = threading.Event()
@@ -38,7 +44,7 @@ class StreamThread:
                 parser,
                 precondition_data,
                 callback_interval,
-                stream_target,
+                stream_target_queue,
                 broker_address,
                 main_event_loop,
                 self._terminate,
@@ -98,7 +104,7 @@ def stream_worker(
     parser: Parser,
     precondition_data: Callable,
     callback_interval: float,
-    stream_target: NetworkAddress,
+    stream_target_queue: queue.Queue[NetworkAddress],
     broker_address: NetworkAddress,
     main_loop: asyncio.AbstractEventLoop,
     terminate: threading.Event,
@@ -110,15 +116,35 @@ def stream_worker(
     Also, it is not possible to change the Qt event loop. Therefore, we
     have to handle the stream in a separate thread running this function.
     """
+
     buffer = [deque(np.zeros(maxlen), maxlen=maxlen) for _ in range(parser.n_sources)]
     stat = StreamStats()
 
     async def handle_stream():
         """This coroutine doesn't run in the main thread's loop!"""
+        logger.info("TEMP: entered handle_stream coroutine")
+        stream_target = await stream_target_queue.get_threadsafe()
+        logger.info("TEMP: blocking get in stream worker")
+        logger.info(f"TEMP: queue id in stream thread: {id(stream_target_queue)}")
+        stream_target_queue.task_done()
+
+        logger.info("TEMP: blocking await done in stream worker")
+
         transport, stream = await StabilizerStream.open(stream_target.get_ip(),
                                                         stream_target.port,
                                                         broker_address.get_ip(), [parser],
                                                         maxsize=1)
+
+        allocated_stream_port = transport.get_extra_info("sockname")[1]
+        stream_target = NetworkAddress(stream_target.ip, allocated_stream_port)
+
+        logger.info("TEMP: Sending stream target to main thread")
+        await stream_target_queue.put_threadsafe(stream_target)
+        # Wait for main thread to read the port
+        logger.info("TEMP: Waiting for main thread to read the port")
+        await stream_target_queue.join_threadsafe()
+        logger.info("TEMP: Done waiting for main thread to read the port")
+
         try:
             while not terminate.is_set():
                 frame = await stream.queue.get()
@@ -130,6 +156,7 @@ def stream_worker(
 
     async def handle_callback():
         """This coroutine doesn't run in the main thread's loop!"""
+        logger.info("TEMP: entered handle_callback coroutine")
         while not terminate.is_set():
             while not all(map(len, buffer)):
                 await asyncio.sleep(callback_interval)
@@ -150,12 +177,15 @@ def stream_worker(
         """
         return True
 
+    logger.info("TEMP: Starting stream worker")
     # Wait for the future to return.
     asyncio.run_coroutine_threadsafe(_wait_for_main_loop(), main_loop).result()
 
     new_loop = asyncio.SelectorEventLoop()
     # Setting the event loop here only applies locally to this thread.
     asyncio.set_event_loop(new_loop)
+
+    logger.info("TEMP: Gathering coros")
 
     tasks = asyncio.gather(handle_callback(), handle_stream())
     new_loop.run_until_complete(tasks)
