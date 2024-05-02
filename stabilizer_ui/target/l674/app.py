@@ -7,8 +7,9 @@ import sys
 from typing import Awaitable, Callable
 from contextlib import suppress
 from enum import Enum, unique
-
 import numpy as np
+
+from gmqtt import Message as MqttMessage
 from PyQt5 import QtGui, QtWidgets, uic
 from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
@@ -264,8 +265,12 @@ async def update_stabilizer(ui: UI, stabilizer_interface: StabilizerInterface,
             state[key] = cfg.read_handler(cfg.widgets)
         return state
 
+    # Close the stream upon bad disconnect
+    stream_topic = f"{root_topic}/{Settings.stream_target.value}"
+    will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=10)
+
     try:
-        bridge = await UiMqttBridge.new(broker_address, settings_map)
+        bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
         ui.comm_status_label.setText(
             f"Connected to MQTT broker at {broker_address.get_ip()}.")
         await bridge.load_ui(Settings, root_topic)

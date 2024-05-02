@@ -119,11 +119,6 @@ class UiWindow(AbstractUiWindow):
 
         settings_map = {}
 
-        settings_map[stabilizer.stream_target.get_path_from_root()] = UiMqttConfig(
-            [],
-            lambda _: stream_target._asdict(),
-            lambda _w, _v: stream_target._asdict(),
-        )
         # `ui/#` are only used by the UI, the others by both UI and stabilizer
         settings_map[stabilizer.stream_target.get_path_from_root()] = UiMqttConfig(
             [],

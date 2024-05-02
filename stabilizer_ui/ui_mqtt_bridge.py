@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 class NetworkAddress(NamedTuple):
     ip: List[int]
     port: int = 9293
-
-    @classmethod
-    def unspecified(cls):
-        return cls.from_str_ip("0.0.0.0", 0)
+    
+    """Mirrors `smoltcp::wire::IpAddress::is_unspecified` in Rust, for IPv4 addresses"""
+    def is_unspecified(self):
+        return self.ip == [0, 0, 0, 0]
 
     @classmethod
     def from_str_ip(cls, ip: str, port: int):
@@ -25,6 +25,9 @@ class NetworkAddress(NamedTuple):
 
     def get_ip(self) -> str:
         return ".".join(map(str, self.ip))
+
+
+NetworkAddress.UNSPECIFIED = NetworkAddress([0, 0, 0, 0], 0)
 
 
 def read(widgets):
@@ -85,8 +88,23 @@ class UiMqttBridge:
         self.configs = configs
         self.panicked = False
 
+    
     @classmethod
-    async def new(cls, broker_address: NetworkAddress, will_message: Optional[MqttMessage] = None, *args, **kwargs):
+    async def new(cls, broker_address: NetworkAddress, *args, **kwargs):
+        r"""Factory method to create a new MQTT connection
+            :param broker_address: Address of the MQTT broker
+            :type broker_address: NetworkAddress
+            :param args: Additional arguments to pass to the constructor
+
+            :Keyword Arguments:
+                * *will_message* (``gmqtt.Message``) -- Last will and testament message
+                * *kwargs* -- Additional keyword arguments to pass to the constructor
+
+            :return: A new instance of UiMqttBridge
+
+        """
+        will_message: Optional[MqttMessage] = kwargs.pop("will_message", None)
+
         client = MqttClient(client_id="", will_message=will_message)
         host, port = broker_address.get_ip(), broker_address.port
         try:
