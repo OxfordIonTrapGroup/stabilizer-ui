@@ -13,6 +13,8 @@ from . import MAX_BUFFER_PERIOD, SCOPE_TIME_SCALE
 #: PyQt's drawing speed limits value.
 DEFAULT_SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
+GRAPHICSLAYOUT_BORDER_WIDTH = 0.2
+LEGEND_OFFSET = (-10, 10)
 
 class FftScope(QtWidgets.QWidget):
     DEFAULT_Y_RANGE = (-11, 11)
@@ -36,8 +38,10 @@ class FftScope(QtWidgets.QWidget):
         # Maximise space utilisation.
         self.graphics_view.ci.layout.setContentsMargins(0, 0, 0, 0)
         self.graphics_view.ci.layout.setSpacing(0)
+        self.graphics_view.centralWidget.setBorder(width=GRAPHICSLAYOUT_BORDER_WIDTH)
+
         # Use legend instead of title to save space.
-        legends = [plt.addLegend(offset=(-10, 10)) for plt in scope_plot_items]
+        legends = [plt.addLegend(offset=LEGEND_OFFSET) for plt in scope_plot_items]
         # Create the objects holding the data to plot.
         self._scope_plot_data_items = [plt.plot() for plt in scope_plot_items]
         for legend, item, title in zip(legends, self._scope_plot_data_items,
