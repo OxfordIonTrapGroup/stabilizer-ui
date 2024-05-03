@@ -13,10 +13,6 @@ logger = logging.getLogger(__name__)
 class NetworkAddress(NamedTuple):
     ip: List[int]
     port: int = 9293
-    
-    """Mirrors `smoltcp::wire::IpAddress::is_unspecified` in Rust, for IPv4 addresses"""
-    def is_unspecified(self):
-        return self.ip == [0, 0, 0, 0]
 
     @classmethod
     def from_str_ip(cls, ip: str, port: int):
@@ -25,6 +21,10 @@ class NetworkAddress(NamedTuple):
 
     def get_ip(self) -> str:
         return ".".join(map(str, self.ip))
+    
+    def is_unspecified(self):
+        """Mirrors `smoltcp::wire::IpAddress::is_unspecified` in Rust, for IPv4 addresses"""
+        return self.ip == [0, 0, 0, 0]
 
 
 NetworkAddress.UNSPECIFIED = NetworkAddress([0, 0, 0, 0], 0)
