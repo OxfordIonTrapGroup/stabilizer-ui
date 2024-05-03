@@ -1,11 +1,12 @@
 import logging
 import asyncio
 from gmqtt import Message as MqttMessage
+from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
 
 from . import topics
 from .topics import app_root
-
 from .ui import UiWindow
+
 from ...mqtt import AbstractStabilizerInterface, MqttInterface
 from ...ui_mqtt_bridge import UiMqttBridge, NetworkAddress, UiMqttConfig
 from ...iir.filters import FILTERS
@@ -18,6 +19,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
     Interface for the FNC stabilizer.
     """
     iir_ch_topic_base = topics.stabilizer.iir_root.get_path_from_root()
+
+    def __init__(self):
+        super().__init__(DEFAULT_FNC_SAMPLE_PERIOD)
 
     async def triage_setting_change(self, setting):
         logger.info(f"Changing setting {setting.get_path_from_root()}': {setting.value}")

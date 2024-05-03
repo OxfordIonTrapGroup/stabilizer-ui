@@ -14,7 +14,7 @@ qasync = "^0.27.1"
 websockets = "^12.0"
 pyqtgraph = "^0.13.4"
 numpy = "^1.21.0"
-stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
+stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py", branch = "py/params" }
 
 # As of 2024-04-19, the newer releases of PyQt5-Qt5 on PyPi only have MacOS wheels.
 # 5.15.2 is the latest release to support other platforms, but MacOS ARM builds 

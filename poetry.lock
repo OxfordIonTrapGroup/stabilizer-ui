@@ -161,13 +161,13 @@ woff = ["brotli (>=1.0.1)", "brotlicffi (>=0.8.0)", "zopfli (>=0.1.4)"]
 
 [[package]]
 name = "gmqtt"
-version = "0.6.14"
+version = "0.6.16"
 description = "Client for MQTT protocol"
 optional = false
 python-versions = ">=3.5"
 files = [
-    {file = "gmqtt-0.6.14-py3-none-any.whl", hash = "sha256:aed71c5e4bbcb8abde923ba917a733408c3d7988b9d9fcc2fdb04717504d5ed7"},
-    {file = "gmqtt-0.6.14.tar.gz", hash = "sha256:45b0f7794247455b9163155eeedf41c86e303c72b79056bf65d33038b17443a3"},
+    {file = "gmqtt-0.6.16-py3-none-any.whl", hash = "sha256:577f9170a88c98c0b16e9ca5cc895d5a3ee82615ace628757454500e565bd12f"},
+    {file = "gmqtt-0.6.16.tar.gz", hash = "sha256:ddd1fdc1c6ae604e74377cf70e99f067e579c03c1c71a6acd494e199e93b7fa4"},
 ]
 
 [package.extras]
@@ -665,13 +665,13 @@ files = [
 
 [[package]]
 name = "pyqtgraph"
-version = "0.13.6"
+version = "0.13.7"
 description = "Scientific Graphics and GUI Library for Python"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "pyqtgraph-0.13.6-py3-none-any.whl", hash = "sha256:35740eb7e5908e490c6e06ef6ef15738dfba27ee35b0b0417638d515da6f9226"},
-    {file = "pyqtgraph-0.13.6.tar.gz", hash = "sha256:2397a2197e7ac66920329bf28fb346b038d85a351f8988ccc806ffb79d11573d"},
+    {file = "pyqtgraph-0.13.7-py3-none-any.whl", hash = "sha256:7754edbefb6c367fa0dfb176e2d0610da3ada20aa7a5318516c74af5fb72bf7a"},
+    {file = "pyqtgraph-0.13.7.tar.gz", hash = "sha256:64f84f1935c6996d0e09b1ee66fe478a7771e3ca6f3aaa05f00f6e068321d9e3"},
 ]
 
 [package.dependencies]
@@ -789,8 +789,8 @@ scipy = "*"
 [package.source]
 type = "git"
 url = "https://github.com/OxfordIonTrapGroup/stabilizer.git"
-reference = "HEAD"
-resolved_reference = "d1197f8ba468374ee008c035f0629b9384ac41c2"
+reference = "py/params"
+resolved_reference = "edc58e7169c801c99a154d08073539dd4aca2614"
 subdirectory = "py"
 
 [[package]]
@@ -925,4 +925,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "60479f7bbae920e9993e90f312359cf3627a88274e0ef264541eb1c1d9a92b2f"
+content-hash = "c42d80e22e1e76cc59ecedf4527dca55cd3e1608081f9bdf992ac1ac1db873b9"

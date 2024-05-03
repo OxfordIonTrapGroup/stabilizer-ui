@@ -1,5 +1,4 @@
 import stabilizer.iir_coefficients as iir
-from stabilizer import SAMPLE_PERIOD
 from collections import OrderedDict
 
 class _AbstractArgs:
@@ -13,7 +12,6 @@ class _AbstractArgs:
     @classmethod
     def get_coefficients(cls, *args, **kwargs):
         args = cls(*args, **kwargs)
-        args.sample_period = SAMPLE_PERIOD
         return cls.coefficients_func(args)
 
 

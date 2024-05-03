@@ -1,4 +1,5 @@
 import logging
+from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD
 
 from ...mqtt import AbstractStabilizerInterface
 from ...iir.filters import FILTERS
@@ -12,6 +13,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
     """
 
     iir_ch_topic_base = "settings/iir_ch"
+
+    def __init__(self):
+        super().__init__(DEFAULT_DUAL_IIR_SAMPLE_PERIOD)
 
     async def triage_setting_change(self, setting, all_values):
         logger.info("Setting change'%s'", setting)

@@ -1,6 +1,7 @@
 import logging
 from PyQt5 import QtWidgets
 from math import inf
+from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
 from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
 
 from .topics import stabilizer, ui
@@ -32,7 +33,7 @@ class UiWindow(AbstractUiWindow):
         self.settingsLayout = QtWidgets.QVBoxLayout()
 
         fftParser = Parser([AdcDecoder(), PhaseOffsetDecoder()])
-        self.fftScopeWidget = FftScope(fftParser)
+        self.fftScopeWidget = FftScope(fftParser, DEFAULT_FNC_SAMPLE_PERIOD)
         self.centralWidgetLayout.addLayout(self.settingsLayout)
         self.centralWidgetLayout.addWidget(self.fftScopeWidget)
 
