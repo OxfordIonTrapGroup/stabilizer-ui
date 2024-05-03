@@ -69,7 +69,7 @@ class UI(AbstractUiWindow):
                 param: all_values[path_root + f"{filter_type}/{param}"]
                 for param in FILTERS[filter_idx].parameters
             }
-            ba = FILTERS[filter_idx].get_coefficients(**kwargs)
+            ba = FILTERS[filter_idx].get_coefficients(self.fft_scope.sample_period, **kwargs)
             _iir_widget = self.channel_settings[int(channel)].iir_widgets[int(iir)]
             _iir_widget.update_transfer_function(ba)
 

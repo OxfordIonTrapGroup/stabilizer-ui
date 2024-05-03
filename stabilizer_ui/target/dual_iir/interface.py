@@ -36,7 +36,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
                 param: all_values[path_root + f"{filter_type}/{param}"]
                 for param in FILTERS[filter_idx].parameters
             }
-            ba = FILTERS[filter_idx].get_coefficients(**kwargs)
+            ba = FILTERS[filter_idx].get_coefficients(self.sample_period, **kwargs)
 
             await self.set_iir(
                 channel=int(channel),

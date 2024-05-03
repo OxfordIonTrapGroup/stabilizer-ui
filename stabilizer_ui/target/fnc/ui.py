@@ -75,7 +75,7 @@ class UiWindow(AbstractUiWindow):
                 ba = get_filter("none").get_coefficients()
             else:
                 filter_params = {setting.name: setting.value for setting in filter.get_children()}
-                ba = get_filter(filter_type).get_coefficients(**filter_params)
+                ba = get_filter(filter_type).get_coefficients(self.fftScopeWidget.sample_period, **filter_params)
 
             _iir_widgets = self.channels[_ch].iir_widgets[_iir]
             _iir_widgets.update_transfer_function(ba)

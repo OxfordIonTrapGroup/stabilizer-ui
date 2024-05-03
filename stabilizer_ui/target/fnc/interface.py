@@ -97,7 +97,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
         filter_params = {filter.name: filter.value for filter in filters.get_children()}
 
         ba = next(filter for filter in FILTERS
-                  if filter.filter_type == filter_type).get_coefficients(**filter_params)
+                  if filter.filter_type == filter_type).get_coefficients(self.sample_period, **filter_params)
 
         await self.set_iir(
             channel=_ch,
