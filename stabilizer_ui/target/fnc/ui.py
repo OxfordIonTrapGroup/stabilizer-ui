@@ -93,8 +93,8 @@ class UiWindow(AbstractUiWindow):
             filter_type = ui_iir.get_child("filter").value
             filter = ui_iir.get_child(filter_type)
 
-            if filter_type == "none":
-                ba = get_filter("none").get_coefficients()
+            if filter_type in ["though", "block"]:
+                ba = get_filter(filter_type).get_coefficients()
             else:
                 filter_params = {setting.name: setting.value for setting in filter.get_children()}
                 ba = get_filter(filter_type).get_coefficients(self.fftScopeWidget.sample_period, **filter_params)

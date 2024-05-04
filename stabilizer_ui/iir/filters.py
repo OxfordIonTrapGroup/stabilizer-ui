@@ -56,8 +56,8 @@ class PidArgs(_AbstractArgs):
     coefficients_func = iir.pid_coefficients
 
 
-class NoFilterArgs(_AbstractArgs):
-    filter_type = "none"
+class ThroughArgs(_AbstractArgs):
+    filter_type = "through"
     parameters = []
 
     @staticmethod
@@ -69,7 +69,20 @@ class NoFilterArgs(_AbstractArgs):
         return cls.coefficients_func()
 
 
-FILTERS = [NoFilterArgs, PidArgs, NotchArgs, LowpassArgs, HighpassArgs, AllpassArgs]
+class BlockAllArgs(_AbstractArgs):
+    filter_type = "block"
+    parameters = []
+
+    @staticmethod
+    def coefficients_func():
+        return [0, 0, 0, 0, 0]
+
+    @classmethod
+    def get_coefficients(cls, *_args):
+        return cls.coefficients_func()
+
+
+FILTERS = [ThroughArgs, BlockAllArgs, PidArgs, NotchArgs, LowpassArgs, HighpassArgs, AllpassArgs]
 
 
 def filters():
