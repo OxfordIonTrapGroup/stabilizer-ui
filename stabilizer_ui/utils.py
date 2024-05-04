@@ -1,5 +1,6 @@
 from PyQt5 import QtWidgets
 import textwrap
+import asyncio
 
 
 def lerp(start, stop, fractional_position):
@@ -48,3 +49,33 @@ def fmt_mac(mac: str) -> str:
     if len(mac_nosep) != 12 or any(char not in "0123456789abcdef" for char in mac_nosep):
         raise ValueError(f"Invalid MAC address: {mac}")
     return "-".join(textwrap.wrap(mac_nosep, 2))
+
+
+class AsyncThreadsafeQueue(asyncio.Queue):
+    def __init__(self, loop=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._loop = loop or asyncio.get_event_loop()
+
+    async def get_threadsafe(self, timeout=None):
+        '''Get an item from the queue in a threadsafe manner.
+
+        This is equivalent to asyncio.Queue.get(), but can be called from a different thread.
+        '''
+        future = asyncio.run_coroutine_threadsafe(self.get(), self._loop)
+        return future.result(timeout)
+    
+    async def put_threadsafe(self, item, timeout=None):
+        '''Put an item into the queue in a threadsafe manner.
+
+        This is equivalent to asyncio.Queue.put(), but can be called from a different thread.
+        '''
+        future = asyncio.run_coroutine_threadsafe(self.put(item), self._loop)
+        return future.result(timeout)
+    
+    async def join_threadsafe(self, timeout=None):
+        '''Block until all items in the queue have been gotten and processed in a threadsafe manner.
+
+        This is equivalent to asyncio.Queue.join(), but can be called from a different thread.
+        '''
+        future = asyncio.run_coroutine_threadsafe(self.join(), self._loop)
+        return future.result(timeout)

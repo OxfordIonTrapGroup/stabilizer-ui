@@ -2,9 +2,10 @@ import argparse
 import asyncio
 import logging
 import sys
+import queue
+
 from contextlib import suppress
 from math import inf
-
 from PyQt5 import QtWidgets
 from qasync import QEventLoop
 from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD
@@ -19,7 +20,7 @@ from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
 from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import ui_mqtt_bridge
-from ...ui_utils import fmt_mac
+from ...utils import fmt_mac, AsyncThreadsafeQueue
 from ...iir.filters import FILTERS
 from ...widgets.ui import AbstractUiWindow
 
@@ -79,7 +80,7 @@ async def update_stabilizer(
     stabilizer_interface: StabilizerInterface,
     root_topic: str,
     broker_address: NetworkAddress,
-    stream_target: NetworkAddress,
+    stream_target_queue: AsyncThreadsafeQueue[NetworkAddress],
 ):
     kilo = (
         lambda w: ui_mqtt_bridge.read(w) * 1e3,
@@ -107,6 +108,16 @@ async def update_stabilizer(
                 widgets[0].setValue(value)
 
         return read, write
+    
+    # Wait for the stream thread to read the initial port.
+    # A bit hacky, would ideally use a join but that seems to lead to a deadlock.
+    # TODO: Get rid of this hack.
+    await asyncio.sleep(1)
+
+    # Wait for stream target to be set
+    stream_target = await stream_target_queue.get()
+    stream_target_queue.task_done()
+    logger.debug("Got stream target from stream thread.")
 
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
@@ -203,9 +214,13 @@ def main():
     parser.add_argument("-b", "--broker-host", default="10.255.6.4")
     parser.add_argument("--broker-port", default=1883, type=int)
     parser.add_argument("--stabilizer-mac", default="80-34-28-5f-59-0b")
-    parser.add_argument("--stream-port", default=9293, type=int)
+    parser.add_argument("--stream-port", default=0, type=int)
     parser.add_argument("--name", default="Dual IIR")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
 
     app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")
@@ -225,7 +240,9 @@ def main():
         # Find out which local IP address we are going to direct the stream to.
         # Assume the local IP address is the same for the broker and the stabilizer.
         local_ip = get_local_ip(args.broker_host)
-        stream_target = NetworkAddress(local_ip, args.stream_port)
+        requested_stream_target = NetworkAddress(local_ip, args.stream_port)
+        stream_target_queue = AsyncThreadsafeQueue(maxsize=1)
+        stream_target_queue.put_nowait(requested_stream_target)
 
         broker_address = NetworkAddress.from_str_ip(args.broker_host, args.broker_port)
 
@@ -236,13 +253,13 @@ def main():
                 stabilizer_interface,
                 stabilizer_topic,
                 broker_address,
-                stream_target,
+                stream_target_queue
             ))
 
         stream_thread = StreamThread(
             ui.update_stream,
             ui.fft_scope,
-            stream_target,
+            stream_target_queue,
             broker_address,
             loop,
         )
