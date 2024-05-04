@@ -789,8 +789,8 @@ scipy = "*"
 [package.source]
 type = "git"
 url = "https://github.com/OxfordIonTrapGroup/stabilizer.git"
-reference = "py/params"
-resolved_reference = "fb9f4d650f1b7b3b6bdbea816015a4493808582e"
+reference = "HEAD"
+resolved_reference = "4c72e8ab70899c22584196c7da0338adab605e2b"
 subdirectory = "py"
 
 [[package]]
@@ -925,4 +925,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "c42d80e22e1e76cc59ecedf4527dca55cd3e1608081f9bdf992ac1ac1db873b9"
+content-hash = "60479f7bbae920e9993e90f312359cf3627a88274e0ef264541eb1c1d9a92b2f"
