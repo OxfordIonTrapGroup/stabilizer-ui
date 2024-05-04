@@ -44,25 +44,15 @@ class StabilizerInterface(AbstractStabilizerInterface):
         broker_address: NetworkAddress,
         stream_target_queue: asyncio.Queue
     ):
-        # Blocking wait until StreamThread reads the requested stream_target
-        # and queues the target to be used.
-        logger.info("TEMP: Waiting for stream target.")
-        logger.info(f"TEMP: id in main {id(stream_target_queue)}")
-        try:
-            await asyncio.sleep(2)
-            logger.info("TEMP: asyncio awaited.")
-            # await stream_target_queue.join()
-            # logger.info("TEMP: Stream target received.")
-        except queue.Empty:
-            logger.error("Timeout waiting for stream target.")
-            raise RuntimeError("Timeout waiting for stream target.")
+        # Wait for the stream thread to read the initial port.
+        # A bit hacky, would ideally use a join but that seems to lead to a deadlock.
+        # TODO: Get rid of this hack.
+        await asyncio.sleep(1)
 
+        # Wait for stream target to be set
         stream_target = await stream_target_queue.get()
-        logger.info(f"TEMP: Stream target received: {stream_target}")
         stream_target_queue.task_done()
-        logger.info(f"TEMP: Stream target task done.")
-
-        stream_target = NetworkAddress(stream_target.ip, stream_target.port)
+        logger.debug("Got stream target from stream thread.")
 
         settings_map = ui.set_mqtt_configs(stream_target)
 
@@ -76,9 +66,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
 
         try:
             bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
-            logger.info(f"TEMP: new bridge made")
             await bridge.load_ui(lambda x: x, app_root.get_path_from_root(), ui)
-            logger.info(f"TEMP: loaded UI")
             keys_to_write, ui_updated = bridge.connect_ui()
 
             #
@@ -104,6 +92,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
                     await self.change(setting)
                     await ui.update_transfer_function(setting)
                 ui_updated.clear()
+
         except BaseException as e:
             if isinstance(e, asyncio.CancelledError):
                 return
@@ -112,8 +101,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
             logger.info(f"Connecting to MQTT broker at {broker_address.get_ip()}.")
 
     async def _change_filter_setting(self, iir_setting):
-        (_ch,
-         _iir_idx) = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
+        (_ch, _iir_idx) = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
 
         filter_type = iir_setting.get_child("filter").value
         filters = iir_setting.get_child(filter_type)

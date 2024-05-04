@@ -24,6 +24,7 @@ SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 DEFAULT_WINDOW_SIZE = (1400, 600)
 
+
 def main():
     logging.basicConfig(level=logging.INFO)
 
@@ -33,7 +34,11 @@ def main():
     parser.add_argument("--stabilizer-mac", default="80-34-28-5f-4f-5d", help="MAC address of the stabilizer")
     parser.add_argument("--stream-port", default=0, type=int)
     parser.add_argument("--name", default="FNC", help="Application name")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
 
     app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")
