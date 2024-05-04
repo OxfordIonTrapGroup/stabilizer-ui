@@ -14,7 +14,7 @@ from . import topics
 
 from ...stream.thread import StreamThread
 from ...ui_mqtt_bridge import NetworkAddress
-from ...ui_utils import fmt_mac, AsyncThreadsafeQueue
+from ...utils import fmt_mac, AsyncThreadsafeQueue
 
 logger = logging.getLogger(__name__)
 

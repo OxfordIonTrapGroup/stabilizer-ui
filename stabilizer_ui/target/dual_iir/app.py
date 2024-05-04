@@ -20,7 +20,7 @@ from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
 from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import ui_mqtt_bridge
-from ...ui_utils import fmt_mac, AsyncThreadsafeQueue
+from ...utils import fmt_mac, AsyncThreadsafeQueue
 from ...iir.filters import FILTERS
 from ...widgets.ui import AbstractUiWindow
 

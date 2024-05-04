@@ -25,7 +25,7 @@ from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
 from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import ui_mqtt_bridge
-from ...ui_utils import link_slider_to_spinbox, fmt_mac, AsyncThreadsafeQueue
+from ...utils import link_slider_to_spinbox, fmt_mac, AsyncThreadsafeQueue
 
 logger = logging.getLogger(__name__)
 
