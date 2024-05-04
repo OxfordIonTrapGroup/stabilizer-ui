@@ -2,6 +2,8 @@ import os
 import numpy as np
 from scipy import signal
 from PyQt5 import QtWidgets, uic
+from PyQt5.QtWidgets import QSpinBox
+from artiq.gui.scientific_spinbox import ScientificSpinBox
 
 from . import filters
 
@@ -107,6 +109,9 @@ class _PIDWidget(QtWidgets.QWidget):
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                "widgets/pid_settings.ui")
         uic.loadUi(ui_path, self)
+
+        for spinbox in self.findChildren(ScientificSpinBox):
+            spinbox.setSigFigs(3)
 
 
 class _NotchWidget(QtWidgets.QWidget):
