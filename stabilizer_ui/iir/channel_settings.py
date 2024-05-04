@@ -1,7 +1,8 @@
 import os
 import numpy as np
 from scipy import signal
-from PyQt5 import QtWidgets, uic
+from PyQt5 import QtWidgets, QtCore, uic
+from artiq.gui.scientific_spinbox import ScientificSpinBox
 
 from . import filters
 
@@ -58,16 +59,25 @@ class _IIRWidget(QtWidgets.QWidget):
             self.filterComboBox.addItem(_filter)
             if _filter == "pid":
                 _widget = _PIDWidget()
+                _tooltip = "PID"
             elif _filter == "notch":
                 _widget = _NotchWidget()
+                _tooltip = "Notch filter"
             elif _filter in ["lowpass", "highpass", "allpass"]:
                 _widget = _XPassWidget()
-            elif _filter == "none":
+                _tooltip = f"{_filter.capitalize()} filter"
+            elif _filter == "through":
                 _widget = QtWidgets.QWidget()
+                _tooltip = "Passes the input through unfiltered"
+            elif _filter == "block":
+                _widget = QtWidgets.QWidget()
+                _tooltip = "Blocks the input via a digital filter"
             else:
                 raise ValueError()
+
             self.widgets[_filter] = _widget
             self.filterParamsStack.addWidget(_widget)
+            self.filterComboBox.setItemData(self.filterComboBox.count() - 1, _tooltip, QtCore.Qt.ToolTipRole)
 
         self.widgets["transferFunctionView"] = self.transferFunctionView.addPlot(row=0,
                                                                                  col=0)
@@ -107,6 +117,9 @@ class _PIDWidget(QtWidgets.QWidget):
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                "widgets/pid_settings.ui")
         uic.loadUi(ui_path, self)
+
+        for spinbox in self.findChildren(ScientificSpinBox):
+            spinbox.setSigFigs(3)
 
 
 class _NotchWidget(QtWidgets.QWidget):
