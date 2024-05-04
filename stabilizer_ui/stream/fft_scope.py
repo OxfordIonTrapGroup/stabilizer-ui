@@ -1,6 +1,5 @@
 import os
 from PyQt5 import QtWidgets, uic
-from stabilizer import SAMPLE_PERIOD
 from stabilizer.stream import Parser
 import numpy as np
 import numpy.fft
@@ -10,17 +9,28 @@ from .thread import CallbackPayload
 
 from . import MAX_BUFFER_PERIOD, SCOPE_TIME_SCALE
 
+#: Interval between scope plot updates, in seconds.
+#: PyQt's drawing speed limits value.
+DEFAULT_SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
+
+GRAPHICSLAYOUT_BORDER_WIDTH = 0.2
+LEGEND_OFFSET = (-10, 10)
 
 class FftScope(QtWidgets.QWidget):
     DEFAULT_Y_RANGE = (-11, 11)
     DEFAULT_X_RANGE = (-MAX_BUFFER_PERIOD / SCOPE_TIME_SCALE, 0)
     DEFAULT_FFT_Y_RANGE = (-7, -1)
-    DEFAULT_FFT_X_RANGE = (-0.5, -np.log10(0.5 * SCOPE_TIME_SCALE / SAMPLE_PERIOD))
 
-    def __init__(self, parser: Parser):
+    def __init__(self, parser: Parser, sample_period: float, update_period=DEFAULT_SCOPE_UPDATE_PERIOD):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scope.ui")
         uic.loadUi(ui_path, self)
+
+        self.stream_parser = parser
+        self.sample_period = sample_period
+        self.update_period = update_period
+
+        self.DEFAULT_FFT_X_RANGE = (-0.5, -np.log10(0.5 * SCOPE_TIME_SCALE / sample_period))
 
         scope_plot_items = [
             self.graphics_view.addPlot(row=i, col=j) for i in range(2) for j in range(2)
@@ -28,8 +38,10 @@ class FftScope(QtWidgets.QWidget):
         # Maximise space utilisation.
         self.graphics_view.ci.layout.setContentsMargins(0, 0, 0, 0)
         self.graphics_view.ci.layout.setSpacing(0)
+        self.graphics_view.centralWidget.setBorder(width=GRAPHICSLAYOUT_BORDER_WIDTH)
+
         # Use legend instead of title to save space.
-        legends = [plt.addLegend(offset=(-10, 10)) for plt in scope_plot_items]
+        legends = [plt.addLegend(offset=LEGEND_OFFSET) for plt in scope_plot_items]
         # Create the objects holding the data to plot.
         self._scope_plot_data_items = [plt.plot() for plt in scope_plot_items]
         for legend, item, title in zip(legends, self._scope_plot_data_items,
@@ -61,12 +73,12 @@ class FftScope(QtWidgets.QWidget):
                 plt.setRange(xRange=cfg["xrange"], yRange=cfg["yrange"], update=False)
                 plt.setLabels(left=cfg["ylabel"], bottom=cfg["xlabel"])
 
-        self.buf_len = int(MAX_BUFFER_PERIOD / SAMPLE_PERIOD)
-        self.sample_times = np.linspace(-self.buf_len * SAMPLE_PERIOD, 0,
+        self.buf_len = int(MAX_BUFFER_PERIOD / self.sample_period)
+        self.sample_times = np.linspace(-self.buf_len * self.sample_period, 0,
                                         self.buf_len) / SCOPE_TIME_SCALE
         self.hamming = np.hamming(self.buf_len)
         self.spectrum_frequencies = np.linspace(
-            0, 0.5 / SAMPLE_PERIOD, floor((self.buf_len + 1) / 2)) * SCOPE_TIME_SCALE
+            0, 0.5 / self.sample_period, floor((self.buf_len + 1) / 2)) * SCOPE_TIME_SCALE
 
         self.en_fft_box.stateChanged.connect(update_axes)
         update_axes(self.en_fft_box.isChecked())
@@ -88,7 +100,7 @@ class FftScope(QtWidgets.QWidget):
             if self.en_fft_box.isChecked():
                 return [
                     (self.spectrum_frequencies, np.abs(np.fft.rfft(buf * self.hamming)) *
-                     np.sqrt(2 * SAMPLE_PERIOD / self.buf_len)) for buf in data
+                     np.sqrt(2 * self.sample_period / self.buf_len)) for buf in data
                 ]
             else:
                 return [(self.sample_times, buf) for buf in data]

@@ -1,4 +1,5 @@
 import os
+from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
 
 from ....iir.channel_settings import AbstractChannelSettings
 from PyQt5 import QtWidgets, uic
@@ -9,14 +10,14 @@ from ..parameters import NUM_CHANNELS
 class ChannelSettings(AbstractChannelSettings):
     """ Channel settings"""
 
-    def __init__(self):
+    def __init__(self, sample_period):
         super().__init__()
 
         uic.loadUi(
             os.path.join(os.path.dirname(os.path.realpath(__file__)), "channel.ui"), self)
 
         self._add_afe_options()
-        self._add_iir_tabWidget()
+        self._add_iir_tabWidget(sample_period)
 
         # Disable mouse wheel scrolling on spinboxes to prevent accidental changes
         spinboxes = self.findChildren(QtWidgets.QDoubleSpinBox)
@@ -71,6 +72,6 @@ class ChannelTabWidget(QtWidgets.QTabWidget):
     def __init__(self):
         super().__init__()
 
-        self.channels = [ChannelSettings() for _ in range(NUM_CHANNELS)]
+        self.channels = [ChannelSettings(DEFAULT_FNC_SAMPLE_PERIOD) for _ in range(NUM_CHANNELS)]
         for i in range(NUM_CHANNELS):
             self.addTab(self.channels[i], f"Channel {i}")

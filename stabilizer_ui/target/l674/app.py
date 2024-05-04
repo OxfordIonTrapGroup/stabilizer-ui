@@ -13,7 +13,8 @@ from gmqtt import Message as MqttMessage
 from PyQt5 import QtGui, QtWidgets, uic
 from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
-from stabilizer.stream import get_local_ip
+from stabilizer import DEFAULT_L674_SAMPLE_PERIOD
+from stabilizer.stream import get_local_ip, Parser, AdcDecoder, DacDecoder
 
 from .interface import StabilizerInterface, Settings
 from .solstis import EnsureSolstis
@@ -154,7 +155,7 @@ class UI(QtWidgets.QMainWindow):
         for afe in [self.afe0GainBox, self.afe1GainBox]:
             afe.addItems(self.afe_options)
 
-        self.scope = FftScope()
+        self.scope = FftScope(Parser([AdcDecoder(), DacDecoder()]), DEFAULT_L674_SAMPLE_PERIOD)
         self.tabWidget.addTab(self.scope, "Scope")
 
     def _link_paired_widgets(self):
@@ -712,8 +713,14 @@ def main():
         server = pc_rpc.Server({"l674_lock_ui": UIStatePublisher(ui)},
                                "Publishes the state of the l674-lock-ui")
 
-        stream_thread = StreamThread(ui.update_stream, FftScope.precondition_data,
-                                     SCOPE_UPDATE_PERIOD, stream_target)
+        stream_thread = StreamThread(
+            ui.update_stream,
+            ui.scope,
+            stream_target,
+            broker_address,
+            loop
+        )
+
         stream_thread.start()
 
         loop.run_until_complete(
