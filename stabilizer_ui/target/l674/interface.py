@@ -2,7 +2,7 @@ import logging
 from enum import Enum, unique
 
 import numpy as np
-from stabilizer import SAMPLE_PERIOD
+from stabilizer import DEFAULT_L674_SAMPLE_PERIOD
 
 from ...mqtt import AbstractStabilizerInterface
 
@@ -67,6 +67,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
     }
     read_adc1_filtered_topic = "read_adc1_filtered"
     iir_ch_topic_base = "settings/iir_ch"
+
+    def __init__(self):
+        super().__init__(DEFAULT_L674_SAMPLE_PERIOD)
 
     async def read_adc(self) -> float:
         await self._interface_set.wait()

@@ -1,6 +1,7 @@
 import logging
 from PyQt5 import QtWidgets
 from math import inf
+from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
 from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
 
 from .topics import stabilizer, ui
@@ -16,6 +17,10 @@ from ...widgets.ui import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_WINDOW_SIZE = (1400, 600)
+DEFAULT_PHASE_PLOT_YRANGE = (0, 1)
+DEFAULT_ADC_PLOT_YRANGE = (-1, 1)
+DEFAULT_ADC_VOLT_PHASE_SCALE = 0.2
 
 class UiWindow(AbstractUiWindow):
     """ Main UI window for FNC"""
@@ -32,9 +37,12 @@ class UiWindow(AbstractUiWindow):
         self.settingsLayout = QtWidgets.QVBoxLayout()
 
         fftParser = Parser([AdcDecoder(), PhaseOffsetDecoder()])
-        self.fftScopeWidget = FftScope(fftParser)
+        self.fftScopeWidget = FftScope(fftParser, DEFAULT_FNC_SAMPLE_PERIOD)
         self.centralWidgetLayout.addLayout(self.settingsLayout)
         self.centralWidgetLayout.addWidget(self.fftScopeWidget)
+
+        # Give any excess space to the FFT scope 
+        self.centralWidgetLayout.setStretchFactor(self.fftScopeWidget, 1)
 
         self.channelTabWidget = ChannelTabWidget()
         self.channels = self.channelTabWidget.channels
@@ -52,10 +60,25 @@ class UiWindow(AbstractUiWindow):
                                                    QtWidgets.QSizePolicy.Expanding)
         self.fftScopeWidget.setSizePolicy(fftScopeSizePolicy)
         self.fftScopeWidget.setMinimumSize(400, 200)
+        
+        # Rescale axes and add an axis converting ADC voltage to phase
+        for i in range(NUM_CHANNELS):
+            adcPlotItem = self.fftScopeWidget.graphics_view.getItem(0, i)
+            adcPlotItem.showAxis("right")
+
+            adcRightAxis = adcPlotItem.getAxis("right")
+            adcRightAxis.setScale(DEFAULT_ADC_VOLT_PHASE_SCALE)
+            adcRightAxis.setLabel("Phase / turns")
+
+            adcPlotItem.setYRange(*DEFAULT_ADC_PLOT_YRANGE)
+
+            self.fftScopeWidget.graphics_view.getItem(1, i).setYRange(*DEFAULT_PHASE_PLOT_YRANGE)
 
         self.statusbar = QtWidgets.QStatusBar(self)
         self.statusbar.setObjectName("statusbar")
         self.setStatusBar(self.statusbar)
+
+        self.resize(*DEFAULT_WINDOW_SIZE)
 
     def update_stream(self, payload):
         self.fftScopeWidget.update(payload)
@@ -70,11 +93,11 @@ class UiWindow(AbstractUiWindow):
             filter_type = ui_iir.get_child("filter").value
             filter = ui_iir.get_child(filter_type)
 
-            if filter_type == "none":
-                ba = get_filter("none").get_coefficients()
+            if filter_type in ["though", "block"]:
+                ba = get_filter(filter_type).get_coefficients()
             else:
                 filter_params = {setting.name: setting.value for setting in filter.get_children()}
-                ba = get_filter(filter_type).get_coefficients(**filter_params)
+                ba = get_filter(filter_type).get_coefficients(self.fftScopeWidget.sample_period, **filter_params)
 
             _iir_widgets = self.channels[_ch].iir_widgets[_iir]
             _iir_widgets.update_transfer_function(ba)

@@ -1,7 +1,7 @@
+from __future__ import annotations
 import asyncio
 import time
 import threading
-import queue
 import logging
 from collections import deque, namedtuple
 from typing import Callable
@@ -9,32 +9,28 @@ from typing import Callable
 from . import MAX_BUFFER_PERIOD
 from ..ui_mqtt_bridge import NetworkAddress
 
-from stabilizer.stream import StabilizerStream, AdcDecoder, DacDecoder, Parser, wrap
-from stabilizer import SAMPLE_PERIOD
+from stabilizer.stream import StabilizerStream, Parser, wrap
 import numpy as np
 
-
-logger = logging.getLogger(__name__)
-
-# Order is consistent with `AdcDac.to_mu()`.
-# StreamData = namedtuple("StreamData", "ADC0 ADC1 DAC0 DAC1")
 
 CallbackPayload = namedtuple("CallbackPayload", "values download loss")
 
 
 class StreamThread:
 
-    def __init__(
-            self,
-            ui_callback: Callable,
-            precondition_data: Callable,
-            callback_interval: float,
-            stream_target_queue: queue.Queue[NetworkAddress],
-            broker_address: NetworkAddress,
-            parser: Parser,
-            main_event_loop: asyncio.AbstractEventLoop,
-            max_buffer_period: float = MAX_BUFFER_PERIOD):
-        maxlen = int(max_buffer_period / SAMPLE_PERIOD)
+    def __init__(self,
+                 ui_callback: Callable,
+                 fftScopeWidget: FftScope,
+                 stream_target_queue: asyncio.Queue[NetworkAddress],
+                 broker_address: NetworkAddress,
+                 main_event_loop: asyncio.AbstractEventLoop,
+                 max_buffer_period: float = MAX_BUFFER_PERIOD
+                 ):
+
+        parser = fftScopeWidget.stream_parser
+        precondition_data = fftScopeWidget.precondition_data()
+        callback_interval = fftScopeWidget.update_period
+        maxlen = int(max_buffer_period / fftScopeWidget.sample_period)
 
         self._terminate = threading.Event()
         self._thread = threading.Thread(

@@ -8,6 +8,7 @@ from contextlib import suppress
 from math import inf
 from PyQt5 import QtWidgets
 from qasync import QEventLoop
+from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD
 from stabilizer.stream import get_local_ip, Parser, AdcDecoder, DacDecoder
 from gmqtt import Message as MqttMessage
 
@@ -25,9 +26,6 @@ from ...widgets.ui import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
 
-#: Interval between scope plot updates, in seconds.
-#: PyQt's drawing speed limits value.
-SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 DEFAULT_WINDOW_SIZE = (1200, 600)
 
 parser = Parser([AdcDecoder(), DacDecoder()])
@@ -43,7 +41,7 @@ class UI(AbstractUiWindow):
         layout = QtWidgets.QHBoxLayout()
 
         # Create UI for channel settings.
-        self.channel_settings = [ChannelSettings(), ChannelSettings()]
+        self.channel_settings = [ChannelSettings(DEFAULT_DUAL_IIR_SAMPLE_PERIOD) for i in range(2)]
 
         self.tab_channel_settings = QtWidgets.QTabWidget()
         for i, channel in enumerate(self.channel_settings):
@@ -51,7 +49,7 @@ class UI(AbstractUiWindow):
         layout.addWidget(self.tab_channel_settings)
 
         # Create UI for FFT scope.
-        self.fft_scope = FftScope(parser)
+        self.fft_scope = FftScope(parser, DEFAULT_DUAL_IIR_SAMPLE_PERIOD)
         layout.addWidget(self.fft_scope)
 
         # Set main window layout
@@ -72,7 +70,7 @@ class UI(AbstractUiWindow):
                 param: all_values[path_root + f"{filter_type}/{param}"]
                 for param in FILTERS[filter_idx].parameters
             }
-            ba = FILTERS[filter_idx].get_coefficients(**kwargs)
+            ba = FILTERS[filter_idx].get_coefficients(self.fft_scope.sample_period, **kwargs)
             _iir_widget = self.channel_settings[int(channel)].iir_widgets[int(iir)]
             _iir_widget.update_transfer_function(ba)
 
@@ -252,8 +250,7 @@ def main():
 
         stream_thread = StreamThread(
             ui.update_stream,
-            ui.fft_scope.precondition_data(),
-            SCOPE_UPDATE_PERIOD,
+            ui.fft_scope,
             stream_target_queue,
             broker_address,
             ui.fft_scope.parser,

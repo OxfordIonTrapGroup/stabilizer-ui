@@ -22,8 +22,7 @@ logger = logging.getLogger(__name__)
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
-DEFAULT_WINDOW_SIZE = (1200, 600)
-
+DEFAULT_WINDOW_SIZE = (1400, 600)
 
 def main():
     logging.basicConfig(level=logging.INFO)
@@ -48,7 +47,6 @@ def main():
 
         ui = UiWindow()
         ui.setWindowTitle(args.name + f" [{fmt_mac(args.stabilizer_mac)}]")
-        ui.resize(*DEFAULT_WINDOW_SIZE)
         ui.show()
 
         stabilizer_interface = StabilizerInterface()
@@ -68,11 +66,9 @@ def main():
 
         stream_thread = StreamThread(
             ui.update_stream,
-            ui.fftScopeWidget.precondition_data(),
-            SCOPE_UPDATE_PERIOD,
+            ui.fftScopeWidget,
             stream_target_queue,
             broker_address,
-            ui.fftScopeWidget.parser,
             loop,
         )
         stream_thread.start()
