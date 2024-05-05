@@ -23,7 +23,7 @@ class TopicTree:
                 subtopics[i].add_child(subtopics[i + 1])
             return subtopics[-1]
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, is_app_root: bool = False):
         """Initialise a new TopicTree node of given name"""
         self._parent = None
         self.name = name
@@ -31,14 +31,19 @@ class TopicTree:
 
         self.children = []
         self.mqtt_config = None
-
-    def __repr__(self):
-        """Internal string representation, uses path from node"""
-        return self.get_path_from_root()
+        self._is_app_root = is_app_root
 
     def __str__(self) -> str:
         """String representation for pretty printing"""
         return self.name
+
+    def set_app_root(self, is_app_root: bool = True) -> None:
+        """Set whether the node is a breakpoint in the path"""
+        self._is_app_root = is_app_root
+
+    def is_app_root(self) -> bool:
+        """Check if the node is a breakpoint in the path"""
+        return self._is_app_root
 
     def set_parent(self, parent: Self) -> None:
         """Set the parent of the node and add the node to the parent's children"""
@@ -136,11 +141,21 @@ class TopicTree:
             return self
         return self._parent.root()
 
-    def get_path_from_root(self, child_path: str = "") -> str:
-        """Get the string path from the root to the node"""
-        if self._parent is None:
+    def get_path_from_root(self, from_app_root: bool = True, child_path: str = "") -> str:
+        r"""Get the string path from the root to the node.
+            If `from_app_root` is True, returns the path from *after* the `app_root`
+            (or the true root, if there are none).
+
+            e.g. If the topic is true_root/app_root/child1/child2, then the
+            path of child2 from app_root is "child1/child2".
+            This is to facilitate getting relative paths from the stabilizer topic.
+
+        :param child_path: str: The path from the current node to the child node. Used for recursion.
+        :param from_app_root: bool: Whether the path is from the app_root or the true_root.
+        """
+        if (self._parent is None) or (self._parent.is_app_root() and from_app_root):
             return f"{self.name}{child_path}"
-        return self._parent.get_path_from_root(f"/{self.name}{child_path}")
+        return self._parent.get_path_from_root(from_app_root, f"/{self.name}{child_path}")
 
     def get_leaves(self, _leaves=[]) -> list[Self]:
         """Get all leaf nodes of the tree"""

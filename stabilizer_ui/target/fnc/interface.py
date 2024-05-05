@@ -59,7 +59,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
                 app_root.get_child(key).value = cfg.read_handler(cfg.widgets)
 
         # Close the stream upon bad disconnect
-        stream_topic = f"{app_root.get_path_from_root()}/{topics.stabilizer.stream_target.get_path_from_root()}"
+        stream_topic = topics.stabilizer.stream_target.get_path_from_root(from_app_root=False)
         will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=3)
 
         try:
@@ -87,7 +87,6 @@ class StabilizerInterface(AbstractStabilizerInterface):
                 while keys_to_write:
                     # Use while/pop instead of for loop, as UI task might push extra
                     # elements while we are executing requests.
-                    # key = keys_to_write.pop()
                     setting = app_root.get_child(keys_to_write.pop())
                     update_all_topics()
                     await self.change(setting)

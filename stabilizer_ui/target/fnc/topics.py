@@ -78,12 +78,8 @@ class Ui:
 global ui
 ui = Ui()
 
-# Root topic. Not using the method `add_child` because it sets the parent of the child
-# It's unnecessary to see the sinara root when traversed up the tree when getting the
-# path but provides a useful starting point to get all topics when traversing down.
-# The MAC address to the Stabilizer board needs to be changed when the app is launched
 global app_root
 app_root = TopicTree.new("dt/sinara/fnc/<MAC>")
-app_root.children = [stabilizer.root, ui.root]
-
+app_root.add_children([stabilizer.root, ui.root])
 app_root.create_children(["meta", "alive"])
+app_root.set_app_root()
