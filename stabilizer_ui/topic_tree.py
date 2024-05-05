@@ -141,6 +141,10 @@ class TopicTree:
             return self
         return self._parent.root()
 
+    def app_root(self) -> Self:
+        """Get the app_root node of the tree"""
+        return self.get_parent_until(lambda x: x._parent.is_app_root())
+
     def path(self, from_app_root: bool = True, child_path: str = "") -> str:
         r"""Get the string path from the root to the node.
             If `from_app_root` is True, returns the path from *after* the `app_root`

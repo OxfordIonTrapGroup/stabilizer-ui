@@ -159,7 +159,7 @@ class UiWindow(AbstractUiWindow):
 
     async def update_transfer_function(self, setting):
         """Update transfer function plot based on setting change."""
-        if setting.root().name == "ui" and (
+        if setting.app_root().name == "ui" and (
                 ui_iir :=
                 setting.get_parent_until(lambda x: x.name.startswith("iir"))) is not None:
             (_ch, _iir) = (int(ui_iir.get_parent().name[2:]), int(ui_iir.name[3:]))
@@ -227,17 +227,18 @@ class UiWindow(AbstractUiWindow):
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
                 iirWidget = self.channels[ch].iir_widgets[iir]
+                iir_topic = UiSettings.iirs[ch][iir]
 
-                for child in UiSettings.iirs[ch][iir].children(
+                for child in iir_topic.children(
                     ["y_offset", "y_min", "y_max", "x_offset"]):
                     settings_map[child.path()] = UiMqttConfig(
                         [getattr(iirWidget, child.name + "Box")])
 
-                settings_map[UiSettings.iirs[ch][iir].child(
+                settings_map[iir_topic.child(
                     "filter").path()] = UiMqttConfig(
                         [iirWidget.filterComboBox])
                 for filter in FILTERS:
-                    filter_topic = UiSettings.iirs[ch][iir].child(filter.filter_type)
+                    filter_topic = iir_topic.child(filter.filter_type)
                     for param in filter_topic.children():
                         widget_attribute = lambda suffix: getattr(
                             iirWidget.widgets[filter.filter_type], f"{param.name}{suffix}"

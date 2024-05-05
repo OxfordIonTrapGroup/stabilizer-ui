@@ -12,6 +12,7 @@ class StabilizerSettings:
     Topics in an array have separate entries for the parent topic and the subtopics
     """
 
+    @classmethod
     def set(cls):
         cls.root = TopicTree("settings")
 
@@ -37,6 +38,7 @@ class UiSettings:
     """Enum wrapping the UI settings topics tree.
     """
 
+    @classmethod
     def set(cls):
         cls.root = TopicTree("ui")
 
@@ -60,7 +62,7 @@ class UiSettings:
 UiSettings.set()
 
 global app_root
-app_root = TopicTree.new("dt/sinara/fnc/<MAC>")
+app_root = TopicTree.new("dt/sinara/dual-iir/<MAC>")
 app_root.set_children([StabilizerSettings.root, UiSettings.root])
 app_root.create_children(["meta", "alive"])
 app_root.set_app_root()

@@ -8,6 +8,7 @@ from .ui import UiWindow
 from ...interface import AbstractStabilizerInterface
 from ...mqtt import MqttInterface, UiMqttBridge, NetworkAddress
 from ...iir.filters import get_filter
+from ...utils import AsyncQueueThreadsafe
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
     async def triage_setting_change(self, setting):
         logger.info(f"Changing setting {setting.path()}': {setting.value}")
 
-        setting_root = setting.root()
+        setting_root = setting.app_root()
         if setting_root.name == "settings":
             await self.request_settings_change(setting.path(),
                                                setting.value)
@@ -39,7 +40,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
         self,
         ui: UiWindow,
         broker_address: NetworkAddress,
-        stream_target_queue: asyncio.Queue
+        stream_target_queue: AsyncQueueThreadsafe
     ):
         # Wait for the stream thread to read the initial port.
         # A bit hacky, would ideally use a join but that seems to lead to a deadlock.

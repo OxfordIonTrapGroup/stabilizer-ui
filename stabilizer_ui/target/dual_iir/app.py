@@ -10,6 +10,7 @@ from stabilizer.stream import get_local_ip
 
 from .ui import UiWindow
 from .interface import StabilizerInterface
+from . import topics
 
 from ...stream.thread import StreamThread
 from ...mqtt import NetworkAddress
@@ -56,11 +57,10 @@ def main():
 
         broker_address = NetworkAddress.from_str_ip(args.broker_host, args.broker_port)
 
-        stabilizer_topic = f"dt/sinara/dual-iir/{fmt_mac(args.stabilizer_mac)}"
+        topics.app_root.name = f"{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(
             stabilizer_interface.update(
                 ui,
-                stabilizer_topic,
                 broker_address,
                 stream_target_queue
             ))
