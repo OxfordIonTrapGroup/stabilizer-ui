@@ -5,7 +5,7 @@ from math import inf
 from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
 from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
 
-from .topics import stabilizer, ui
+from .topics import StabilizerSettings, UiSettings
 from . import *
 
 from ...pounder.ui import ClockWidget
@@ -182,62 +182,62 @@ class UiWindow(AbstractUiWindow):
         settings_map = {}
 
         # `ui/#` are only used by the UI, the others by both UI and stabilizer
-        settings_map[stabilizer.stream_target.path()] = UiMqttConfig(
+        settings_map[StabilizerSettings.stream_target.path()] = UiMqttConfig(
             [],
             lambda _: stream_target._asdict(),
             lambda _w, _v: stream_target._asdict(),
         )
 
-        settings_map[stabilizer.ext_clk.path()] = UiMqttConfig(
+        settings_map[StabilizerSettings.ext_clk.path()] = UiMqttConfig(
             [self.clockWidget.extClkCheckBox])
-        settings_map[stabilizer.ref_clk_frequency.path()] = UiMqttConfig(
+        settings_map[StabilizerSettings.ref_clk_frequency.path()] = UiMqttConfig(
             [self.clockWidget.refFrequencyBox], *mega)
-        settings_map[stabilizer.clk_multiplier.path()] = UiMqttConfig(
+        settings_map[StabilizerSettings.clk_multiplier.path()] = UiMqttConfig(
             [self.clockWidget.multiplierBox])
 
         for ch in range(NUM_CHANNELS):
-            settings_map[stabilizer.afes[ch].path()] = UiMqttConfig(
+            settings_map[StabilizerSettings.afes[ch].path()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])
 
             settings_map[
-                stabilizer.attenuation_ins[ch].path()] = UiMqttConfig(
+                StabilizerSettings.attenuation_ins[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsInAttenuationBox])
             settings_map[
-                stabilizer.attenuation_outs[ch].path()] = UiMqttConfig(
+                StabilizerSettings.attenuation_outs[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsOutAttenuationBox])
 
             settings_map[
-                stabilizer.amplitude_dds_ins[ch].path()] = UiMqttConfig(
+                StabilizerSettings.amplitude_dds_ins[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsInAmplitudeBox])
             settings_map[
-                stabilizer.amplitude_dds_outs[ch].path()] = UiMqttConfig(
+                StabilizerSettings.amplitude_dds_outs[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsOutAmplitudeBox])
 
             settings_map[
-                stabilizer.frequency_dds_outs[ch].path()] = UiMqttConfig(
+                StabilizerSettings.frequency_dds_outs[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsOutFrequencyBox], *mega)
             settings_map[
-                stabilizer.frequency_dds_ins[ch].path()] = UiMqttConfig(
+                StabilizerSettings.frequency_dds_ins[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsInFrequencyBox], *mega)
             
             settings_map[
-                ui.dds_io_link_checkboxes[ch].path()] = UiMqttConfig(
+                UiSettings.dds_io_link_checkboxes[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsIoFreqLinkCheckBox])
 
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
                 iirWidget = self.channels[ch].iir_widgets[iir]
 
-                for child in ui.iirs[ch][iir].children(
+                for child in UiSettings.iirs[ch][iir].children(
                     ["y_offset", "y_min", "y_max", "x_offset"]):
                     settings_map[child.path()] = UiMqttConfig(
                         [getattr(iirWidget, child.name + "Box")])
 
-                settings_map[ui.iirs[ch][iir].child(
+                settings_map[UiSettings.iirs[ch][iir].child(
                     "filter").path()] = UiMqttConfig(
                         [iirWidget.filterComboBox])
                 for filter in FILTERS:
-                    filter_topic = ui.iirs[ch][iir].child(filter.filter_type)
+                    filter_topic = UiSettings.iirs[ch][iir].child(filter.filter_type)
                     for param in filter_topic.children():
                         widget_attribute = lambda suffix: getattr(
                             iirWidget.widgets[filter.filter_type], f"{param.name}{suffix}"

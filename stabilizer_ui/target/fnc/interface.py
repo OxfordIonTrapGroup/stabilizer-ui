@@ -3,8 +3,7 @@ import asyncio
 from gmqtt import Message as MqttMessage
 from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
 
-from . import topics
-from .topics import app_root
+from .topics import app_root, StabilizerSettings
 from .ui import UiWindow
 from ...interface import AbstractStabilizerInterface
 from ...mqtt import MqttInterface, UiMqttBridge, NetworkAddress
@@ -17,7 +16,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
     """
     Interface for the FNC stabilizer.
     """
-    iir_ch_topic_base = topics.stabilizer.iir_root.path()
+    iir_ch_topic_base = StabilizerSettings.iir_root.path()
 
     def __init__(self):
         super().__init__(DEFAULT_FNC_SAMPLE_PERIOD)
@@ -59,7 +58,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
                 app_root.child(key).value = cfg.read_handler(cfg.widgets)
 
         # Close the stream upon bad disconnect
-        stream_topic = topics.stabilizer.stream_target.path(from_app_root=False)
+        stream_topic = StabilizerSettings.stream_target.path(from_app_root=False)
         will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=3)
 
         try:
