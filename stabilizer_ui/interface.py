@@ -8,7 +8,7 @@ from typing import Any, Iterable, Optional
 from sipyco import pc_rpc
 from gmqtt import Message as MqttMessage
 
-from .widgets import AbstractUiWindow
+from .ui import AbstractUiWindow
 from .mqtt import MqttInterface, NetworkAddress, UiMqttBridge
 from .iir.filters import get_filter
 from .topic_tree import TopicTree

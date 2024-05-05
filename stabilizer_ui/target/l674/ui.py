@@ -8,7 +8,7 @@ from stabilizer import DEFAULT_L674_SAMPLE_PERIOD
 from .lock import LockState
 from ...utils import link_slider_to_spinbox
 from ...stream.fft_scope import FftScope
-from ...widgets import AbstractUiWindow
+from ...ui import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
 

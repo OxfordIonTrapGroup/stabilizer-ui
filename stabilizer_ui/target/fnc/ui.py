@@ -13,7 +13,7 @@ from ...stream.fft_scope import FftScope
 from ...mqtt import UiMqttConfig, NetworkAddress
 from ...iir.filters import FILTERS, get_filter
 from ...iir.channel_settings import AbstractChannelSettings
-from ...widgets import AbstractUiWindow
+from ...ui import AbstractUiWindow
 from ...utils import kilo, kilo2, mega, link_spinbox_to_is_inf_checkbox
 
 logger = logging.getLogger(__name__)

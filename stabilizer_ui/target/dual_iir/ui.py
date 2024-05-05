@@ -5,7 +5,7 @@ from stabilizer.stream import Parser, AdcDecoder, DacDecoder
 from . import *
 from .topics import StabilizerSettings, UiSettings
 
-from ...widgets import AbstractUiWindow
+from ...ui import AbstractUiWindow
 from ...mqtt import NetworkAddress, UiMqttConfig
 from ...iir.channel_settings import ChannelSettings
 from ...iir.filters import FILTERS, get_filter
