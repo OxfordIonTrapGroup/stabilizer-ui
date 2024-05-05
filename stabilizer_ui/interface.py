@@ -6,9 +6,12 @@ import json
 
 from typing import Any, Iterable, Optional
 from sipyco import pc_rpc
+from gmqtt import Message as MqttMessage
 
 from .widgets import AbstractUiWindow
-from .mqtt import MqttInterface, NetworkAddress
+from .mqtt import MqttInterface, NetworkAddress, UiMqttBridge
+from .iir.filters import get_filter
+from .topic_tree import TopicTree
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +27,15 @@ class AbstractStabilizerInterface:
     Shim for controlling stabilizer over MQTT
     """
 
-    def __init__(self, sample_period: float):
+    stream_target_topic = "settings/stream_target"
+
+    def __init__(self, sample_period: float, app_root: TopicTree):
         self._interface_set = asyncio.Event()
         self._interface: Optional[MqttInterface] = None
         self.sample_period = sample_period
+        self.app_root = app_root
+        # Default stream target topic if not specified by subclass.
+        self.stream_target_topic = app_root.path() + f"/{self.stream_target_topic}"
 
     def set_interface(self, interface: MqttInterface) -> None:
         self._interface = interface
@@ -37,25 +45,11 @@ class AbstractStabilizerInterface:
         await self._interface_set.wait()
         await self.triage_setting_change(*args, **kwargs)
 
-    async def triage_setting_change(self, setting):
-        logger.info(f"Changing setting {setting.path()}': {setting.value}")
-
-        setting_root = setting.app_root()
-        if setting_root.name == "settings":
-            await self.request_settings_change(setting.path(),
-                                               setting.value)
-        elif setting_root.name == "ui":
-            self.publish_ui_change(setting.path(), setting.value)
-
-            if (ui_iir := setting.get_parent_until(lambda x: x.name.startswith("iir"))
-                ) is not None:
-                await self._change_filter_setting(ui_iir)
-
     async def update(
         self,
         ui: AbstractUiWindow,
         broker_address: NetworkAddress,
-        stream_target_queue: asyncio.Queue
+        stream_target_queue: asyncio.Queue,
     ):
         # Wait for the stream thread to read the initial port.
         # A bit hacky, would ideally use a join but that seems to lead to a deadlock.
@@ -71,25 +65,24 @@ class AbstractStabilizerInterface:
 
         def update_all_topics():
             for key, cfg in settings_map.items():
-                app_root.child(key).value = cfg.read_handler(cfg.widgets)
+                self.app_root.child(key).value = cfg.read_handler(cfg.widgets)
 
         # Close the stream upon bad disconnect
-        stream_topic = topics.stabilizer.stream_target.path(from_app_root=False)
-        will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=3)
+        will_message = MqttMessage(self.stream_target_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=3)
 
         try:
             bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
             ui.set_comm_status(
                 f"Connected to MQTT broker at {broker_address.get_ip()}.")
 
-            await bridge.load_ui(lambda x: x, app_root.path(), ui)
+            await bridge.load_ui(lambda x: x, self.app_root.path(), ui)
             keys_to_write, ui_updated = bridge.connect_ui()
 
             #
             # Relay user input to MQTT.
             #
             interface = MqttInterface(bridge.client,
-                                      app_root.path(),
+                                      self.app_root.path(),
                                       timeout=10.0)
 
             # Allow relock task to directly request ADC1 updates.
@@ -102,7 +95,7 @@ class AbstractStabilizerInterface:
                 while keys_to_write:
                     # Use while/pop instead of for loop, as UI task might push extra
                     # elements while we are executing requests.
-                    setting = app_root.child(keys_to_write.pop())
+                    setting = self.app_root.child(keys_to_write.pop())
                     update_all_topics()
                     await self.change(setting)
                     await ui.update_transfer_function(setting)
@@ -117,27 +110,6 @@ class AbstractStabilizerInterface:
                 err_msg = repr(e)
             ui.set_comm_status(f"Stabilizer connection error: {err_msg}")
             logger.exception(f"Stabilizer communication failure: {err_msg}")
-
-    async def _change_filter_setting(self, iir_setting):
-        (_ch, _iir_idx) = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
-
-        filter_type = iir_setting.child("filter").value
-        filters = iir_setting.child(filter_type)
-
-        filter_params = {filter_param.name: filter_param.value for filter_param in filters.children()}
-
-        ba = get_filter(filter_type).get_coefficients(self.sample_period, **filter_params)
-
-        await self.set_iir(
-            channel=_ch,
-            iir_idx=_iir_idx,
-            ba=ba,
-            x_offset=iir_setting.child("x_offset").value,
-            y_offset=iir_setting.child("y_offset").value,
-            y_min=iir_setting.child("y_min").value,
-            y_max=iir_setting.child("y_max").value,
-        )
-
 
     async def set_pi_gains(self, channel: int, iir_idx: int, p_gain: float,
                            i_gain: float):
@@ -183,6 +155,26 @@ class AbstractStabilizerInterface:
         msg = await self._interface.request(key, value, retain=True)
         if starts_with(msg, "Settings fail"):
             logger.warning("Stabilizer reported failure to write setting: '%s'", msg)
+
+    async def _change_filter_setting(self, iir_setting):
+        (_ch, _iir_idx) = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
+
+        filter_type = iir_setting.child("filter").value
+        filters = iir_setting.child(filter_type)
+
+        filter_params = {filter_param.name: filter_param.value for filter_param in filters.children()}
+
+        ba = get_filter(filter_type).get_coefficients(self.sample_period, **filter_params)
+
+        await self.set_iir(
+            channel=_ch,
+            iir_idx=_iir_idx,
+            ba=ba,
+            x_offset=iir_setting.child("x_offset").value,
+            y_offset=iir_setting.child("y_offset").value,
+            y_min=iir_setting.child("y_min").value,
+            y_max=iir_setting.child("y_max").value,
+        )
 
 
 class WavemeterInterface:

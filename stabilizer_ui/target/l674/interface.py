@@ -5,6 +5,7 @@ import numpy as np
 from stabilizer import DEFAULT_L674_SAMPLE_PERIOD
 
 from ...interface import AbstractStabilizerInterface
+from ...topic_tree import TopicTree
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
     iir_ch_topic_base = "settings/iir_ch"
 
     def __init__(self):
-        super().__init__(DEFAULT_L674_SAMPLE_PERIOD)
+        # Temporary fix until ported to topictree
+        app_root = "dt/sinara/l674"
+        super().__init__(DEFAULT_L674_SAMPLE_PERIOD, TopicTree.new(app_root))
 
     async def read_adc(self) -> float:
         await self._interface_set.wait()
