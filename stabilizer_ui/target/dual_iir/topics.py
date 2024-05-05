@@ -15,16 +15,12 @@ class Stabilizer:
     def __init__(self):
         self.root = TopicTree("settings")
 
-        (afe, self.iir_root, self.pounder,
-         self.dds_ref_clock) = self.root.create_children(
-             ["afe", "iir_ch", "pounder", "dds_ref_clock"])
+        (afe, self.iir_root) = self.root.create_children(["afe", "iir_ch"])
 
         self.iir_root.create_children(["0", "1"])
 
         self.stream_target = self.root.create_child("stream_target")
         self.afes = afe.create_children(["0", "1"])
-        self.ext_clk, self.ref_clk_frequency, self.clk_multiplier = self.dds_ref_clock.create_children(
-            ["external_clock", "reference_clock_frequency", "multiplier"])
 
         # iir_ch/0/1 represents the IIR filter 1 for channel 0
         self.iirs = [
@@ -32,16 +28,6 @@ class Stabilizer:
                 [f"{ch}/{iir}" for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])
             for ch in range(NUM_CHANNELS)
         ]
-
-        # Pounder settings
-        pounder_channels = self.pounder.create_children(["0", "1"])
-
-        for topic in [
-                "frequency_dds_out", "frequency_dds_in", "amplitude_dds_out",
-                "amplitude_dds_in", "attenuation_out", "attenuation_in"
-        ]:
-            setattr(self, f"{topic}s",
-                    [pounder.create_child(topic) for pounder in pounder_channels])
 
 
 global stabilizer
@@ -60,9 +46,6 @@ class Ui:
             ui_channels[ch].create_children(
                 [f"iir{iir}" for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])
             for ch in range(NUM_CHANNELS)
-        ]
-        self.dds_io_link_checkboxes = [
-            ui_channels[ch].create_child("dds_in_checkbox") for ch in range(NUM_CHANNELS)
         ]
 
         for ch in range(NUM_CHANNELS):

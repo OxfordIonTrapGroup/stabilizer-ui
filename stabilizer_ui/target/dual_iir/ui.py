@@ -5,55 +5,80 @@ from stabilizer.stream import Parser, AdcDecoder, DacDecoder
 from ...widgets import AbstractUiWindow
 from ...mqtt import NetworkAddress, UiMqttConfig
 from ...iir.channel_settings import ChannelSettings
-from ...iir.filters import FILTERS
+from ...iir.filters import FILTERS, get_filter
 from ...stream.fft_scope import FftScope
 from ...utils import kilo, kilo2, link_spinbox_to_is_inf_checkbox
+from . import *
 
+#
+# Parameters for the FNC ui.
+#
+
+DEFAULT_WINDOW_SIZE = (1200, 600)
+DEFAULT_DAC_PLOT_YRANGE = (-1, 1)
+DEFAULT_ADC_PLOT_YRANGE = (-1, 1)
+
+#: Interval between scope plot updates, in seconds.
+#: PyQt's drawing speed limits value.
+SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 class UiWindow(AbstractUiWindow):
 
     def __init__(self, title: str = "Dual IIR"):
         super().__init__()
-
         self.setWindowTitle(title)
 
-        wid = QtWidgets.QWidget(self)
-        self.setCentralWidget(wid)
-        layout = QtWidgets.QHBoxLayout()
+        # Set main window layout
+        self.setCentralWidget(QtWidgets.QWidget(self))
+        centralLayout = QtWidgets.QHBoxLayout(self.centralWidget())
 
         # Create UI for channel settings.
-        self.channel_settings = [ChannelSettings(DEFAULT_DUAL_IIR_SAMPLE_PERIOD) for i in range(2)]
+        self.channels = [ChannelSettings(DEFAULT_DUAL_IIR_SAMPLE_PERIOD) for _ in range(NUM_CHANNELS)]
 
-        self.tab_channel_settings = QtWidgets.QTabWidget()
-        for i, channel in enumerate(self.channel_settings):
-            self.tab_channel_settings.addTab(channel, f"Channel {i}")
-        layout.addWidget(self.tab_channel_settings)
+        self.channelTabWidget = QtWidgets.QTabWidget()
+        for i, channel in enumerate(self.channels):
+            self.channelTabWidget.addTab(channel, f"Channel {i}")
+        centralLayout.addWidget(self.channelTabWidget)
 
         # Create UI for FFT scope.
         streamParser = Parser([AdcDecoder(), DacDecoder()])
-        self.fft_scope = FftScope(streamParser, DEFAULT_DUAL_IIR_SAMPLE_PERIOD)
-        layout.addWidget(self.fft_scope)
+        self.fftScopeWidget = FftScope(streamParser, DEFAULT_DUAL_IIR_SAMPLE_PERIOD)
+        centralLayout.addWidget(self.fftScopeWidget)
 
-        # Set main window layout
-        wid.setLayout(layout)
+        # # Give any excess space to the FFT scope
+        # centralLayout.setStretchFactor(self.fftScopeWidget, 1)
+
+        for i in range(NUM_CHANNELS):
+            self.fftScopeWidget.graphics_view.getItem(0, i).setYRange(*DEFAULT_ADC_PLOT_YRANGE)
+            self.fftScopeWidget.graphics_view.getItem(1, i).setYRange(*DEFAULT_DAC_PLOT_YRANGE)
+
+        # Disable mouse wheel scrolling on spinboxes to prevent accidental changes
+        spinboxes = self.channelTabWidget.findChildren(QtWidgets.QDoubleSpinBox)
+        for box in spinboxes:
+            box.wheelEvent = lambda *event: None
+
+        self.resize(*DEFAULT_WINDOW_SIZE)
 
     def update_stream(self, payload):
-        # if self.tab_channel_settings.currentIndex() != 1:
-        #    return
-        self.fft_scope.update(payload)
+        self.fftScopeWidget.update(payload)
 
     async def update_transfer_function(self, setting, all_values):
         if setting.split("/")[0] == "ui":
             channel, iir = setting.split("/")[1:3]
             path_root = f"ui/{channel}/{iir}/"
             filter_type = all_values[path_root + "filter"]
-            filter_idx = [f.filter_type for f in FILTERS].index(filter_type)
-            kwargs = {
-                param: all_values[path_root + f"{filter_type}/{param}"]
-                for param in FILTERS[filter_idx].parameters
-            }
-            ba = FILTERS[filter_idx].get_coefficients(self.fft_scope.sample_period, **kwargs)
-            _iir_widget = self.channel_settings[int(channel)].iir_widgets[int(iir)]
+            filter = get_filter(filter_type)
+
+            if filter_type in ["though", "block"]:
+                ba = filter.get_coefficients()
+            else:
+                filter_params = {
+                    param: all_values[path_root + f"{filter_type}/{param}"]
+                    for param in filter.parameters
+                }
+                ba = filter.get_coefficients(self.fftScopeWidget.sample_period, **filter_params)
+
+            _iir_widget = self.channels[int(channel)].iir_widgets[int(iir)]
             _iir_widget.update_transfer_function(ba)
 
     def set_mqtt_configs(self, stream_target: NetworkAddress):
@@ -67,20 +92,20 @@ class UiWindow(AbstractUiWindow):
             )
         }
 
-        for c in range(2):
-            settings_map[f"settings/afe/{c}"] = UiMqttConfig(
-                [self.channel_settings[c].afeGainBox])
-            for iir in range(2):
-                name_root = f"ui/{c}/{iir}/"
-                iir_ui = self.channel_settings[c].iir_widgets[iir]
+        for ch in range(NUM_CHANNELS):
+            settings_map[f"settings/afe/{ch}"] = UiMqttConfig(
+                [self.channels[ch].afeGainBox])
+            for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
+                name_root = f"ui/{ch}/{iir}/"
+                iir_ui = self.channels[ch].iir_widgets[iir]
                 settings_map[name_root + "filter"] = UiMqttConfig([iir_ui.filterComboBox])
                 settings_map[name_root + "x_offset"] = UiMqttConfig([iir_ui.x_offsetBox])
                 settings_map[name_root + "y_offset"] = UiMqttConfig([iir_ui.y_offsetBox])
                 settings_map[name_root + "y_max"] = UiMqttConfig([iir_ui.y_maxBox])
                 settings_map[name_root + "y_min"] = UiMqttConfig([iir_ui.y_minBox])
-                for f in FILTERS:
-                    f_str = f.filter_type
-                    for arg in f.parameters:
+                for filter in FILTERS:
+                    f_str = filter.filter_type
+                    for arg in filter.parameters:
                         if arg.split("_")[-1] == "limit":
                             settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
                                 [

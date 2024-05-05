@@ -2,12 +2,10 @@ import argparse
 import asyncio
 import logging
 import sys
-import numpy as np
 
 from contextlib import suppress
-from enum import Enum, unique
 from gmqtt import Message as MqttMessage
-from PyQt5 import QtGui, QtWidgets, uic
+from PyQt5 import QtWidgets
 from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
 from stabilizer.stream import get_local_ip
@@ -17,17 +15,12 @@ from .interface import StabilizerInterface, Settings
 from .lock import monitor_lock_state
 
 from ...mqtt import MqttInterface
-from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
 from ...mqtt import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import mqtt
-from ...utils import link_slider_to_spinbox, fmt_mac, AsyncQueueThreadsafe
+from ...utils import fmt_mac, AsyncQueueThreadsafe
 
 logger = logging.getLogger(__name__)
-
-#: Interval between scope plot updates, in seconds.
-#: PyQt's drawing speed limits value.
-SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 
 async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterface,

@@ -6,7 +6,7 @@ from gmqtt import Message as MqttMessage
 from .ui import UiWindow
 from ...mqtt import NetworkAddress, UiMqttBridge, MqttInterface
 from ...interface import AbstractStabilizerInterface
-from ...iir.filters import FILTERS
+from ...iir.filters import get_filter
 from ...utils import AsyncQueueThreadsafe
 
 logger = logging.getLogger(__name__)
@@ -36,12 +36,12 @@ class StabilizerInterface(AbstractStabilizerInterface):
             x_offset = all_values[path_root + "x_offset"]
 
             filter_type = all_values[path_root + "filter"]
-            filter_idx = [f.filter_type for f in FILTERS].index(filter_type)
+            filter = get_filter(filter_type)
             kwargs = {
                 param: all_values[path_root + f"{filter_type}/{param}"]
-                for param in FILTERS[filter_idx].parameters
+                for param in filter.parameters
             }
-            ba = FILTERS[filter_idx].get_coefficients(self.sample_period, **kwargs)
+            ba = filter.get_coefficients(self.sample_period, **kwargs)
 
             await self.set_iir(
                 channel=int(channel),
@@ -91,7 +91,6 @@ class StabilizerInterface(AbstractStabilizerInterface):
             #
             # Relay user input to MQTT.
             #
-
             interface = MqttInterface(bridge.client, root_topic, timeout=10.0)
 
             # Allow relock task to directly request ADC1 updates.

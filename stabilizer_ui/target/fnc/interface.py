@@ -8,7 +8,7 @@ from .topics import app_root
 from .ui import UiWindow
 from ...interface import AbstractStabilizerInterface
 from ...mqtt import MqttInterface, UiMqttBridge, NetworkAddress, UiMqttConfig
-from ...iir.filters import FILTERS
+from ...iir.filters import get_filter
 
 logger = logging.getLogger(__name__)
 
@@ -112,10 +112,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
         filter_type = iir_setting.get_child("filter").value
         filters = iir_setting.get_child(filter_type)
 
-        filter_params = {filter.name: filter.value for filter in filters.get_children()}
+        filter_params = {filter_param.name: filter_param.value for filter_param in filters.get_children()}
 
-        ba = next(filter for filter in FILTERS
-                  if filter.filter_type == filter_type).get_coefficients(self.sample_period, **filter_params)
+        ba = get_filter(filter_type).get_coefficients(self.sample_period, **filter_params)
 
         await self.set_iir(
             channel=_ch,

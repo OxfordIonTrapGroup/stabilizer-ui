@@ -18,16 +18,6 @@ from ...utils import fmt_mac, AsyncQueueThreadsafe
 
 logger = logging.getLogger(__name__)
 
-#
-# Parameters for the FNC ui.
-#
-
-#: Interval between scope plot updates, in seconds.
-#: PyQt's drawing speed limits value.
-SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
-
-DEFAULT_WINDOW_SIZE = (1400, 600)
-
 
 def main():
     logging.basicConfig(level=logging.INFO)

@@ -4,7 +4,6 @@ import logging
 import sys
 
 from contextlib import suppress
-from math import inf
 from PyQt5 import QtWidgets
 from qasync import QEventLoop
 from stabilizer.stream import get_local_ip
@@ -17,8 +16,6 @@ from ...mqtt import NetworkAddress
 from ...utils import fmt_mac, AsyncQueueThreadsafe
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_WINDOW_SIZE = (1200, 600)
 
 
 def main():
@@ -45,7 +42,6 @@ def main():
         asyncio.set_event_loop(loop)
 
         ui = UiWindow(f"{args.name} [{fmt_mac(args.stabilizer_mac)}]")
-        ui.resize(*DEFAULT_WINDOW_SIZE)
         ui.show()
 
         ui.set_comm_status(f"Connecting to MQTT broker at {args.broker_host}…")
@@ -71,7 +67,7 @@ def main():
 
         stream_thread = StreamThread(
             ui.update_stream,
-            ui.fft_scope,
+            ui.fftScopeWidget,
             stream_target_queue,
             broker_address,
             loop,

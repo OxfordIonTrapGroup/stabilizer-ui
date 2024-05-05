@@ -6,7 +6,7 @@ from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
 from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
 
 from .topics import stabilizer, ui
-from .parameters import *
+from . import *
 
 from ...pounder.ui import ClockWidget
 from ...stream.fft_scope import FftScope
@@ -18,10 +18,20 @@ from ...utils import kilo, kilo2, mega, link_spinbox_to_is_inf_checkbox
 
 logger = logging.getLogger(__name__)
 
+#
+# Parameters for the FNC ui.
+#
+
 DEFAULT_WINDOW_SIZE = (1400, 600)
 DEFAULT_PHASE_PLOT_YRANGE = (0, 1)
 DEFAULT_ADC_PLOT_YRANGE = (-1, 1)
+
+# Default conversion from ADC voltage to phase turns
 DEFAULT_ADC_VOLT_PHASE_SCALE = 0.2
+
+#: Interval between scope plot updates, in seconds.
+#: PyQt's drawing speed limits value.
+SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 class ChannelSettings(AbstractChannelSettings):
     """ Channel settings"""
@@ -102,19 +112,15 @@ class UiWindow(AbstractUiWindow):
 
         # Set up main window with Horizontal layout
         self.setCentralWidget(QtWidgets.QWidget(self))
-        self.centralWidget = self.centralWidget()
-        self.centralWidgetLayout = QtWidgets.QHBoxLayout(self.centralWidget)
+        centralLayout = QtWidgets.QHBoxLayout(self.centralWidget())
 
         # Add FFT scope next to a vertical layout for settings
-        self.settingsLayout = QtWidgets.QVBoxLayout()
+        settingsLayout = QtWidgets.QVBoxLayout()
 
         streamParser = Parser([AdcDecoder(), PhaseOffsetDecoder()])
         self.fftScopeWidget = FftScope(streamParser, DEFAULT_FNC_SAMPLE_PERIOD)
-        self.centralWidgetLayout.addLayout(self.settingsLayout)
-        self.centralWidgetLayout.addWidget(self.fftScopeWidget)
-
-        # Give any excess space to the FFT scope
-        self.centralWidgetLayout.setStretchFactor(self.fftScopeWidget, 1)
+        centralLayout.addLayout(settingsLayout)
+        centralLayout.addWidget(self.fftScopeWidget)
 
         self.channelTabWidget = ChannelTabWidget()
         self.channels = self.channelTabWidget.channels
@@ -124,10 +130,11 @@ class UiWindow(AbstractUiWindow):
         # Disable the clock widget until this is resolved.
         self.clockWidget.setEnabled(False)
 
-        self.settingsLayout.addWidget(self.clockWidget)
-        self.settingsLayout.addWidget(self.channelTabWidget)
+        settingsLayout.addWidget(self.clockWidget)
+        settingsLayout.addWidget(self.channelTabWidget)
 
         # Set FFT scope to take max available space
+        centralLayout.setStretchFactor(self.fftScopeWidget, 1)
         fftScopeSizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding,
                                                    QtWidgets.QSizePolicy.Expanding)
         self.fftScopeWidget.setSizePolicy(fftScopeSizePolicy)
@@ -168,24 +175,6 @@ class UiWindow(AbstractUiWindow):
 
             _iir_widgets = self.channels[_ch].iir_widgets[_iir]
             _iir_widgets.update_transfer_function(ba)
-
-    def _is_inf_widgets_readwrite(self):
-
-        def read(widgets):
-            """Expects widgets in the form [spinbox, checkbox]."""
-            if widgets[1].isChecked():
-                return inf
-            else:
-                return widgets[0].value()
-
-        def write(widgets, value):
-            """Expects widgets in the form [spinbox, checkbox]."""
-            if value == inf:
-                widgets[1].setChecked(True)
-            else:
-                widgets[0].setValue(value)
-
-        return read, write
 
     def set_mqtt_configs(self, stream_target: NetworkAddress):
         """ Link the UI widgets to the MQTT topic tree"""
