@@ -2,7 +2,7 @@ import logging
 from enum import Enum, unique
 
 import numpy as np
-from stabilizer import SAMPLE_PERIOD
+from stabilizer import DEFAULT_L674_SAMPLE_PERIOD
 
 from ...interface import AbstractStabilizerInterface
 
@@ -68,6 +68,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
     read_adc1_filtered_topic = "read_adc1_filtered"
     iir_ch_topic_base = "settings/iir_ch"
 
+    def __init__(self):
+        super().__init__(DEFAULT_L674_SAMPLE_PERIOD)
+
     async def read_adc(self) -> float:
         await self._interface_set.wait()
         # Argument irrelevant.
@@ -108,7 +111,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
 
         if setting in self.fast_notch_settings:
             if all_values[Settings.fast_notch_enable]:
-                f0 = (all_values[Settings.fast_notch_frequency] * np.pi * SAMPLE_PERIOD)
+                f0 = (all_values[Settings.fast_notch_frequency] * np.pi * self.sample_period)
                 q = all_values[Settings.fast_notch_quality_factor]
                 # unit gain
                 denominator = (1 + f0 / q + f0**2)

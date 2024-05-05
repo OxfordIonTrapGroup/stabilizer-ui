@@ -3,10 +3,10 @@ import logging
 import json
 import uuid
 
-from typing import NamedTuple, List, Callable, Any, Dict
+from typing import NamedTuple, List, Callable, Any, Dict, Optional
 from contextlib import suppress
 from PyQt5 import QtWidgets
-from gmqtt import Client as MqttClient
+from gmqtt import Client as MqttClient, Message as MqttMessage
 from .widgets import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ class MqttInterface:
         return await result
 
     def _on_message(self, _client, topic, payload, _qos, properties) -> int:
-        if not starts_with(topic, self._response_base):
+        if not topic.startswith(self._response_base):
             logger.debug("Ignoring unrelated topic: %s", topic)
             return 0
 
@@ -126,16 +126,19 @@ class NetworkAddress(NamedTuple):
     port: int = 9293
 
     @classmethod
-    def unspecified(cls):
-        return cls.from_str_ip("0.0.0.0", 0)
-
-    @classmethod
     def from_str_ip(cls, ip: str, port: int):
         _ip = list(map(int, ip.split(".")))
         return cls(_ip, port)
 
     def get_ip(self) -> str:
         return ".".join(map(str, self.ip))
+
+    def is_unspecified(self):
+        """Mirrors `smoltcp::wire::IpAddress::is_unspecified` in Rust, for IPv4 addresses"""
+        return self.ip == [0, 0, 0, 0]
+
+
+NetworkAddress.UNSPECIFIED = NetworkAddress([0, 0, 0, 0], 0)
 
 
 def read(widgets):
@@ -198,7 +201,19 @@ class UiMqttBridge:
 
     @classmethod
     async def new(cls, broker_address: NetworkAddress, *args, **kwargs):
-        will_message = kwargs.pop("will_message", None)
+        r"""Factory method to create a new MQTT connection
+            :param broker_address: Address of the MQTT broker
+            :type broker_address: NetworkAddress
+            :param args: Additional arguments to pass to the constructor
+
+            :Keyword Arguments:
+                * *will_message* (``gmqtt.Message``) -- Last will and testament message
+                * *kwargs* -- Additional keyword arguments to pass to the constructor
+
+            :return: A new instance of UiMqttBridge
+
+        """
+        will_message: Optional[MqttMessage] = kwargs.pop("will_message", None)
         client = MqttClient(client_id="", will_message=will_message)
         host, port = broker_address.get_ip(), broker_address.port
         try:

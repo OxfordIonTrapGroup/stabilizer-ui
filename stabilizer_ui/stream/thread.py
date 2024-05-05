@@ -1,18 +1,19 @@
+from __future__ import annotations
 import asyncio
 import time
 import threading
+import logging
 from collections import deque, namedtuple
 from typing import Callable
 
 from . import MAX_BUFFER_PERIOD
 from ..mqtt import NetworkAddress
+from ..utils import AsyncQueueThreadsafe
 
-from stabilizer.stream import StabilizerStream, AdcDecoder, DacDecoder, Parser, wrap
-from stabilizer import SAMPLE_PERIOD
+from stabilizer.stream import StabilizerStream, Parser, wrap
 import numpy as np
 
-# Order is consistent with `AdcDac.to_mu()`.
-# StreamData = namedtuple("StreamData", "ADC0 ADC1 DAC0 DAC1")
+logger = logging.getLogger(__name__)
 
 CallbackPayload = namedtuple("CallbackPayload", "values download loss")
 
@@ -21,14 +22,17 @@ class StreamThread:
 
     def __init__(self,
                  ui_callback: Callable,
-                 precondition_data: Callable,
-                 callback_interval: float,
-                 stream_target: NetworkAddress,
+                 fftScopeWidget: FftScope,
+                 stream_target_queue: asyncio.Queue[NetworkAddress],
                  broker_address: NetworkAddress,
                  main_event_loop: asyncio.AbstractEventLoop,
-                 max_buffer_period: float = MAX_BUFFER_PERIOD,
-                 parser: Parser = Parser([AdcDecoder(), DacDecoder()])):
-        maxlen = int(max_buffer_period / SAMPLE_PERIOD)
+                 max_buffer_period: float = MAX_BUFFER_PERIOD
+                 ):
+
+        parser = fftScopeWidget.stream_parser
+        precondition_data = fftScopeWidget.precondition_data()
+        callback_interval = fftScopeWidget.update_period
+        maxlen = int(max_buffer_period / fftScopeWidget.sample_period)
 
         self._terminate = threading.Event()
         self._thread = threading.Thread(
@@ -38,7 +42,7 @@ class StreamThread:
                 parser,
                 precondition_data,
                 callback_interval,
-                stream_target,
+                stream_target_queue,
                 broker_address,
                 main_event_loop,
                 self._terminate,
@@ -98,7 +102,7 @@ def stream_worker(
     parser: Parser,
     precondition_data: Callable,
     callback_interval: float,
-    stream_target: NetworkAddress,
+    stream_target_queue: AsyncQueueThreadsafe[NetworkAddress],
     broker_address: NetworkAddress,
     main_loop: asyncio.AbstractEventLoop,
     terminate: threading.Event,
@@ -110,15 +114,37 @@ def stream_worker(
     Also, it is not possible to change the Qt event loop. Therefore, we
     have to handle the stream in a separate thread running this function.
     """
+
     buffer = [deque(np.zeros(maxlen), maxlen=maxlen) for _ in range(parser.n_sources)]
     stat = StreamStats()
 
     async def handle_stream():
-        """This coroutine doesn't run in the main thread's loop!"""
+        """This coroutine doesn't run in the main thread's loop!
+
+        We first get the stream target from the queue, and queue back the allocated
+        port for streaming. 
+
+        The stream is then processed until it is requested to terminate.
+        """
+        stream_target = await stream_target_queue.get_threadsafe()
+        stream_target_queue.task_done()
+        logger.debug("Got initial requested stream target.")
+
         transport, stream = await StabilizerStream.open(stream_target.get_ip(),
                                                         stream_target.port,
                                                         broker_address.get_ip(), [parser],
                                                         maxsize=1)
+
+        allocated_stream_port = transport.get_extra_info("sockname")[1]
+        stream_target = NetworkAddress(stream_target.ip, allocated_stream_port)
+        
+        logger.info(f"Binding stream to port: {allocated_stream_port}")
+        await stream_target_queue.put_threadsafe(stream_target)
+        # Wait for main thread to read the port
+        logger.debug("StreamThread awaiting main thread to read stream target...")
+        await stream_target_queue.join_threadsafe()
+        logger.debug("StreamThread resuming...")
+
         try:
             while not terminate.is_set():
                 frame = await stream.queue.get()

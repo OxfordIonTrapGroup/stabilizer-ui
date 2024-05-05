@@ -2,6 +2,7 @@ import logging
 import os
 from PyQt5 import QtWidgets, uic
 from math import inf
+from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
 from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
 
 from .topics import stabilizer, ui
@@ -13,22 +14,26 @@ from ...mqtt import UiMqttConfig, NetworkAddress
 from ...iir.filters import FILTERS, get_filter
 from ...iir.channel_settings import AbstractChannelSettings
 from ...widgets import AbstractUiWindow
-from ...ui_utils import kilo, kilo2, mega, link_spinbox_to_is_inf_checkbox
+from ...utils import kilo, kilo2, mega, link_spinbox_to_is_inf_checkbox
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_WINDOW_SIZE = (1400, 600)
+DEFAULT_PHASE_PLOT_YRANGE = (0, 1)
+DEFAULT_ADC_PLOT_YRANGE = (-1, 1)
+DEFAULT_ADC_VOLT_PHASE_SCALE = 0.2
 
 class ChannelSettings(AbstractChannelSettings):
     """ Channel settings"""
 
-    def __init__(self):
+    def __init__(self, sample_period=DEFAULT_FNC_SAMPLE_PERIOD):
         super().__init__()
 
         uic.loadUi(
             os.path.join(os.path.dirname(os.path.realpath(__file__)), "widgets/channel.ui"), self)
 
         self._add_afe_options()
-        self._add_iir_tabWidget()
+        self._add_iir_tabWidget(sample_period)
 
         # Disable mouse wheel scrolling on spinboxes to prevent accidental changes
         spinboxes = self.findChildren(QtWidgets.QDoubleSpinBox)
@@ -104,9 +109,12 @@ class UiWindow(AbstractUiWindow):
         self.settingsLayout = QtWidgets.QVBoxLayout()
 
         streamParser = Parser([AdcDecoder(), PhaseOffsetDecoder()])
-        self.fftScopeWidget = FftScope(streamParser)
+        self.fftScopeWidget = FftScope(streamParser, DEFAULT_FNC_SAMPLE_PERIOD)
         self.centralWidgetLayout.addLayout(self.settingsLayout)
         self.centralWidgetLayout.addWidget(self.fftScopeWidget)
+
+        # Give any excess space to the FFT scope
+        self.centralWidgetLayout.setStretchFactor(self.fftScopeWidget, 1)
 
         self.channelTabWidget = ChannelTabWidget()
         self.channels = self.channelTabWidget.channels
@@ -124,6 +132,20 @@ class UiWindow(AbstractUiWindow):
                                                    QtWidgets.QSizePolicy.Expanding)
         self.fftScopeWidget.setSizePolicy(fftScopeSizePolicy)
         self.fftScopeWidget.setMinimumSize(400, 200)
+        
+        # Rescale axes and add an axis converting ADC voltage to phase
+        for i in range(NUM_CHANNELS):
+            adcPlotItem = self.fftScopeWidget.graphics_view.getItem(0, i)
+            adcPlotItem.showAxis("right")
+            adcPlotItem.setYRange(*DEFAULT_ADC_PLOT_YRANGE)
+
+            adcRightAxis = adcPlotItem.getAxis("right")
+            adcRightAxis.setScale(DEFAULT_ADC_VOLT_PHASE_SCALE)
+            adcRightAxis.setLabel("Phase / turns")
+
+            self.fftScopeWidget.graphics_view.getItem(1, i).setYRange(*DEFAULT_PHASE_PLOT_YRANGE)
+
+        self.resize(*DEFAULT_WINDOW_SIZE)
 
     def update_stream(self, payload):
         self.fftScopeWidget.update(payload)
@@ -138,11 +160,11 @@ class UiWindow(AbstractUiWindow):
             filter_type = ui_iir.get_child("filter").value
             filter = ui_iir.get_child(filter_type)
 
-            if filter_type == "none":
-                ba = get_filter("none").get_coefficients()
+            if filter_type in ["though", "block"]:
+                ba = get_filter(filter_type).get_coefficients()
             else:
                 filter_params = {setting.name: setting.value for setting in filter.get_children()}
-                ba = get_filter(filter_type).get_coefficients(**filter_params)
+                ba = get_filter(filter_type).get_coefficients(self.fftScopeWidget.sample_period, **filter_params)
 
             _iir_widgets = self.channels[_ch].iir_widgets[_iir]
             _iir_widgets.update_transfer_function(ba)
@@ -170,11 +192,6 @@ class UiWindow(AbstractUiWindow):
 
         settings_map = {}
 
-        settings_map[stabilizer.stream_target.get_path_from_root()] = UiMqttConfig(
-            [],
-            lambda _: stream_target._asdict(),
-            lambda _w, _v: stream_target._asdict(),
-        )
         # `ui/#` are only used by the UI, the others by both UI and stabilizer
         settings_map[stabilizer.stream_target.get_path_from_root()] = UiMqttConfig(
             [],

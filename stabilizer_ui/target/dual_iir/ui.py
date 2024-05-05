@@ -1,4 +1,5 @@
 from PyQt5 import QtWidgets
+from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD
 from stabilizer.stream import Parser, AdcDecoder, DacDecoder
 
 from ...widgets import AbstractUiWindow
@@ -6,7 +7,7 @@ from ...mqtt import NetworkAddress, UiMqttConfig
 from ...iir.channel_settings import ChannelSettings
 from ...iir.filters import FILTERS
 from ...stream.fft_scope import FftScope
-from ...ui_utils import kilo, kilo2, link_spinbox_to_is_inf_checkbox
+from ...utils import kilo, kilo2, link_spinbox_to_is_inf_checkbox
 
 
 class UiWindow(AbstractUiWindow):
@@ -21,7 +22,7 @@ class UiWindow(AbstractUiWindow):
         layout = QtWidgets.QHBoxLayout()
 
         # Create UI for channel settings.
-        self.channel_settings = [ChannelSettings(), ChannelSettings()]
+        self.channel_settings = [ChannelSettings(DEFAULT_DUAL_IIR_SAMPLE_PERIOD) for i in range(2)]
 
         self.tab_channel_settings = QtWidgets.QTabWidget()
         for i, channel in enumerate(self.channel_settings):
@@ -30,7 +31,7 @@ class UiWindow(AbstractUiWindow):
 
         # Create UI for FFT scope.
         streamParser = Parser([AdcDecoder(), DacDecoder()])
-        self.fft_scope = FftScope(streamParser)
+        self.fft_scope = FftScope(streamParser, DEFAULT_DUAL_IIR_SAMPLE_PERIOD)
         layout.addWidget(self.fft_scope)
 
         # Set main window layout
@@ -51,7 +52,7 @@ class UiWindow(AbstractUiWindow):
                 param: all_values[path_root + f"{filter_type}/{param}"]
                 for param in FILTERS[filter_idx].parameters
             }
-            ba = FILTERS[filter_idx].get_coefficients(**kwargs)
+            ba = FILTERS[filter_idx].get_coefficients(self.fft_scope.sample_period, **kwargs)
             _iir_widget = self.channel_settings[int(channel)].iir_widgets[int(iir)]
             _iir_widget.update_transfer_function(ba)
 
@@ -101,3 +102,5 @@ class UiWindow(AbstractUiWindow):
                             else:
                                 settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
                                     [getattr(iir_ui.widgets[f_str], f"{arg}Box")])
+
+        return settings_map

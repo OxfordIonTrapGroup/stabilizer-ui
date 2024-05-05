@@ -1,19 +1,18 @@
 import stabilizer.iir_coefficients as iir
-from stabilizer import SAMPLE_PERIOD
 from collections import OrderedDict
 
 class _AbstractArgs:
 
-    def __init__(self, **kwargs):
+    def __init__(self, sample_period, **kwargs):
+        self.sample_period = sample_period
         for key, value in kwargs.items():
             if key not in self.parameters:
                 raise ValueError(f"Key: {key} not found.")
             setattr(self, key, value)
 
     @classmethod
-    def get_coefficients(cls, *args, **kwargs):
-        args = cls(*args, **kwargs)
-        args.sample_period = SAMPLE_PERIOD
+    def get_coefficients(cls, sample_period, **kwargs):
+        args = cls(sample_period, **kwargs)
         return cls.coefficients_func(args)
 
 
@@ -57,16 +56,33 @@ class PidArgs(_AbstractArgs):
     coefficients_func = iir.pid_coefficients
 
 
-class NoFilterArgs(_AbstractArgs):
-    filter_type = "none"
+class ThroughArgs(_AbstractArgs):
+    filter_type = "through"
     parameters = []
 
     @staticmethod
-    def coefficients_func(*_args):
+    def coefficients_func():
         return [1, 0, 0, 0, 0]
 
+    @classmethod
+    def get_coefficients(cls, *_args):
+        return cls.coefficients_func()
 
-FILTERS = [NoFilterArgs, PidArgs, NotchArgs, LowpassArgs, HighpassArgs, AllpassArgs]
+
+class BlockAllArgs(_AbstractArgs):
+    filter_type = "block"
+    parameters = []
+
+    @staticmethod
+    def coefficients_func():
+        return [0, 0, 0, 0, 0]
+
+    @classmethod
+    def get_coefficients(cls, *_args):
+        return cls.coefficients_func()
+
+
+FILTERS = [ThroughArgs, BlockAllArgs, PidArgs, NotchArgs, LowpassArgs, HighpassArgs, AllpassArgs]
 
 
 def filters():

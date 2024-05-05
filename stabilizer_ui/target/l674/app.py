@@ -2,9 +2,12 @@ import argparse
 import asyncio
 import logging
 import sys
-from contextlib import suppress
+import numpy as np
 
-from PyQt5 import QtWidgets
+from contextlib import suppress
+from enum import Enum, unique
+from gmqtt import Message as MqttMessage
+from PyQt5 import QtGui, QtWidgets, uic
 from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
 from stabilizer.stream import get_local_ip
@@ -18,7 +21,7 @@ from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
 from ...mqtt import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import mqtt
-from ...ui_utils import fmt_mac
+from ...utils import link_slider_to_spinbox, fmt_mac, AsyncQueueThreadsafe
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +32,7 @@ SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterface,
                             root_topic: str, broker_address: NetworkAddress,
-                            stream_target: NetworkAddress):
-
+                            stream_target_queue: AsyncQueueThreadsafe[NetworkAddress]):
     invert = (lambda w: not mqtt.read(w),
               lambda w, v: mqtt.write(w, not v))
     kilo = (lambda w: mqtt.read(w) * 1e3,
@@ -57,6 +59,16 @@ async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterf
                 logger.warning("Unexpected value: '%s' (choices: '%s')", value, choices)
 
         return read, write
+
+    # Wait for the stream thread to read the initial port.
+    # A bit hacky, would ideally use a join but that seems to lead to a deadlock.
+    # TODO: Get rid of this hack.
+    await asyncio.sleep(1)
+
+    # Wait for stream target to be set
+    stream_target = await stream_target_queue.get()
+    stream_target_queue.task_done()
+    logger.debug("Got stream target from stream thread.")
 
     # `ui/#` are only used by the UI, the others by both UI and stabilizer
     settings_map = {
@@ -106,8 +118,12 @@ async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterf
             state[key] = cfg.read_handler(cfg.widgets)
         return state
 
+    # Close the stream upon bad disconnect
+    stream_topic = f"{root_topic}/{Settings.stream_target.value}"
+    will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=10)
+
     try:
-        bridge = await UiMqttBridge.new(broker_address, settings_map)
+        bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
         ui.set_comm_status(
             f"Connected to MQTT broker at {broker_address.get_ip()}.")
         await bridge.load_ui(Settings, root_topic)
@@ -151,7 +167,7 @@ async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterf
             # Show message for things like timeout errors.
             text = repr(e)
         ui.set_comm_status(f"Stabilizer connection error: {text}")
-        raise e
+        raise
 
 
 class UIStatePublisher:
@@ -177,8 +193,12 @@ def main():
     parser.add_argument("--wand-port", default=3251, type=int)
     parser.add_argument("--wand-channel", default="lab1_674", type=str)
     parser.add_argument("--solstis-host", default="10.179.22.23", type=str)
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     common_args.simple_network_args(parser, 4110)
     args = parser.parse_args()
+
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
 
     app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")
@@ -198,14 +218,16 @@ def main():
         # Find out which local IP address we are going to direct the stream to.
         # Assume the local IP address is the same for the broker and the stabilizer.
         local_ip = get_local_ip(args.broker_host)
-        stream_target = NetworkAddress(local_ip, args.stream_port)
+        requested_stream_target = NetworkAddress(local_ip, args.stream_port)
+        stream_target_queue = AsyncQueueThreadsafe(maxsize=1)
+        stream_target_queue.put_nowait(requested_stream_target)
 
         broker_address = NetworkAddress.from_str_ip(args.broker_host, args.broker_port)
 
         stabilizer_topic = f"dt/sinara/l674/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(
             update_stabilizer(ui, stabilizer_interface, stabilizer_topic, broker_address,
-                              stream_target))
+                              stream_target_queue))
 
         monitor_lock_task = loop.create_task(
             monitor_lock_state(ui, stabilizer_interface, args.wand_host, args.wand_port,
@@ -214,8 +236,14 @@ def main():
         server = pc_rpc.Server({"l674_lock_ui": UIStatePublisher(ui)},
                                "Publishes the state of the l674-lock-ui")
 
-        stream_thread = StreamThread(ui.update_stream, FftScope.precondition_data,
-                                     SCOPE_UPDATE_PERIOD, stream_target, broker_address, loop)
+        stream_thread = StreamThread(
+            ui.update_stream,
+            ui.scope,
+            stream_target_queue,
+            broker_address,
+            loop
+        )
+
         stream_thread.start()
 
         loop.run_until_complete(

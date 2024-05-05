@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-#: Duration of a single scope trace of streamed ADC, DAC data, in seconds.
+#: Duration of a single scope trace of streamed data, in seconds.
 #: PyQt's drawing speed and the FFT processing step limit this value.
 MAX_BUFFER_PERIOD = 0.02
 

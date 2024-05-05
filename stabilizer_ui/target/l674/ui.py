@@ -3,9 +3,10 @@ import logging
 
 from PyQt5 import QtGui, QtWidgets, uic
 from stabilizer.stream import Parser, AdcDecoder, DacDecoder
+from stabilizer import DEFAULT_L674_SAMPLE_PERIOD
 
 from .lock import LockState
-from ...ui_utils import link_slider_to_spinbox
+from ...utils import link_slider_to_spinbox
 from ...stream.fft_scope import FftScope
 from ...widgets import AbstractUiWindow
 
@@ -58,8 +59,8 @@ class UiWindow(AbstractUiWindow):
         for afe in [self.afe0GainBox, self.afe1GainBox]:
             afe.addItems(self.afe_options)
 
-        stream_parser = Parser([AdcDecoder(), DacDecoder()])
-        self.scope = FftScope(stream_parser)
+        streamParser = Parser([AdcDecoder(), DacDecoder()])
+        self.scope = FftScope(streamParser, DEFAULT_L674_SAMPLE_PERIOD)
         self.tabWidget.addTab(self.scope, "Scope")
 
     def _link_paired_widgets(self):

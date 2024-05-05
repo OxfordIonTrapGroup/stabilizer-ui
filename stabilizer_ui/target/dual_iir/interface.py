@@ -1,10 +1,13 @@
 import logging
 import asyncio
+from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD
+from gmqtt import Message as MqttMessage
 
 from .ui import UiWindow
-from ...mqtt import UiMqttConfig, NetworkAddress, UiMqttBridge, MqttInterface
+from ...mqtt import NetworkAddress, UiMqttBridge, MqttInterface
 from ...interface import AbstractStabilizerInterface
 from ...iir.filters import FILTERS
+from ...utils import AsyncQueueThreadsafe
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +18,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
     """
 
     iir_ch_topic_base = "settings/iir_ch"
+
+    def __init__(self):
+        super().__init__(DEFAULT_DUAL_IIR_SAMPLE_PERIOD)
 
     async def triage_setting_change(self, setting, all_values):
         logger.info("Setting change'%s'", setting)
@@ -35,7 +41,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
                 param: all_values[path_root + f"{filter_type}/{param}"]
                 for param in FILTERS[filter_idx].parameters
             }
-            ba = FILTERS[filter_idx].get_coefficients(**kwargs)
+            ba = FILTERS[filter_idx].get_coefficients(self.sample_period, **kwargs)
 
             await self.set_iir(
                 channel=int(channel),
@@ -52,8 +58,18 @@ class StabilizerInterface(AbstractStabilizerInterface):
         ui: UiWindow,
         root_topic: str,
         broker_address: NetworkAddress,
-        stream_target: NetworkAddress,
+        stream_target_queue: AsyncQueueThreadsafe[NetworkAddress],
     ):
+        # Wait for the stream thread to read the initial port.
+        # A bit hacky, would ideally use a join but that seems to lead to a deadlock.
+        # TODO: Get rid of this hack.
+        await asyncio.sleep(1)
+
+        # Wait for stream target to be set
+        stream_target = await stream_target_queue.get()
+        stream_target_queue.task_done()
+        logger.debug("Got stream target from stream thread.")
+
         settings_map = ui.set_mqtt_configs(stream_target)
 
         def read_ui():
@@ -62,8 +78,12 @@ class StabilizerInterface(AbstractStabilizerInterface):
                 state[key] = cfg.read_handler(cfg.widgets)
             return state
 
+        # Close the stream upon bad disconnect
+        stream_topic = f"{root_topic}/settings/stream_target"
+        will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=10)
+
         try:
-            bridge = await UiMqttBridge.new(broker_address, settings_map)
+            bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
             ui.set_comm_status(f"Connected to MQTT broker at {broker_address.get_ip()}.")
             await bridge.load_ui(lambda x: x, root_topic, ui)
             keys_to_write, ui_updated = bridge.connect_ui()

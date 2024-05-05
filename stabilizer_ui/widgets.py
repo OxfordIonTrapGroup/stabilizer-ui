@@ -1,4 +1,5 @@
 from PyQt5.QtWidgets import QMainWindow, QMessageBox, QLabel, QStatusBar
+from PyQt5.QtGui import QPalette
 from typing import Optional
 
 
@@ -19,6 +20,22 @@ class AbstractUiWindow(QMainWindow):
         self.comm_status_label = QLabel()
         self.statusbar.addPermanentWidget(self.comm_status_label)
 
+        # Message box indicating stabilizer is offline
+        self._offlineMessageBox = QMessageBox()
+        self._offlineMessageBox.setText("Stabilizer offline")
+        self._offlineMessageBox.setInformativeText("Check the stabilizer's network connection.")
+        self._offlineMessageBox.setIcon(QMessageBox.Warning)
+        self._offlineMessageBox.setStandardButtons(QMessageBox.Ok)
+        self._offlineMessageBox.setModal(True)
+
+        # Message box showing panic message upon stabilizer reboot after panic
+        self._panicMessageBox = QMessageBox()
+        self._panicMessageBox.setText("Stabilizer panicked!")
+        self._panicMessageBox.setIcon(QMessageBox.Critical)
+        self._panicMessageBox.setInformativeText(f"Stabilizer had panicked, but has since restarted. "\
+            "You may need to change some settings if the issue persists.")
+        self._panicMessageBox.setStandardButtons(QMessageBox.Ok)
+
     def set_comm_status(self, status: str):
         self.comm_status_label.setText(status)
 
@@ -27,35 +44,26 @@ class AbstractUiWindow(QMainWindow):
             [f"{key}: {value}" for key, value in self.stylesheet.items()])
         self.setStyleSheet(stylesheet_str)
 
-    def _offlineMessageBox(self):
-        messageBox = QMessageBox()
-
-        messageBox.setText("Stabilizer offline")
-        messageBox.setInformativeText("Check the stabilizer's network connection.")
-        messageBox.setIcon(QMessageBox.Warning)
-
-        messageBox.setStandardButtons(QMessageBox.Ok)
-
-        return messageBox
-
     def onPanicStatusChange(self, isPanicked: bool, value: Optional[str]):
         if not isPanicked:
             self.stylesheet.pop("background-color")
             self.setWindowTitle(self._windowTitle)
             return
 
-        panicMessageBox = QMessageBox()
-        panicMessageBox.setText("Stabilizer panicked!")
-        panicMessageBox.setIcon(QMessageBox.Critical)
-        panicMessageBox.setInformativeText(f"Stabilizer had panicked, but has since restarted. "\
-            "You may need to change some settings if the issue persists.")
-        panicMessageBox.setDescriptiveText(f"Diagnostic information: \n{value}")
+        self._panicMessageBox.setDetailedText(f"Diagnostic information: \n{value}")
+        self._panicMessageBox.open()
 
-        panicMessageBox.setStandardButtons(QMessageBox.Ok)
-        panicMessageBox.setDefaultButton(QMessageBox.Ok)
-        panicMessageBox.setEscapeButton(QMessageBox.Ok)
+    def is_dark_theme(self):
+        r""" Guess whether the current theme is dark or light by comparing
+            the text and background color of a virtual label.
+            :return: True if the theme is dark, False otherwise.
 
-        panicMessageBox.exec()
+        """
+        # Virtual label that is deleted after use
+        label = QLabel("am I in the dark?")
+        text_hsv_value = label.palette().color(QPalette.WindowText).value()
+        bg_hsv_value = label.palette().color(QPalette.Background).value()
+        return text_hsv_value > bg_hsv_value
 
     def onlineStatusChange(self, isOnline: bool):
         if self.stabilizerOnline == isOnline:
@@ -67,8 +75,8 @@ class AbstractUiWindow(QMainWindow):
             self.stylesheet.pop("background-color")
             self.setWindowTitle(self._windowTitle)
         else:
-            self.stylesheet["background-color"] = "mistyrose"
-            self._offlineMessageBox().exec()
+            self.stylesheet["background-color"] = "maroon" if self.is_dark_theme() else "mistyrose"
+            self._offlineMessageBox.open()
 
             self._windowTitle = self.windowTitle()
             self.setWindowTitle(f"{self._windowTitle} [OFFLINE]")

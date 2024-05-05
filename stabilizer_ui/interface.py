@@ -23,9 +23,10 @@ class AbstractStabilizerInterface:
     Shim for controlling stabilizer over MQTT
     """
 
-    def __init__(self):
+    def __init__(self, sample_period: float):
         self._interface_set = asyncio.Event()
         self._interface: Optional[MqttInterface] = None
+        self.sample_period = sample_period
 
     def set_interface(self, interface: MqttInterface) -> None:
         self._interface = interface
@@ -40,7 +41,7 @@ class AbstractStabilizerInterface:
 
     async def set_pi_gains(self, channel: int, iir_idx: int, p_gain: float,
                            i_gain: float):
-        b0 = i_gain * 2 * np.pi * stabilizer.SAMPLE_PERIOD + p_gain
+        b0 = i_gain * 2 * np.pi * self.sample_period + p_gain
         b1 = -p_gain
         await self.set_iir(channel, iir_idx, [b0, b1, 0, 1, 0])
 

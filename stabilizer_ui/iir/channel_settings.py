@@ -1,8 +1,8 @@
 import os
 import numpy as np
 from scipy import signal
-from PyQt5 import QtWidgets, uic
-from stabilizer import SAMPLE_PERIOD
+from PyQt5 import QtWidgets, QtCore, uic
+from artiq.gui.scientific_spinbox import ScientificSpinBox
 
 from . import filters
 
@@ -19,8 +19,8 @@ class AbstractChannelSettings(QtWidgets.QWidget):
     def _add_afe_options(self):
         self.afeGainBox.addItems(self.afe_options)
 
-    def _add_iir_tabWidget(self):
-        self.iir_widgets = [_IIRWidget(), _IIRWidget()]
+    def _add_iir_tabWidget(self, sample_period):
+        self.iir_widgets = [_IIRWidget(sample_period), _IIRWidget(sample_period)]
         for i, iir in enumerate(self.iir_widgets):
             self.IIRTabs.addTab(iir, f"Filter {i}")
 
@@ -29,7 +29,7 @@ class ChannelSettings(AbstractChannelSettings):
     """ Minimal channel settings widget for a dual-iir-like application
     """
 
-    def __init__(self):
+    def __init__(self, sample_period):
         super().__init__()
 
         uic.loadUi(
@@ -37,16 +37,18 @@ class ChannelSettings(AbstractChannelSettings):
                          "widgets/channel_settings.ui"), self)
 
         self._add_afe_options()
-        self._add_iir_tabWidget()
+        self._add_iir_tabWidget(sample_period)
 
 
 class _IIRWidget(QtWidgets.QWidget):
 
-    def __init__(self):
+    def __init__(self, sample_period):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                "widgets/iir.ui")
         uic.loadUi(ui_path, self)
+
+        self.sample_period = sample_period
 
         # Obtains dict of filters from stabilizer.py module
         self.filters = (filters.filters())
@@ -57,27 +59,36 @@ class _IIRWidget(QtWidgets.QWidget):
             self.filterComboBox.addItem(_filter)
             if _filter == "pid":
                 _widget = _PIDWidget()
+                _tooltip = "PID"
             elif _filter == "notch":
                 _widget = _NotchWidget()
+                _tooltip = "Notch filter"
             elif _filter in ["lowpass", "highpass", "allpass"]:
                 _widget = _XPassWidget()
-            elif _filter == "none":
+                _tooltip = f"{_filter.capitalize()} filter"
+            elif _filter == "through":
                 _widget = QtWidgets.QWidget()
+                _tooltip = "Passes the input through unfiltered"
+            elif _filter == "block":
+                _widget = QtWidgets.QWidget()
+                _tooltip = "Blocks the input via a digital filter"
             else:
                 raise ValueError()
+
             self.widgets[_filter] = _widget
             self.filterParamsStack.addWidget(_widget)
+            self.filterComboBox.setItemData(self.filterComboBox.count() - 1, _tooltip, QtCore.Qt.ToolTipRole)
 
         self.widgets["transferFunctionView"] = self.transferFunctionView.addPlot(row=0,
                                                                                  col=0)
 
-        self.f = np.logspace(-8.5, 0, 1024, endpoint=False) * (0.5 / SAMPLE_PERIOD)
+        self.frequencies = np.logspace(-8.5, 0, 1024, endpoint=False) * (0.5 / self.sample_period)
         plot_config = {
             "ylabel": "Magnitude (dB)",
             "xlabel": "Frequency (Hz)",
             "log": [True, False],
-            "xrange": [np.log10(min(self.f)),
-                       np.log10(max(self.f))],
+            "xrange": [np.log10(min(self.frequencies)),
+                       np.log10(max(self.frequencies))],
         }
 
         self.widgets["transferFunctionView"].setLogMode(*plot_config["log"])
@@ -86,13 +97,16 @@ class _IIRWidget(QtWidgets.QWidget):
         self.widgets["transferFunctionView"].setLabels(left=plot_config["ylabel"],
                                                        bottom=plot_config["xlabel"])
 
+        # Disable divide by zero warnings
+        np.seterr(divide='ignore')
+
     def update_transfer_function(self, coefficients):
         f, h = signal.freqz(
             coefficients[:3],
             np.r_[1, [c for c in coefficients[3:]]],
             # TODO: Simplfy once the stabilizer python script is updated
-            worN=self.f,
-            fs=1 / SAMPLE_PERIOD,
+            worN=self.frequencies,
+            fs=1 / self.sample_period,
         )
         # TODO: setData isn't working?
         self.widgets["transferFunctionView"].clear()
@@ -106,6 +120,9 @@ class _PIDWidget(QtWidgets.QWidget):
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                "widgets/pid_settings.ui")
         uic.loadUi(ui_path, self)
+
+        for spinbox in self.findChildren(ScientificSpinBox):
+            spinbox.setSigFigs(3)
 
 
 class _NotchWidget(QtWidgets.QWidget):
