@@ -63,6 +63,6 @@ ui = Ui()
 
 global app_root
 app_root = TopicTree.new("dt/sinara/fnc/<MAC>")
-app_root.add_children([stabilizer.root, ui.root])
+app_root.set_children([stabilizer.root, ui.root])
 app_root.create_children(["meta", "alive"])
 app_root.set_app_root()

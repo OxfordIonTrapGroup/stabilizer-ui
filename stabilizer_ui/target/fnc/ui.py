@@ -164,13 +164,13 @@ class UiWindow(AbstractUiWindow):
                 setting.get_parent_until(lambda x: x.name.startswith("iir"))) is not None:
             (_ch, _iir) = (int(ui_iir.get_parent().name[2:]), int(ui_iir.name[3:]))
 
-            filter_type = ui_iir.get_child("filter").value
-            filter = ui_iir.get_child(filter_type)
+            filter_type = ui_iir.child("filter").value
+            filter = ui_iir.child(filter_type)
 
             if filter_type in ["though", "block"]:
                 ba = get_filter(filter_type).get_coefficients()
             else:
-                filter_params = {setting.name: setting.value for setting in filter.get_children()}
+                filter_params = {setting.name: setting.value for setting in filter.children()}
                 ba = get_filter(filter_type).get_coefficients(self.fftScopeWidget.sample_period, **filter_params)
 
             _iir_widgets = self.channels[_ch].iir_widgets[_iir]
@@ -182,69 +182,69 @@ class UiWindow(AbstractUiWindow):
         settings_map = {}
 
         # `ui/#` are only used by the UI, the others by both UI and stabilizer
-        settings_map[stabilizer.stream_target.get_path_from_root()] = UiMqttConfig(
+        settings_map[stabilizer.stream_target.path()] = UiMqttConfig(
             [],
             lambda _: stream_target._asdict(),
             lambda _w, _v: stream_target._asdict(),
         )
 
-        settings_map[stabilizer.ext_clk.get_path_from_root()] = UiMqttConfig(
+        settings_map[stabilizer.ext_clk.path()] = UiMqttConfig(
             [self.clockWidget.extClkCheckBox])
-        settings_map[stabilizer.ref_clk_frequency.get_path_from_root()] = UiMqttConfig(
+        settings_map[stabilizer.ref_clk_frequency.path()] = UiMqttConfig(
             [self.clockWidget.refFrequencyBox], *mega)
-        settings_map[stabilizer.clk_multiplier.get_path_from_root()] = UiMqttConfig(
+        settings_map[stabilizer.clk_multiplier.path()] = UiMqttConfig(
             [self.clockWidget.multiplierBox])
 
         for ch in range(NUM_CHANNELS):
-            settings_map[stabilizer.afes[ch].get_path_from_root()] = UiMqttConfig(
+            settings_map[stabilizer.afes[ch].path()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])
 
             settings_map[
-                stabilizer.attenuation_ins[ch].get_path_from_root()] = UiMqttConfig(
+                stabilizer.attenuation_ins[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsInAttenuationBox])
             settings_map[
-                stabilizer.attenuation_outs[ch].get_path_from_root()] = UiMqttConfig(
+                stabilizer.attenuation_outs[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsOutAttenuationBox])
 
             settings_map[
-                stabilizer.amplitude_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
+                stabilizer.amplitude_dds_ins[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsInAmplitudeBox])
             settings_map[
-                stabilizer.amplitude_dds_outs[ch].get_path_from_root()] = UiMqttConfig(
+                stabilizer.amplitude_dds_outs[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsOutAmplitudeBox])
 
             settings_map[
-                stabilizer.frequency_dds_outs[ch].get_path_from_root()] = UiMqttConfig(
+                stabilizer.frequency_dds_outs[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsOutFrequencyBox], *mega)
             settings_map[
-                stabilizer.frequency_dds_ins[ch].get_path_from_root()] = UiMqttConfig(
+                stabilizer.frequency_dds_ins[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsInFrequencyBox], *mega)
             
             settings_map[
-                ui.dds_io_link_checkboxes[ch].get_path_from_root()] = UiMqttConfig(
+                ui.dds_io_link_checkboxes[ch].path()] = UiMqttConfig(
                     [self.channels[ch].ddsIoFreqLinkCheckBox])
 
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
                 iirWidget = self.channels[ch].iir_widgets[iir]
 
-                for child in ui.iirs[ch][iir].get_children(
+                for child in ui.iirs[ch][iir].children(
                     ["y_offset", "y_min", "y_max", "x_offset"]):
-                    settings_map[child.get_path_from_root()] = UiMqttConfig(
+                    settings_map[child.path()] = UiMqttConfig(
                         [getattr(iirWidget, child.name + "Box")])
 
-                settings_map[ui.iirs[ch][iir].get_child(
-                    "filter").get_path_from_root()] = UiMqttConfig(
+                settings_map[ui.iirs[ch][iir].child(
+                    "filter").path()] = UiMqttConfig(
                         [iirWidget.filterComboBox])
                 for filter in FILTERS:
-                    filter_topic = ui.iirs[ch][iir].get_child(filter.filter_type)
-                    for param in filter_topic.get_children():
+                    filter_topic = ui.iirs[ch][iir].child(filter.filter_type)
+                    for param in filter_topic.children():
                         widget_attribute = lambda suffix: getattr(
                             iirWidget.widgets[filter.filter_type], f"{param.name}{suffix}"
                         )
 
                         if param.name.split("_")[-1] == "limit":
-                            settings_map[param.get_path_from_root()] = UiMqttConfig(
+                            settings_map[param.path()] = UiMqttConfig(
                                 [
                                     widget_attribute("Box"),
                                     widget_attribute("IsInf"),
@@ -252,13 +252,13 @@ class UiWindow(AbstractUiWindow):
                                 *link_spinbox_to_is_inf_checkbox(),
                             )
                         elif param.name in {"f0", "Ki"}:
-                            settings_map[param.get_path_from_root()] = UiMqttConfig(
+                            settings_map[param.path()] = UiMqttConfig(
                                 [widget_attribute("Box")], *kilo)
                         elif param.name == "Kii":
-                            settings_map[param.get_path_from_root()] = UiMqttConfig(
+                            settings_map[param.path()] = UiMqttConfig(
                                 [widget_attribute("Box")], *kilo2)
                         else:
-                            settings_map[param.get_path_from_root()] = UiMqttConfig(
+                            settings_map[param.path()] = UiMqttConfig(
                                 [widget_attribute("Box")])
 
         return settings_map
