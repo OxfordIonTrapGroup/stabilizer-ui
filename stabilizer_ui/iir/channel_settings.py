@@ -5,6 +5,9 @@ from PyQt5 import QtWidgets, QtCore, uic
 from artiq.gui.scientific_spinbox import ScientificSpinBox
 
 from . import filters
+from .filters import FILTERS
+from ..mqtt import UiMqttConfig
+from ..utils import link_spinbox_to_is_inf_checkbox, kilo, kilo2
 
 
 class AbstractChannelSettings(QtWidgets.QWidget):
@@ -111,6 +114,40 @@ class _IIRWidget(QtWidgets.QWidget):
         # TODO: setData isn't working?
         self.widgets["transferFunctionView"].clear()
         self.widgets["transferFunctionView"].plot(f, 20 * np.log10(np.absolute(h)))
+
+    def set_mqtt_configs(self, settings_map, iir_topic):
+        for child in iir_topic.children(["y_offset", "y_min", "y_max", "x_offset"]):
+            settings_map[child.path()] = UiMqttConfig(
+                [getattr(self, child.name + "Box")])
+
+        settings_map[iir_topic.child(
+            "filter").path()] = UiMqttConfig(
+                [self.filterComboBox])
+
+        for filter in FILTERS:
+            filter_topic = iir_topic.child(filter.filter_type)
+            for param in filter_topic.children():
+                widget_attribute = lambda suffix: getattr(
+                    self.widgets[filter.filter_type], f"{param.name}{suffix}"
+                )
+
+                if param.name.split("_")[-1] == "limit":
+                    settings_map[param.path()] = UiMqttConfig(
+                        [
+                            widget_attribute("Box"),
+                            widget_attribute("IsInf"),
+                        ],
+                        *link_spinbox_to_is_inf_checkbox(),
+                    )
+                elif param.name in {"f0", "Ki"}:
+                    settings_map[param.path()] = UiMqttConfig(
+                        [widget_attribute("Box")], *kilo)
+                elif param.name == "Kii":
+                    settings_map[param.path()] = UiMqttConfig(
+                        [widget_attribute("Box")], *kilo2)
+                else:
+                    settings_map[param.path()] = UiMqttConfig(
+                        [widget_attribute("Box")])
 
 
 class _PIDWidget(QtWidgets.QWidget):

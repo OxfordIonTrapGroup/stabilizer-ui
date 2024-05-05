@@ -64,44 +64,6 @@ class UiWindow(AbstractUiWindow):
     def update_stream(self, payload):
         self.fftScopeWidget.update(payload)
 
-    # async def update_transfer_function(self, setting, all_values):
-    #     if setting.split("/")[0] == "ui":
-    #         channel, iir = setting.split("/")[1:3]
-    #         path_root = f"ui/{channel}/{iir}/"
-    #         filter_type = all_values[path_root + "filter"]
-    #         filter = get_filter(filter_type)
-
-    #         if filter_type in ["though", "block"]:
-    #             ba = filter.get_coefficients()
-    #         else:
-    #             filter_params = {
-    #                 param: all_values[path_root + f"{filter_type}/{param}"]
-    #                 for param in filter.parameters
-    #             }
-    #             ba = filter.get_coefficients(self.fftScopeWidget.sample_period, **filter_params)
-
-    #         _iir_widget = self.channels[int(channel)].iir_widgets[int(iir)]
-    #         _iir_widget.update_transfer_function(ba)
-
-    async def update_transfer_function(self, setting):
-        """Update transfer function plot based on setting change."""
-        if setting.app_root().name == "ui" and (
-                ui_iir :=
-                setting.get_parent_until(lambda x: x.name.startswith("iir"))) is not None:
-            (_ch, _iir) = (int(ui_iir.get_parent().name[2:]), int(ui_iir.name[3:]))
-
-            filter_type = ui_iir.child("filter").value
-            filter = ui_iir.child(filter_type)
-
-            if filter_type in ["though", "block"]:
-                ba = get_filter(filter_type).get_coefficients()
-            else:
-                filter_params = {setting.name: setting.value for setting in filter.children()}
-                ba = get_filter(filter_type).get_coefficients(self.fftScopeWidget.sample_period, **filter_params)
-
-            _iir_widgets = self.channels[_ch].iir_widgets[_iir]
-            _iir_widgets.update_transfer_function(ba)
-
     def set_mqtt_configs(self, stream_target: NetworkAddress):
         """ Link the UI widgets to the MQTT topic tree"""
 
@@ -118,44 +80,12 @@ class UiWindow(AbstractUiWindow):
         for ch in range(NUM_CHANNELS):
             settings_map[StabilizerSettings.afes[ch].path()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])
-            
+
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
                 iirWidget = self.channels[ch].iir_widgets[iir]
                 iir_topic = UiSettings.iirs[ch][iir]
 
-                for child in iir_topic.children(
-                    ["y_offset", "y_min", "y_max", "x_offset"]):
-                    settings_map[child.path()] = UiMqttConfig(
-                        [getattr(iirWidget, child.name + "Box")])
-                    
-                settings_map[iir_topic.child(
-                    "filter").path()] = UiMqttConfig(
-                        [iirWidget.filterComboBox])
-                
-                for filter in FILTERS:
-                    filter_topic = iir_topic.child(filter.filter_type)
-                    for param in filter_topic.children():
-                        widget_attribute = lambda suffix: getattr(
-                            iirWidget.widgets[filter.filter_type], f"{param.name}{suffix}"
-                        )
-
-                        if param.name.split("_")[-1] == "limit":
-                            settings_map[param.path()] = UiMqttConfig(
-                                [
-                                    widget_attribute("Box"),
-                                    widget_attribute("IsInf"),
-                                ],
-                                *link_spinbox_to_is_inf_checkbox(),
-                            )
-                        elif param.name in {"f0", "Ki"}:
-                            settings_map[param.path()] = UiMqttConfig(
-                                [widget_attribute("Box")], *kilo)
-                        elif param.name == "Kii":
-                            settings_map[param.path()] = UiMqttConfig(
-                                [widget_attribute("Box")], *kilo2)
-                        else:
-                            settings_map[param.path()] = UiMqttConfig(
-                                [widget_attribute("Box")])
+                iirWidget.set_mqtt_configs(settings_map, iir_topic)
 
         return settings_map

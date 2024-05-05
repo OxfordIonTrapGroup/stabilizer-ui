@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import json
@@ -7,7 +9,6 @@ from typing import NamedTuple, List, Callable, Any, Dict, Optional
 from contextlib import suppress
 from PyQt5 import QtWidgets
 from gmqtt import Client as MqttClient, Message as MqttMessage
-from .widgets import AbstractUiWindow
 
 logger = logging.getLogger(__name__)
 
