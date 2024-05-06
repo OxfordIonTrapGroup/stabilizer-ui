@@ -24,6 +24,7 @@ DEFAULT_ADC_PLOT_YRANGE = (-1, 1)
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
+
 class UiWindow(AbstractUiWindow):
 
     def __init__(self, title: str = "Dual IIR"):
@@ -35,7 +36,9 @@ class UiWindow(AbstractUiWindow):
         centralLayout = QtWidgets.QHBoxLayout(self.centralWidget())
 
         # Create UI for channel settings.
-        self.channels = [ChannelSettings(DEFAULT_DUAL_IIR_SAMPLE_PERIOD) for _ in range(NUM_CHANNELS)]
+        self.channels = [
+            ChannelSettings(DEFAULT_DUAL_IIR_SAMPLE_PERIOD) for _ in range(NUM_CHANNELS)
+        ]
 
         self.channelTabWidget = QtWidgets.QTabWidget()
         for i, channel in enumerate(self.channels):
@@ -51,8 +54,10 @@ class UiWindow(AbstractUiWindow):
         # centralLayout.setStretchFactor(self.fftScopeWidget, 1)
 
         for i in range(NUM_CHANNELS):
-            self.fftScopeWidget.graphics_view.getItem(0, i).setYRange(*DEFAULT_ADC_PLOT_YRANGE)
-            self.fftScopeWidget.graphics_view.getItem(1, i).setYRange(*DEFAULT_DAC_PLOT_YRANGE)
+            self.fftScopeWidget.graphics_view.getItem(
+                0, i).setYRange(*DEFAULT_ADC_PLOT_YRANGE)
+            self.fftScopeWidget.graphics_view.getItem(
+                1, i).setYRange(*DEFAULT_DAC_PLOT_YRANGE)
 
         # Disable mouse wheel scrolling on spinboxes to prevent accidental changes
         spinboxes = self.channelTabWidget.findChildren(QtWidgets.QDoubleSpinBox)

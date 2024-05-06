@@ -25,7 +25,9 @@ def main():
     parser = argparse.ArgumentParser(description="Interface for the Dual-IIR Stabilizer.")
     parser.add_argument("-b", "--broker-host", default="10.255.6.4")
     parser.add_argument("--broker-port", default=1883, type=int)
-    parser.add_argument("--stabilizer-mac", default="80-34-28-5f-4f-5d", help="MAC address of the stabilizer")
+    parser.add_argument("--stabilizer-mac",
+                        default="80-34-28-5f-4f-5d",
+                        help="MAC address of the stabilizer")
     parser.add_argument("--stream-port", default=0, type=int)
     parser.add_argument("--name", default="FNC", help="Application name")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")

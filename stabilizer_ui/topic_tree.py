@@ -97,7 +97,8 @@ class TopicTree:
     def child(self, path: str) -> Self:
         """Get a child node at the given path. Raises ValueError if the child does not exist."""
         path = path.split("/")
-        _child = next((_child for _child in self._children if _child.name == path[0]), None)
+        _child = next((_child for _child in self._children if _child.name == path[0]),
+                      None)
 
         if len(path) == 1:
             return _child
@@ -126,7 +127,8 @@ class TopicTree:
     def get_or_create_child(self, path: str) -> Self:
         """Get a child node at the given path. If the child does not exist, create it and any intermediate nodes."""
         path = path.split("/")
-        _child = next((_child for _child in self._children if _child.name == path[0]), None)
+        _child = next((_child for _child in self._children if _child.name == path[0]),
+                      None)
 
         if _child is None:
             return self.create_child("/".join(path))

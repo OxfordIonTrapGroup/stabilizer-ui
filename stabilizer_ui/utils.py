@@ -22,6 +22,7 @@ mega = (
     lambda widgets, value: mqtt.write(widgets, value / 1e6),
 )
 
+
 def lerp(start, stop, fractional_position):
     return start + (stop - start) * fractional_position
 
@@ -64,6 +65,7 @@ def link_slider_to_spinbox(slider: QtWidgets.QSlider,
 
 
 def link_spinbox_to_is_inf_checkbox():
+
     def read(widgets):
         """Expects widgets in the form [spinbox, checkbox]."""
         if widgets[1].isChecked():
@@ -89,6 +91,7 @@ def fmt_mac(mac: str) -> str:
 
 
 class AsyncQueueThreadsafe(asyncio.Queue):
+
     def __init__(self, loop=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._loop = loop or asyncio.get_event_loop()
@@ -100,7 +103,7 @@ class AsyncQueueThreadsafe(asyncio.Queue):
         '''
         future = asyncio.run_coroutine_threadsafe(self.get(), self._loop)
         return future.result(timeout)
-    
+
     async def put_threadsafe(self, item, timeout=None):
         '''Put an item into the queue in a threadsafe manner.
 
@@ -108,7 +111,7 @@ class AsyncQueueThreadsafe(asyncio.Queue):
         '''
         future = asyncio.run_coroutine_threadsafe(self.put(item), self._loop)
         return future.result(timeout)
-    
+
     async def join_threadsafe(self, timeout=None):
         '''Block until all items in the queue have been gotten and processed in a threadsafe manner.
 

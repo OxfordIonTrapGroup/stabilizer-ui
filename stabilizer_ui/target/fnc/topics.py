@@ -16,9 +16,8 @@ class StabilizerSettings:
     def set(cls):
         cls.root = TopicTree("settings")
 
-        (afe, cls.iir_root, cls.pounder,
-         cls.dds_ref_clock) = cls.root.create_children(
-             ["afe", "iir_ch", "pounder", "dds_ref_clock"])
+        (afe, cls.iir_root, cls.pounder, cls.dds_ref_clock) = cls.root.create_children(
+            ["afe", "iir_ch", "pounder", "dds_ref_clock"])
 
         cls.iir_root.create_children(["0", "1"])
 

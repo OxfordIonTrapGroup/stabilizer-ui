@@ -120,7 +120,7 @@ class MqttInterface:
                 err.__cause__ = e
                 result.set_exception(err)
         return 0
-    
+
 
 class NetworkAddress(NamedTuple):
     ip: List[int]

@@ -4,9 +4,9 @@ from PyQt5 import QtWidgets, uic
 
 logger = logging.getLogger(__name__)
 
-# 
+#
 # Parameters defining the AD9959 DDS REFCLK settings
-# 
+#
 
 # AD9959 DDS REFCLK SETTINGS
 # Keep these up to date with the firmware

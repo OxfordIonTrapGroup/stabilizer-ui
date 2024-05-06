@@ -26,10 +26,8 @@ logger = logging.getLogger(__name__)
 async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterface,
                             root_topic: str, broker_address: NetworkAddress,
                             stream_target_queue: AsyncQueueThreadsafe[NetworkAddress]):
-    invert = (lambda w: not mqtt.read(w),
-              lambda w, v: mqtt.write(w, not v))
-    kilo = (lambda w: mqtt.read(w) * 1e3,
-            lambda w, v: mqtt.write(w, v / 1e3))
+    invert = (lambda w: not mqtt.read(w), lambda w, v: mqtt.write(w, not v))
+    kilo = (lambda w: mqtt.read(w) * 1e3, lambda w, v: mqtt.write(w, v / 1e3))
 
     def radio_group(choices):
 
@@ -113,12 +111,15 @@ async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterf
 
     # Close the stream upon bad disconnect
     stream_topic = f"{root_topic}/{Settings.stream_target.value}"
-    will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=10)
+    will_message = MqttMessage(stream_topic,
+                               NetworkAddress.UNSPECIFIED._asdict(),
+                               will_delay_interval=10)
 
     try:
-        bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
-        ui.set_comm_status(
-            f"Connected to MQTT broker at {broker_address.get_ip()}.")
+        bridge = await UiMqttBridge.new(broker_address,
+                                        settings_map,
+                                        will_message=will_message)
+        ui.set_comm_status(f"Connected to MQTT broker at {broker_address.get_ip()}.")
         await bridge.load_ui(Settings, root_topic)
         keys_to_write, ui_updated = bridge.connect_ui()
 
@@ -229,13 +230,8 @@ def main():
         server = pc_rpc.Server({"l674_lock_ui": UIStatePublisher(ui)},
                                "Publishes the state of the l674-lock-ui")
 
-        stream_thread = StreamThread(
-            ui.update_stream,
-            ui.scope,
-            stream_target_queue,
-            broker_address,
-            loop
-        )
+        stream_thread = StreamThread(ui.update_stream, ui.scope, stream_target_queue,
+                                     broker_address, loop)
 
         stream_thread.start()
 
