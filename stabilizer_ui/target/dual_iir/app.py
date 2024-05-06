@@ -2,209 +2,21 @@ import argparse
 import asyncio
 import logging
 import sys
-import queue
 
 from contextlib import suppress
-from math import inf
 from PyQt5 import QtWidgets
 from qasync import QEventLoop
-from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD
-from stabilizer.stream import get_local_ip, Parser, AdcDecoder, DacDecoder
-from gmqtt import Message as MqttMessage
+from stabilizer.stream import get_local_ip
 
+from .ui import UiWindow
 from .interface import StabilizerInterface
+from . import topics
 
-from ...mqtt import MqttInterface
-from ...iir.channel_settings import ChannelSettings
-from ...stream.fft_scope import FftScope
 from ...stream.thread import StreamThread
-from ...ui_mqtt_bridge import NetworkAddress, UiMqttConfig, UiMqttBridge
-from ... import ui_mqtt_bridge
-from ...utils import fmt_mac, AsyncThreadsafeQueue
-from ...iir.filters import FILTERS
-from ...widgets.ui import AbstractUiWindow
+from ...mqtt import NetworkAddress
+from ...utils import fmt_mac, AsyncQueueThreadsafe
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_WINDOW_SIZE = (1200, 600)
-
-parser = Parser([AdcDecoder(), DacDecoder()])
-
-
-class UI(AbstractUiWindow):
-
-    def __init__(self):
-        super().__init__()
-
-        wid = QtWidgets.QWidget(self)
-        self.setCentralWidget(wid)
-        layout = QtWidgets.QHBoxLayout()
-
-        # Create UI for channel settings.
-        self.channel_settings = [ChannelSettings(DEFAULT_DUAL_IIR_SAMPLE_PERIOD) for i in range(2)]
-
-        self.tab_channel_settings = QtWidgets.QTabWidget()
-        for i, channel in enumerate(self.channel_settings):
-            self.tab_channel_settings.addTab(channel, f"Channel {i}")
-        layout.addWidget(self.tab_channel_settings)
-
-        # Create UI for FFT scope.
-        self.fft_scope = FftScope(parser, DEFAULT_DUAL_IIR_SAMPLE_PERIOD)
-        layout.addWidget(self.fft_scope)
-
-        # Set main window layout
-        wid.setLayout(layout)
-
-    def update_stream(self, payload):
-        # if self.tab_channel_settings.currentIndex() != 1:
-        #    return
-        self.fft_scope.update(payload)
-
-    async def update_transfer_function(self, setting, all_values):
-        if setting.split("/")[0] == "ui":
-            channel, iir = setting.split("/")[1:3]
-            path_root = f"ui/{channel}/{iir}/"
-            filter_type = all_values[path_root + "filter"]
-            filter_idx = [f.filter_type for f in FILTERS].index(filter_type)
-            kwargs = {
-                param: all_values[path_root + f"{filter_type}/{param}"]
-                for param in FILTERS[filter_idx].parameters
-            }
-            ba = FILTERS[filter_idx].get_coefficients(self.fft_scope.sample_period, **kwargs)
-            _iir_widget = self.channel_settings[int(channel)].iir_widgets[int(iir)]
-            _iir_widget.update_transfer_function(ba)
-
-
-async def update_stabilizer(
-    ui: UI,
-    stabilizer_interface: StabilizerInterface,
-    root_topic: str,
-    broker_address: NetworkAddress,
-    stream_target_queue: AsyncThreadsafeQueue[NetworkAddress],
-):
-    kilo = (
-        lambda w: ui_mqtt_bridge.read(w) * 1e3,
-        lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
-    )
-    kilo2 = (
-        lambda w: ui_mqtt_bridge.read(w) * 1e3,
-        lambda w, v: ui_mqtt_bridge.write(w, v / 1e3),
-    )
-
-    def spinbox_checkbox_group():
-
-        def read(widgets):
-            """Expects widgets in the form [spinbox, checkbox]."""
-            if widgets[1].isChecked():
-                return inf
-            else:
-                return widgets[0].value()
-
-        def write(widgets, value):
-            """Expects widgets in the form [spinbox, checkbox]."""
-            if value == inf:
-                widgets[1].setChecked(True)
-            else:
-                widgets[0].setValue(value)
-
-        return read, write
-    
-    # Wait for the stream thread to read the initial port.
-    # A bit hacky, would ideally use a join but that seems to lead to a deadlock.
-    # TODO: Get rid of this hack.
-    await asyncio.sleep(1)
-
-    # Wait for stream target to be set
-    stream_target = await stream_target_queue.get()
-    stream_target_queue.task_done()
-    logger.debug("Got stream target from stream thread.")
-
-    # `ui/#` are only used by the UI, the others by both UI and stabilizer
-    settings_map = {
-        "settings/stream_target":
-        UiMqttConfig(
-            [],
-            lambda _: stream_target._asdict(),
-            lambda _w, _v: stream_target._asdict(),
-        )
-    }
-
-    for c in range(2):
-        settings_map[f"settings/afe/{c}"] = UiMqttConfig(
-            [ui.channel_settings[c].afeGainBox])
-        for iir in range(2):
-            name_root = f"ui/{c}/{iir}/"
-            iir_ui = ui.channel_settings[c].iir_widgets[iir]
-            settings_map[name_root + "filter"] = UiMqttConfig([iir_ui.filterComboBox])
-            settings_map[name_root + "x_offset"] = UiMqttConfig([iir_ui.x_offsetBox])
-            settings_map[name_root + "y_offset"] = UiMqttConfig([iir_ui.y_offsetBox])
-            settings_map[name_root + "y_max"] = UiMqttConfig([iir_ui.y_maxBox])
-            settings_map[name_root + "y_min"] = UiMqttConfig([iir_ui.y_minBox])
-            for f in FILTERS:
-                f_str = f.filter_type
-                for arg in f.parameters:
-                    if arg.split("_")[-1] == "limit":
-                        settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                            [
-                                getattr(iir_ui.widgets[f_str], f"{arg}Box"),
-                                getattr(iir_ui.widgets[f_str], f"{arg}IsInf"),
-                            ],
-                            *spinbox_checkbox_group(),
-                        )
-                    else:
-                        if arg == "f0":
-                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo)
-                        elif arg == "Ki":
-                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo)
-                        elif arg == "Kii":
-                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")], *kilo2)
-                        else:
-                            settings_map[name_root + f"{f_str}/{arg}"] = UiMqttConfig(
-                                [getattr(iir_ui.widgets[f_str], f"{arg}Box")])
-
-    def read_ui():
-        state = {}
-        for key, cfg in settings_map.items():
-            state[key] = cfg.read_handler(cfg.widgets)
-        return state
-
-    # Close the stream upon bad disconnect
-    stream_topic = f"{root_topic}/settings/stream_target"
-    will_message = MqttMessage(stream_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=10)
-
-    try:
-        bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
-        await bridge.load_ui(lambda x: x, root_topic, ui)
-        keys_to_write, ui_updated = bridge.connect_ui()
-
-        #
-        # Relay user input to MQTT.
-        #
-
-        interface = MqttInterface(bridge.client, root_topic, timeout=10.0)
-
-        # Allow relock task to directly request ADC1 updates.
-        stabilizer_interface.set_interface(interface)
-
-        # keys_to_write.update(set(Settings))
-        ui_updated.set()  # trigger initial update
-        while True:
-            await ui_updated.wait()
-            while keys_to_write:
-                # Use while/pop instead of for loop, as UI task might push extra
-                # elements while we are executing requests.
-                key = keys_to_write.pop()
-                all_params = read_ui()
-                await stabilizer_interface.change(key, all_params)
-                await ui.update_transfer_function(key, all_params)
-            ui_updated.clear()
-    except BaseException as e:
-        if isinstance(e, asyncio.CancelledError):
-            return
-        logger.exception("Failure in Stabilizer communication task")
 
 
 def main():
@@ -230,35 +42,32 @@ def main():
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
 
-        ui = UI()
-        ui.resize(*DEFAULT_WINDOW_SIZE)
+        ui = UiWindow(f"{args.name} [{fmt_mac(args.stabilizer_mac)}]")
         ui.show()
-        ui.setWindowTitle(args.name + f" [{fmt_mac(args.stabilizer_mac)}]")
 
+        ui.set_comm_status(f"Connecting to MQTT broker at {args.broker_host}…")
         stabilizer_interface = StabilizerInterface()
 
         # Find out which local IP address we are going to direct the stream to.
         # Assume the local IP address is the same for the broker and the stabilizer.
         local_ip = get_local_ip(args.broker_host)
         requested_stream_target = NetworkAddress(local_ip, args.stream_port)
-        stream_target_queue = AsyncThreadsafeQueue(maxsize=1)
+        stream_target_queue = AsyncQueueThreadsafe(maxsize=1)
         stream_target_queue.put_nowait(requested_stream_target)
 
         broker_address = NetworkAddress.from_str_ip(args.broker_host, args.broker_port)
 
-        stabilizer_topic = f"dt/sinara/dual-iir/{fmt_mac(args.stabilizer_mac)}"
+        topics.app_root.name = f"{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(
-            update_stabilizer(
+            stabilizer_interface.update(
                 ui,
-                stabilizer_interface,
-                stabilizer_topic,
                 broker_address,
                 stream_target_queue
             ))
 
         stream_thread = StreamThread(
             ui.update_stream,
-            ui.fft_scope,
+            ui.fftScopeWidget,
             stream_target_queue,
             broker_address,
             loop,

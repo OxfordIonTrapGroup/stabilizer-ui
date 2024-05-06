@@ -16,16 +16,12 @@ class StabilizerSettings:
     def set(cls):
         cls.root = TopicTree("settings")
 
-        (afe, cls.iir_root, cls.pounder,
-         cls.dds_ref_clock) = cls.root.create_children(
-             ["afe", "iir_ch", "pounder", "dds_ref_clock"])
+        (afe, cls.iir_root) = cls.root.create_children(["afe", "iir_ch"])
 
         cls.iir_root.create_children(["0", "1"])
 
         cls.stream_target = cls.root.create_child("stream_target")
         cls.afes = afe.create_children(["0", "1"])
-        cls.ext_clk, cls.ref_clk_frequency, cls.clk_multiplier = cls.dds_ref_clock.create_children(
-            ["external_clock", "reference_clock_frequency", "multiplier"])
 
         # iir_ch/0/1 represents the IIR filter 1 for channel 0
         cls.iirs = [
@@ -33,16 +29,6 @@ class StabilizerSettings:
                 [f"{ch}/{iir}" for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])
             for ch in range(NUM_CHANNELS)
         ]
-
-        # Pounder settings
-        pounder_channels = cls.pounder.create_children(["0", "1"])
-
-        for topic in [
-                "frequency_dds_out", "frequency_dds_in", "amplitude_dds_out",
-                "amplitude_dds_in", "attenuation_out", "attenuation_in"
-        ]:
-            setattr(cls, f"{topic}s",
-                    [pounder_ch.create_child(topic) for pounder_ch in pounder_channels])
 
 
 StabilizerSettings.set()
@@ -62,9 +48,6 @@ class UiSettings:
                 [f"iir{iir}" for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])
             for ch in range(NUM_CHANNELS)
         ]
-        cls.dds_io_link_checkboxes = [
-            ui_channels[ch].create_child("dds_in_checkbox") for ch in range(NUM_CHANNELS)
-        ]
 
         for ch in range(NUM_CHANNELS):
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
@@ -79,7 +62,7 @@ class UiSettings:
 UiSettings.set()
 
 global app_root
-app_root = TopicTree.new("dt/sinara/fnc/<MAC>")
+app_root = TopicTree.new("dt/sinara/dual-iir/<MAC>")
 app_root.set_children([StabilizerSettings.root, UiSettings.root])
 app_root.create_children(["meta", "alive"])
 app_root.set_app_root()

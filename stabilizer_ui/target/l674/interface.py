@@ -4,7 +4,8 @@ from enum import Enum, unique
 import numpy as np
 from stabilizer import DEFAULT_L674_SAMPLE_PERIOD
 
-from ...mqtt import AbstractStabilizerInterface
+from ...interface import AbstractStabilizerInterface
+from ...topic_tree import TopicTree
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,9 @@ class StabilizerInterface(AbstractStabilizerInterface):
     iir_ch_topic_base = "settings/iir_ch"
 
     def __init__(self):
-        super().__init__(DEFAULT_L674_SAMPLE_PERIOD)
+        # Temporary fix until ported to topictree
+        app_root = "dt/sinara/l674"
+        super().__init__(DEFAULT_L674_SAMPLE_PERIOD, TopicTree.new(app_root))
 
     async def read_adc(self) -> float:
         await self._interface_set.wait()
@@ -111,7 +114,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
 
         if setting in self.fast_notch_settings:
             if all_values[Settings.fast_notch_enable]:
-                f0 = (all_values[Settings.fast_notch_frequency] * np.pi * SAMPLE_PERIOD)
+                f0 = (all_values[Settings.fast_notch_frequency] * np.pi * self.sample_period)
                 q = all_values[Settings.fast_notch_quality_factor]
                 # unit gain
                 denominator = (1 + f0 / q + f0**2)

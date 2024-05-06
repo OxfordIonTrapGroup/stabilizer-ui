@@ -2,6 +2,25 @@ from PyQt5 import QtWidgets
 import textwrap
 import asyncio
 
+from math import inf
+from . import mqtt
+
+# Unit conversions
+kilo = (
+    lambda w: mqtt.read(w) * 1e3,
+    lambda w, v: mqtt.write(w, v / 1e3),
+)
+
+# TODO: check if this is correct, this is what the code previously had
+kilo2 = (
+    lambda w: mqtt.read(w) * 1e3,
+    lambda w, v: mqtt.write(w, v / 1e3),
+)
+
+mega = (
+    lambda widgets: mqtt.read(widgets) * 1e6,
+    lambda widgets, value: mqtt.write(widgets, value / 1e6),
+)
 
 def lerp(start, stop, fractional_position):
     return start + (stop - start) * fractional_position
@@ -44,6 +63,24 @@ def link_slider_to_spinbox(slider: QtWidgets.QSlider,
     spinbox.setKeyboardTracking(False)
 
 
+def link_spinbox_to_is_inf_checkbox():
+    def read(widgets):
+        """Expects widgets in the form [spinbox, checkbox]."""
+        if widgets[1].isChecked():
+            return inf
+        else:
+            return widgets[0].value()
+
+    def write(widgets, value):
+        """Expects widgets in the form [spinbox, checkbox]."""
+        if value == inf:
+            widgets[1].setChecked(True)
+        else:
+            widgets[0].setValue(value)
+
+    return read, write
+
+
 def fmt_mac(mac: str) -> str:
     mac_nosep = "".join(c for c in mac if c.isalnum()).lower()
     if len(mac_nosep) != 12 or any(char not in "0123456789abcdef" for char in mac_nosep):
@@ -51,7 +88,7 @@ def fmt_mac(mac: str) -> str:
     return "-".join(textwrap.wrap(mac_nosep, 2))
 
 
-class AsyncThreadsafeQueue(asyncio.Queue):
+class AsyncQueueThreadsafe(asyncio.Queue):
     def __init__(self, loop=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._loop = loop or asyncio.get_event_loop()

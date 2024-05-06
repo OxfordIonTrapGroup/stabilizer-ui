@@ -24,7 +24,7 @@
   </property>
   <property name="maximumSize">
    <size>
-    <width>205</width>
+    <width>16777215</width>
     <height>16777215</height>
    </size>
   </property>
@@ -269,7 +269,7 @@
              <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
             </property>
             <property name="value">
-             <double>10000.000000000000000</double>
+             <double>99.989999999999995</double>
             </property>
            </widget>
           </item>
@@ -364,7 +364,7 @@
              <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
             </property>
             <property name="value">
-             <double>10000.000000000000000</double>
+             <double>99.989999999999995</double>
             </property>
            </widget>
           </item>
@@ -492,7 +492,7 @@
              <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
             </property>
             <property name="value">
-             <double>10000.000000000000000</double>
+             <double>99.989999999999995</double>
             </property>
            </widget>
           </item>
@@ -527,7 +527,7 @@
              <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
             </property>
             <property name="value">
-             <double>10000.000000000000000</double>
+             <double>99.989999999999995</double>
             </property>
            </widget>
           </item>

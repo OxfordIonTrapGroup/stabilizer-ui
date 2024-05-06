@@ -13,16 +13,10 @@ from .ui import UiWindow
 from . import topics
 
 from ...stream.thread import StreamThread
-from ...ui_mqtt_bridge import NetworkAddress
-from ...utils import fmt_mac, AsyncThreadsafeQueue
+from ...mqtt import NetworkAddress
+from ...utils import fmt_mac, AsyncQueueThreadsafe
 
 logger = logging.getLogger(__name__)
-
-#: Interval between scope plot updates, in seconds.
-#: PyQt's drawing speed limits value.
-SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
-
-DEFAULT_WINDOW_SIZE = (1400, 600)
 
 
 def main():
@@ -54,6 +48,8 @@ def main():
         ui.setWindowTitle(args.name + f" [{fmt_mac(args.stabilizer_mac)}]")
         ui.show()
 
+        ui.set_comm_status(f"Connecting to MQTT broker at {args.broker_host}…")
+
         stabilizer_interface = StabilizerInterface()
 
         # Find out which local IP address we are going to direct the stream to.
@@ -63,7 +59,7 @@ def main():
         requested_stream_target = NetworkAddress(local_ip, args.stream_port)
         broker_address = NetworkAddress.from_str_ip(args.broker_host, args.broker_port)
 
-        stream_target_queue = AsyncThreadsafeQueue(loop, maxsize=1)
+        stream_target_queue = AsyncQueueThreadsafe(loop, maxsize=1)
         stream_target_queue.put_nowait(requested_stream_target)
 
         stabilizer_task = loop.create_task(

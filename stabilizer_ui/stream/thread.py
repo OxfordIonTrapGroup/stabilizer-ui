@@ -7,7 +7,8 @@ from collections import deque, namedtuple
 from typing import Callable
 
 from . import MAX_BUFFER_PERIOD
-from ..ui_mqtt_bridge import NetworkAddress
+from ..mqtt import NetworkAddress
+from ..utils import AsyncQueueThreadsafe
 
 from stabilizer.stream import StabilizerStream, Parser, wrap
 import numpy as np
@@ -101,7 +102,7 @@ def stream_worker(
     parser: Parser,
     precondition_data: Callable,
     callback_interval: float,
-    stream_target_queue: queue.Queue[NetworkAddress],
+    stream_target_queue: AsyncQueueThreadsafe[NetworkAddress],
     broker_address: NetworkAddress,
     main_loop: asyncio.AbstractEventLoop,
     terminate: threading.Event,
