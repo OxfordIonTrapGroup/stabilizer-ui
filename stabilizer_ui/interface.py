@@ -68,12 +68,15 @@ class AbstractStabilizerInterface:
                 self.app_root.child(key).value = cfg.read_handler(cfg.widgets)
 
         # Close the stream upon bad disconnect
-        will_message = MqttMessage(self.stream_target_topic, NetworkAddress.UNSPECIFIED._asdict(), will_delay_interval=3)
+        will_message = MqttMessage(self.stream_target_topic,
+                                   NetworkAddress.UNSPECIFIED._asdict(),
+                                   will_delay_interval=3)
 
         try:
-            bridge = await UiMqttBridge.new(broker_address, settings_map, will_message=will_message)
-            ui.set_comm_status(
-                f"Connected to MQTT broker at {broker_address.get_ip()}.")
+            bridge = await UiMqttBridge.new(broker_address,
+                                            settings_map,
+                                            will_message=will_message)
+            ui.set_comm_status(f"Connected to MQTT broker at {broker_address.get_ip()}.")
 
             await bridge.load_ui(lambda x: x, self.app_root.path(), ui)
             keys_to_write, ui_updated = bridge.connect_ui()
@@ -81,9 +84,7 @@ class AbstractStabilizerInterface:
             #
             # Relay user input to MQTT.
             #
-            interface = MqttInterface(bridge.client,
-                                      self.app_root.path(),
-                                      timeout=10.0)
+            interface = MqttInterface(bridge.client, self.app_root.path(), timeout=10.0)
 
             # Allow relock task to directly request ADC1 updates.
             self.set_interface(interface)
@@ -157,12 +158,16 @@ class AbstractStabilizerInterface:
             logger.warning("Stabilizer reported failure to write setting: '%s'", msg)
 
     async def _change_filter_setting(self, iir_setting):
-        (_ch, _iir_idx) = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
+        (_ch,
+         _iir_idx) = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
 
         filter_type = iir_setting.child("filter").value
         filters = iir_setting.child(filter_type)
 
-        filter_params = {filter_param.name: filter_param.value for filter_param in filters.children()}
+        filter_params = {
+            filter_param.name: filter_param.value
+            for filter_param in filters.children()
+        }
 
         ba = get_filter(filter_type).get_coefficients(self.sample_period, **filter_params)
 

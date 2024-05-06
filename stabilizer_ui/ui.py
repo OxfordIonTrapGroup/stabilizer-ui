@@ -9,6 +9,7 @@ from .iir.filters import get_filter
 
 logger = logging.getLogger(__name__)
 
+
 class AbstractUiWindow(QMainWindow):
     """Abstract class for main UI window"""
 
@@ -29,7 +30,8 @@ class AbstractUiWindow(QMainWindow):
         # Message box indicating stabilizer is offline
         self._offlineMessageBox = QMessageBox()
         self._offlineMessageBox.setText("Stabilizer offline")
-        self._offlineMessageBox.setInformativeText("Check the stabilizer's network connection.")
+        self._offlineMessageBox.setInformativeText(
+            "Check the stabilizer's network connection.")
         self._offlineMessageBox.setIcon(QMessageBox.Warning)
         self._offlineMessageBox.setStandardButtons(QMessageBox.Ok)
         self._offlineMessageBox.setModal(True)
@@ -81,7 +83,8 @@ class AbstractUiWindow(QMainWindow):
             self.stylesheet.pop("background-color")
             self.setWindowTitle(self._windowTitle)
         else:
-            self.stylesheet["background-color"] = "maroon" if self.is_dark_theme() else "mistyrose"
+            self.stylesheet["background-color"] = "maroon" if self.is_dark_theme(
+            ) else "mistyrose"
             self._offlineMessageBox.open()
 
             self._windowTitle = self.windowTitle()
@@ -91,7 +94,7 @@ class AbstractUiWindow(QMainWindow):
 
     def set_mqtt_configs(self, _stream_target: NetworkAddress):
         raise NotImplementedError
-    
+
     async def update_transfer_function(self, setting):
         """Update transfer function plot based on setting change."""
         if setting.app_root().name == "ui" and (
@@ -105,8 +108,12 @@ class AbstractUiWindow(QMainWindow):
             if filter_type in ["though", "block"]:
                 ba = get_filter(filter_type).get_coefficients()
             else:
-                filter_params = {setting.name: setting.value for setting in filter_topic.children()}
-                ba = get_filter(filter_type).get_coefficients(self.fftScopeWidget.sample_period, **filter_params)
+                filter_params = {
+                    setting.name: setting.value
+                    for setting in filter_topic.children()
+                }
+                ba = get_filter(filter_type).get_coefficients(
+                    self.fftScopeWidget.sample_period, **filter_params)
 
             try:
                 _iir_widgets = self.channels[_ch].iir_widgets[_iir]
@@ -114,4 +121,5 @@ class AbstractUiWindow(QMainWindow):
             except NameError:
                 logger.error("Unable to update transfer function: widget not found")
             except KeyError:
-                logger.error("Unable to update transfer function: incorrect number of channels")
+                logger.error(
+                    "Unable to update transfer function: incorrect number of channels")

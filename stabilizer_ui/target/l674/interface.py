@@ -114,7 +114,8 @@ class StabilizerInterface(AbstractStabilizerInterface):
 
         if setting in self.fast_notch_settings:
             if all_values[Settings.fast_notch_enable]:
-                f0 = (all_values[Settings.fast_notch_frequency] * np.pi * self.sample_period)
+                f0 = (all_values[Settings.fast_notch_frequency] * np.pi *
+                      self.sample_period)
                 q = all_values[Settings.fast_notch_quality_factor]
                 # unit gain
                 denominator = (1 + f0 / q + f0**2)

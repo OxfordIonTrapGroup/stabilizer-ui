@@ -59,11 +59,7 @@ def main():
 
         topics.app_root.name = f"{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(
-            stabilizer_interface.update(
-                ui,
-                broker_address,
-                stream_target_queue
-            ))
+            stabilizer_interface.update(ui, broker_address, stream_target_queue))
 
         stream_thread = StreamThread(
             ui.update_stream,

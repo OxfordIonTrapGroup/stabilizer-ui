@@ -84,6 +84,7 @@ LOCK_ATTEMPTS_BEFORE_RESONANCE_SEARCH = 5
 
 logger = logging.getLogger(__name__)
 
+
 @unique
 class LockState(Enum):
     out_of_lock = "Out of lock"

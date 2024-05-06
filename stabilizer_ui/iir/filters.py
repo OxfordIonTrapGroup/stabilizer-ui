@@ -1,6 +1,7 @@
 import stabilizer.iir_coefficients as iir
 from collections import OrderedDict
 
+
 class _AbstractArgs:
 
     def __init__(self, sample_period, **kwargs):
@@ -82,7 +83,9 @@ class BlockAllArgs(_AbstractArgs):
         return cls.coefficients_func()
 
 
-FILTERS = [ThroughArgs, BlockAllArgs, PidArgs, NotchArgs, LowpassArgs, HighpassArgs, AllpassArgs]
+FILTERS = [
+    ThroughArgs, BlockAllArgs, PidArgs, NotchArgs, LowpassArgs, HighpassArgs, AllpassArgs
+]
 
 
 def filters():

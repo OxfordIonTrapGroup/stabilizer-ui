@@ -80,12 +80,14 @@ class _IIRWidget(QtWidgets.QWidget):
 
             self.widgets[_filter] = _widget
             self.filterParamsStack.addWidget(_widget)
-            self.filterComboBox.setItemData(self.filterComboBox.count() - 1, _tooltip, QtCore.Qt.ToolTipRole)
+            self.filterComboBox.setItemData(self.filterComboBox.count() - 1, _tooltip,
+                                            QtCore.Qt.ToolTipRole)
 
         self.widgets["transferFunctionView"] = self.transferFunctionView.addPlot(row=0,
                                                                                  col=0)
 
-        self.frequencies = np.logspace(-8.5, 0, 1024, endpoint=False) * (0.5 / self.sample_period)
+        self.frequencies = np.logspace(-8.5, 0, 1024,
+                                       endpoint=False) * (0.5 / self.sample_period)
         plot_config = {
             "ylabel": "Magnitude (dB)",
             "xlabel": "Frequency (Hz)",
@@ -117,19 +119,16 @@ class _IIRWidget(QtWidgets.QWidget):
 
     def set_mqtt_configs(self, settings_map, iir_topic):
         for child in iir_topic.children(["y_offset", "y_min", "y_max", "x_offset"]):
-            settings_map[child.path()] = UiMqttConfig(
-                [getattr(self, child.name + "Box")])
+            settings_map[child.path()] = UiMqttConfig([getattr(self, child.name + "Box")])
 
-        settings_map[iir_topic.child(
-            "filter").path()] = UiMqttConfig(
-                [self.filterComboBox])
+        settings_map[iir_topic.child("filter").path()] = UiMqttConfig(
+            [self.filterComboBox])
 
         for filter in FILTERS:
             filter_topic = iir_topic.child(filter.filter_type)
             for param in filter_topic.children():
                 widget_attribute = lambda suffix: getattr(
-                    self.widgets[filter.filter_type], f"{param.name}{suffix}"
-                )
+                    self.widgets[filter.filter_type], f"{param.name}{suffix}")
 
                 if param.name.split("_")[-1] == "limit":
                     settings_map[param.path()] = UiMqttConfig(
@@ -140,14 +139,13 @@ class _IIRWidget(QtWidgets.QWidget):
                         *link_spinbox_to_is_inf_checkbox(),
                     )
                 elif param.name in {"f0", "Ki"}:
-                    settings_map[param.path()] = UiMqttConfig(
-                        [widget_attribute("Box")], *kilo)
+                    settings_map[param.path()] = UiMqttConfig([widget_attribute("Box")],
+                                                              *kilo)
                 elif param.name == "Kii":
-                    settings_map[param.path()] = UiMqttConfig(
-                        [widget_attribute("Box")], *kilo2)
+                    settings_map[param.path()] = UiMqttConfig([widget_attribute("Box")],
+                                                              *kilo2)
                 else:
-                    settings_map[param.path()] = UiMqttConfig(
-                        [widget_attribute("Box")])
+                    settings_map[param.path()] = UiMqttConfig([widget_attribute("Box")])
 
 
 class _PIDWidget(QtWidgets.QWidget):

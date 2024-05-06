@@ -26,8 +26,7 @@ class StreamThread:
                  stream_target_queue: asyncio.Queue[NetworkAddress],
                  broker_address: NetworkAddress,
                  main_event_loop: asyncio.AbstractEventLoop,
-                 max_buffer_period: float = MAX_BUFFER_PERIOD
-                 ):
+                 max_buffer_period: float = MAX_BUFFER_PERIOD):
 
         parser = fftScopeWidget.stream_parser
         precondition_data = fftScopeWidget.precondition_data()
@@ -137,7 +136,7 @@ def stream_worker(
 
         allocated_stream_port = transport.get_extra_info("sockname")[1]
         stream_target = NetworkAddress(stream_target.ip, allocated_stream_port)
-        
+
         logger.info(f"Binding stream to port: {allocated_stream_port}")
         await stream_target_queue.put_threadsafe(stream_target)
         # Wait for main thread to read the port

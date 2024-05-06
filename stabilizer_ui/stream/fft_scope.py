@@ -22,7 +22,10 @@ class FftScope(QtWidgets.QWidget):
     DEFAULT_X_RANGE = (-MAX_BUFFER_PERIOD / SCOPE_TIME_SCALE, 0)
     DEFAULT_FFT_Y_RANGE = (-7, -1)
 
-    def __init__(self, parser: Parser, sample_period: float, update_period=DEFAULT_SCOPE_UPDATE_PERIOD):
+    def __init__(self,
+                 parser: Parser,
+                 sample_period: float,
+                 update_period=DEFAULT_SCOPE_UPDATE_PERIOD):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "scope.ui")
         uic.loadUi(ui_path, self)
@@ -31,7 +34,8 @@ class FftScope(QtWidgets.QWidget):
         self.sample_period = sample_period
         self.update_period = update_period
 
-        self.DEFAULT_FFT_X_RANGE = (-0.5, -np.log10(0.5 * SCOPE_TIME_SCALE / sample_period))
+        self.DEFAULT_FFT_X_RANGE = (-0.5,
+                                    -np.log10(0.5 * SCOPE_TIME_SCALE / sample_period))
 
         scope_plot_items = [
             self.graphics_view.addPlot(row=i, col=j) for i in range(2) for j in range(2)

@@ -33,6 +33,7 @@ DEFAULT_ADC_VOLT_PHASE_SCALE = 0.2
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
+
 class ChannelSettings(AbstractChannelSettings):
     """ Channel settings"""
 
@@ -40,7 +41,8 @@ class ChannelSettings(AbstractChannelSettings):
         super().__init__()
 
         uic.loadUi(
-            os.path.join(os.path.dirname(os.path.realpath(__file__)), "widgets/channel.ui"), self)
+            os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                         "widgets/channel.ui"), self)
 
         self._add_afe_options()
         self._add_iir_tabWidget(sample_period)
@@ -139,7 +141,7 @@ class UiWindow(AbstractUiWindow):
                                                    QtWidgets.QSizePolicy.Expanding)
         self.fftScopeWidget.setSizePolicy(fftScopeSizePolicy)
         self.fftScopeWidget.setMinimumSize(400, 200)
-        
+
         # Rescale axes and add an axis converting ADC voltage to phase
         for i in range(NUM_CHANNELS):
             adcPlotItem = self.fftScopeWidget.graphics_view.getItem(0, i)
@@ -150,7 +152,8 @@ class UiWindow(AbstractUiWindow):
             adcRightAxis.setScale(DEFAULT_ADC_VOLT_PHASE_SCALE)
             adcRightAxis.setLabel("Phase / turns")
 
-            self.fftScopeWidget.graphics_view.getItem(1, i).setYRange(*DEFAULT_PHASE_PLOT_YRANGE)
+            self.fftScopeWidget.graphics_view.getItem(
+                1, i).setYRange(*DEFAULT_PHASE_PLOT_YRANGE)
 
         self.resize(*DEFAULT_WINDOW_SIZE)
 
@@ -180,30 +183,23 @@ class UiWindow(AbstractUiWindow):
             settings_map[StabilizerSettings.afes[ch].path()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])
 
-            settings_map[
-                StabilizerSettings.attenuation_ins[ch].path()] = UiMqttConfig(
-                    [self.channels[ch].ddsInAttenuationBox])
-            settings_map[
-                StabilizerSettings.attenuation_outs[ch].path()] = UiMqttConfig(
-                    [self.channels[ch].ddsOutAttenuationBox])
+            settings_map[StabilizerSettings.attenuation_ins[ch].path()] = UiMqttConfig(
+                [self.channels[ch].ddsInAttenuationBox])
+            settings_map[StabilizerSettings.attenuation_outs[ch].path()] = UiMqttConfig(
+                [self.channels[ch].ddsOutAttenuationBox])
 
-            settings_map[
-                StabilizerSettings.amplitude_dds_ins[ch].path()] = UiMqttConfig(
-                    [self.channels[ch].ddsInAmplitudeBox])
-            settings_map[
-                StabilizerSettings.amplitude_dds_outs[ch].path()] = UiMqttConfig(
-                    [self.channels[ch].ddsOutAmplitudeBox])
+            settings_map[StabilizerSettings.amplitude_dds_ins[ch].path()] = UiMqttConfig(
+                [self.channels[ch].ddsInAmplitudeBox])
+            settings_map[StabilizerSettings.amplitude_dds_outs[ch].path()] = UiMqttConfig(
+                [self.channels[ch].ddsOutAmplitudeBox])
 
-            settings_map[
-                StabilizerSettings.frequency_dds_outs[ch].path()] = UiMqttConfig(
-                    [self.channels[ch].ddsOutFrequencyBox], *mega)
-            settings_map[
-                StabilizerSettings.frequency_dds_ins[ch].path()] = UiMqttConfig(
-                    [self.channels[ch].ddsInFrequencyBox], *mega)
+            settings_map[StabilizerSettings.frequency_dds_outs[ch].path()] = UiMqttConfig(
+                [self.channels[ch].ddsOutFrequencyBox], *mega)
+            settings_map[StabilizerSettings.frequency_dds_ins[ch].path()] = UiMqttConfig(
+                [self.channels[ch].ddsInFrequencyBox], *mega)
 
-            settings_map[
-                UiSettings.dds_io_link_checkboxes[ch].path()] = UiMqttConfig(
-                    [self.channels[ch].ddsIoFreqLinkCheckBox])
+            settings_map[UiSettings.dds_io_link_checkboxes[ch].path()] = UiMqttConfig(
+                [self.channels[ch].ddsIoFreqLinkCheckBox])
 
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
