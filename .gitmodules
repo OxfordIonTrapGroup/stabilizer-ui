@@ -1,0 +1,4 @@
+[submodule "stabilizer-stream"]
+	path = stabilizer_ui/stream/long-scope
+	url = https://github.com/OxfordIonTrapGroup/stabilizer-stream.git
+	branch = main
