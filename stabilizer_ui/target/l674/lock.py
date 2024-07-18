@@ -281,7 +281,7 @@ async def relock_laser(ui: UiWindow, stabilizer_interface: StabilizerInterface,
 
 
 async def monitor_lock_state(ui: UiWindow, stabilizer_interface: StabilizerInterface,
-                             wand_host: str, wand_port: int, wand_channel: str,
+                             wand_host: NetworkAddress, wand_channel: str,
                              solstis_host: str):
     # While not relocking, we regularly poll the wavemeter and save the last reading,
     # to be "graduated" to last_locked_freq_reading once we know that the laser was
@@ -291,7 +291,7 @@ async def monitor_lock_state(ui: UiWindow, stabilizer_interface: StabilizerInter
 
     # Connect to wavemeter server (but gracefully fail to allow using the UI for manual
     # operation even if the wavemeter is offline).
-    wand = WavemeterInterface(wand_host, wand_port, wand_channel, WAVEMETER_TIMEOUT)
+    wand = WavemeterInterface(wand_host.get_ip(), wand_host.port, wand_channel, WAVEMETER_TIMEOUT)
     await wand.try_connect()
     wavemeter_task = None
     if not wand.is_connected():
