@@ -19,6 +19,7 @@ from ...stream.thread import StreamThread
 from ...mqtt import NetworkAddress, UiMqttConfig, UiMqttBridge
 from ... import mqtt
 from ...utils import fmt_mac, AsyncQueueThreadsafe
+from ...device_db import stabilizer_devices
 
 logger = logging.getLogger(__name__)
 
@@ -178,21 +179,39 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="Interface for the Vescent + Stabilizer 674 laser lock setup")
-    parser.add_argument("-b", "--broker-host", default="10.255.6.4")
-    parser.add_argument("-n", "--name", default="674-lock-ui")
-    parser.add_argument("--broker-port", default=1883, type=int)
-    parser.add_argument("--stabilizer-mac", default="80-1f-12-5d-47-df")
+    parser.add_argument("stabilizer_name", metavar="stabilizer", type=str,
+                        help="Stabilizer name as entered in the device database")
     parser.add_argument("--stream-port", default=9293, type=int)
-    parser.add_argument("--wand-host", default="10.255.6.61")
-    parser.add_argument("--wand-port", default=3251, type=int)
-    parser.add_argument("--wand-channel", default="lab1_674", type=str)
-    parser.add_argument("--solstis-host", default="10.179.22.23", type=str)
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     common_args.simple_network_args(parser, 4110)
     args = parser.parse_args()
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
+
+    try:
+        """
+        The stabilizer config must have the additional following params:
+        * "wand-address": `NetworkAddress` of the wand
+        * "wand-channel": `str` of the wand channel
+        * "solstis-host": `str` IPv4 of the solstis host
+        """
+        stabilizer = stabilizer_devices[args.stabilizer_name]
+    except KeyError:
+        logger.error(f"Device '{args.stabilizer_name}' not found in device database.")
+        sys.exit(1)
+
+    if stabilizer["application"] != "l674":
+        logger.error(f"Device '{args.stabilizer_name}' is not listed as running l674 lock.")
+        sys.exit(1)
+
+    broker_address = stabilizer["broker"]
+
+    # Find out which local IP address we are going to direct the stream to. 
+    # Assume the local IP address is the same for the broker and the stabilizer.
+    local_ip = get_local_ip(broker_address.get_ip())
+    requested_stream_target = NetworkAddress(local_ip, args.stream_port)
+    stabilizer_topic = f"dt/sinara/l674/{stabilizer.get("net_id", fmt_mac(stabilizer["mac-address"]))}"
 
     app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")
@@ -202,30 +221,23 @@ def main():
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
 
-        ui = UiWindow(f"{args.name} [{fmt_mac(args.stabilizer_mac)}]")
+        ui = UiWindow(f"L674 lock [{args.stabilizer_name}]")
         ui.show()
 
         stabilizer_interface = StabilizerInterface()
 
-        ui.set_comm_status(f"Connecting to MQTT broker at {args.broker_host}…")
+        ui.set_comm_status(f"Connecting to MQTT broker at {broker_address.get_ip()}…")
 
-        # Find out which local IP address we are going to direct the stream to.
-        # Assume the local IP address is the same for the broker and the stabilizer.
-        local_ip = get_local_ip(args.broker_host)
-        requested_stream_target = NetworkAddress(local_ip, args.stream_port)
         stream_target_queue = AsyncQueueThreadsafe(maxsize=1)
         stream_target_queue.put_nowait(requested_stream_target)
 
-        broker_address = NetworkAddress.from_str_ip(args.broker_host, args.broker_port)
-
-        stabilizer_topic = f"dt/sinara/l674/{fmt_mac(args.stabilizer_mac)}"
         stabilizer_task = loop.create_task(
             update_stabilizer(ui, stabilizer_interface, stabilizer_topic, broker_address,
                               stream_target_queue))
 
         monitor_lock_task = loop.create_task(
-            monitor_lock_state(ui, stabilizer_interface, args.wand_host, args.wand_port,
-                               args.wand_channel, args.solstis_host))
+            monitor_lock_state(ui, stabilizer_interface, stabilizer["wand-address"],
+                               stabilizer["wand-channel"], stabilizer["solstis-host"]))
 
         server = pc_rpc.Server({"l674_lock_ui": UIStatePublisher(ui)},
                                "Publishes the state of the l674-lock-ui")
