@@ -121,6 +121,7 @@ class UiWindow(AbstractUiWindow):
 
         streamParser = Parser([AdcDecoder(), PhaseOffsetDecoder()])
         self.fftScopeWidget = FftScope(streamParser, DEFAULT_FNC_SAMPLE_PERIOD)
+        self.fftScopeWidget.long_scope_options = ["--fs", str(1 / DEFAULT_FNC_SAMPLE_PERIOD), "--fnc"]
         centralLayout.addLayout(settingsLayout)
         centralLayout.addWidget(self.fftScopeWidget)
 

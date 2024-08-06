@@ -5,7 +5,6 @@ import numpy as np
 from math import floor
 from typing import Iterable
 from .thread import CallbackPayload
-import subprocess
 import logging
 
 from . import MAX_BUFFER_PERIOD, SCOPE_TIME_SCALE
@@ -36,6 +35,9 @@ class FftScope(QtWidgets.QWidget):
         self.stream_parser = parser
         self.sample_period = sample_period
         self.update_period = update_period
+
+        # CLI arguments to be passed to the stabilizer-stream scope launcher.
+        self.long_scope_options = ["--fs", str(1 / sample_period)]
 
         self.DEFAULT_FFT_X_RANGE = (-0.5,
                                     -np.log10(0.5 * SCOPE_TIME_SCALE / sample_period))
@@ -90,39 +92,6 @@ class FftScope(QtWidgets.QWidget):
 
         self.en_fft_box.stateChanged.connect(update_axes)
         update_axes(self.en_fft_box.isChecked())
-
-        def launch_external_long_fft_scope():
-            """Launches the stabilizer-stream scope for long FFTs in an external window."""
-            logger.info("Launching external long FFT scope")
-            try:
-                scopeProcessStatus = subprocess.Popen(
-                    [
-                        "cargo", "run", "--bin", "psd", "--release", "--", "--fs",
-                        str(1 / sample_period)
-                    ],
-                    cwd="./stabilizer_ui/stream/long-scope",
-                    stderr=subprocess.PIPE)
-                (stdout_data, stderr_data) = scopeProcessStatus.communicate()
-
-                if stdout_data is not None:
-                    logger.info(f"stabilizer-stream: {stdout_data.decode('utf-8')}")
-                if stderr_data is not None:
-                    logger.error(f"stabilizer-stream: {stderr_data.decode('utf-8')}")
-
-                # User closing the scope returns code 1, throw an error otherwise.
-                if scopeProcessStatus.returncode not in [0, 1]:
-                    raise OSError
-            except (FileNotFoundError, OSError):
-                errorMsgBox = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Warning,
-                                                    "Error launching scope",
-                                                    "Unable to launch external scope.",
-                                                    QtWidgets.QMessageBox.Ok)
-                errorMsgBox.setInformativeText(
-                    "The digital scope \'stabilizer-stream\' could not be opened. \
-                        Check that the submodule has been cloned and Rust is installed.")
-                errorMsgBox.exec()
-
-        self.longFftButton.clicked.connect(launch_external_long_fft_scope)
 
     def update(self, payload: CallbackPayload):
         """Callback for the stream thread"""

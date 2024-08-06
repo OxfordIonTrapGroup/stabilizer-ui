@@ -3,8 +3,11 @@ import asyncio
 import time
 import threading
 import logging
+import subprocess
+
 from collections import deque, namedtuple
 from typing import Callable
+from PyQt5 import QtWidgets
 
 from . import MAX_BUFFER_PERIOD
 from ..mqtt import NetworkAddress
@@ -17,6 +20,41 @@ logger = logging.getLogger(__name__)
 
 CallbackPayload = namedtuple("CallbackPayload", "values download loss")
 
+
+def launch_external_long_fft_scope(sample_period: float, opts: list = []):
+    
+    def _scope_launcher():
+        """Launches the stabilizer-stream scope for long FFTs in an external window."""
+        logger.info("Launching external long FFT scope")
+        try:
+            scopeProcessStatus = subprocess.Popen(
+                [
+                    "cargo", "run", "--bin", "psd", "--release", "--",
+                    *opts
+                ],
+                cwd="./stabilizer_ui/stream/long-scope",
+                stderr=subprocess.PIPE)
+            (stdout_data, stderr_data) = scopeProcessStatus.communicate()
+
+            if stdout_data is not None:
+                logger.info(f"stabilizer-stream: {stdout_data.decode('utf-8')}")
+            if stderr_data is not None:
+                logger.error(f"stabilizer-stream: {stderr_data.decode('utf-8')}")
+
+            # User closing the scope returns code 1, throw an error otherwise.
+            if scopeProcessStatus.returncode not in [0, 1]:
+                raise OSError
+        except (FileNotFoundError, OSError):
+            errorMsgBox = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Warning,
+                                                "Error launching scope",
+                                                "Unable to launch external scope.",
+                                                QtWidgets.QMessageBox.Ok)
+            errorMsgBox.setInformativeText(
+                "The digital scope \'stabilizer-stream\' could not be opened. \
+                    Check that the submodule has been cloned and Rust is installed.")
+            errorMsgBox.exec()
+
+    return _scope_launcher
 
 class StreamThread:
 
@@ -32,6 +70,8 @@ class StreamThread:
         precondition_data = fftScopeWidget.precondition_data()
         callback_interval = fftScopeWidget.update_period
         maxlen = int(max_buffer_period / fftScopeWidget.sample_period)
+
+        fftScopeWidget.longFftButton.clicked.connect(launch_external_long_fft_scope(fftScopeWidget.long_scope_options))
 
         self._terminate = threading.Event()
         self._thread = threading.Thread(
@@ -58,7 +98,6 @@ class StreamThread:
 
 
 _StatPoint = namedtuple("_StatPoint", "time received lost bytes")
-
 
 class StreamStats:
     """Moving average stream statistics
