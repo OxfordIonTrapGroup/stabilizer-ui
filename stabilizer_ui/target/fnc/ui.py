@@ -1,7 +1,7 @@
 import logging
 import os
 from PyQt5 import QtWidgets, uic
-from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
+from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD, ADC_VOLTS_PER_LSB
 from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
 from numpy import pi
 
@@ -27,19 +27,20 @@ DEFAULT_PHASE_PLOT_YRANGE = (0, 1)
 DEFAULT_ADC_PLOT_YRANGE = (-1, 1)
 
 # Default conversion from ADC voltage to phase turns
+# TODO: This is just a guess, needs to be calibrated for hardware
 DEFAULT_ADC_VOLT_PHASE_SCALE = 0.2
 
 #: Interval between scope plot updates, in seconds.
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
-# Conversion factor from urad/V to turns/ADC code LSB
+# Conversion factor from mrad/V to turns/ADC code LSB
 # for gains
-DEGREE_PER_V_TO_ADC_LSB = 1e-6/(2 * pi * DEFAULT_ADC_VOLT_PHASE_SCALE)
+MRAD_PER_V_TO_ADC_LSB = 1e-3/(2 * pi) * ADC_VOLTS_PER_LSB
 
 pid_gain_readwrite = (
-    lambda w: mqtt.read(w) * DEGREE_PER_V_TO_ADC_LSB,
-    lambda w, v: mqtt.write(w, v / DEGREE_PER_V_TO_ADC_LSB),
+    lambda w: mqtt.read(w) * MRAD_PER_V_TO_ADC_LSB,
+    lambda w, v: mqtt.write(w, v / MRAD_PER_V_TO_ADC_LSB),
 )
 
 class ChannelSettings(AbstractChannelSettings):
@@ -230,10 +231,10 @@ class UiWindow(AbstractUiWindow):
                 settings_map[pidTopic.child("Kdd").path()] = UiMqttConfig(
                     [pidWidget.KddBox], *pid_gain_readwrite)
                 
-                pidWidget.KpBox.setSuffix(" μrad/V")
-                pidWidget.KiBox.setSuffix(" μrad/Vs")
-                pidWidget.KiiBox.setSuffix(" μrad/Vs²")
-                pidWidget.KdBox.setSuffix(" μrad/VHz")
-                pidWidget.KddBox.setSuffix(" μrad/VHz²")
+                pidWidget.KpBox.setSuffix(" mrad/V")
+                pidWidget.KiBox.setSuffix(" mrad/Vs")
+                pidWidget.KiiBox.setSuffix(" mrad/Vs²")
+                pidWidget.KdBox.setSuffix(" mrad/VHz")
+                pidWidget.KddBox.setSuffix(" mrad/VHz²")
 
         return settings_map
