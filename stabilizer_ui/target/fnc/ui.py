@@ -1,20 +1,20 @@
 import logging
 import os
 from PyQt5 import QtWidgets, uic
-from math import inf
-from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
+from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD, ADC_VOLTS_PER_LSB
 from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
+from numpy import pi
 
 from .topics import StabilizerSettings, UiSettings
 from . import *
 
+from ... import mqtt
 from ...pounder.ui import ClockWidget
 from ...stream.fft_scope import FftScope
 from ...mqtt import UiMqttConfig, NetworkAddress
-from ...iir.filters import FILTERS, get_filter
 from ...iir.channel_settings import AbstractChannelSettings
 from ...ui import AbstractUiWindow
-from ...utils import kilo, kilo2, mega, link_spinbox_to_is_inf_checkbox
+from ...utils import mega
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +27,21 @@ DEFAULT_PHASE_PLOT_YRANGE = (0, 1)
 DEFAULT_ADC_PLOT_YRANGE = (-1, 1)
 
 # Default conversion from ADC voltage to phase turns
+# TODO: This is just a guess, needs to be calibrated for hardware
 DEFAULT_ADC_VOLT_PHASE_SCALE = 0.2
 
 #: Interval between scope plot updates, in seconds.
 #: PyQt's drawing speed limits value.
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
+# Conversion factor from mrad/V to turns/ADC code LSB
+# for gains
+MRAD_PER_V_TO_ADC_LSB = 1e-3/(2 * pi) * ADC_VOLTS_PER_LSB
+
+pid_gain_readwrite = (
+    lambda w: mqtt.read(w) * MRAD_PER_V_TO_ADC_LSB,
+    lambda w, v: mqtt.write(w, v / MRAD_PER_V_TO_ADC_LSB),
+)
 
 class ChannelSettings(AbstractChannelSettings):
     """ Channel settings"""
@@ -204,8 +213,28 @@ class UiWindow(AbstractUiWindow):
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
                 iirWidget = self.channels[ch].iir_widgets[iir]
-                iir_topic = UiSettings.iirs[ch][iir]
+                iirTopic = UiSettings.iirs[ch][iir]
 
-                iirWidget.set_mqtt_configs(settings_map, iir_topic)
+                iirWidget.set_mqtt_configs(settings_map, iirTopic)
+
+                # Override units for PID gains
+                pidTopic = iirTopic.child("pid")
+                pidWidget = iirWidget.widgets["pid"]
+                settings_map[pidTopic.child("Kp").path()] = UiMqttConfig(
+                    [pidWidget.KpBox], *pid_gain_readwrite)
+                settings_map[pidTopic.child("Ki").path()] = UiMqttConfig(
+                    [pidWidget.KiBox], *pid_gain_readwrite)
+                settings_map[pidTopic.child("Kd").path()] = UiMqttConfig(
+                    [pidWidget.KdBox], *pid_gain_readwrite)
+                settings_map[pidTopic.child("Kii").path()] = UiMqttConfig(
+                    [pidWidget.KiiBox], *pid_gain_readwrite)
+                settings_map[pidTopic.child("Kdd").path()] = UiMqttConfig(
+                    [pidWidget.KddBox], *pid_gain_readwrite)
+                
+                pidWidget.KpBox.setSuffix(" mrad/V")
+                pidWidget.KiBox.setSuffix(" mrad/Vs")
+                pidWidget.KiiBox.setSuffix(" mrad/Vs²")
+                pidWidget.KdBox.setSuffix(" mrad/VHz")
+                pidWidget.KddBox.setSuffix(" mrad/VHz²")
 
         return settings_map
