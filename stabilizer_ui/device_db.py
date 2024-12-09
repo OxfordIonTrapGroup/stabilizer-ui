@@ -22,6 +22,7 @@ broker_255_6_4 = NetworkAddress.from_str_ip("10.255.6.4", 1883)
 wand_lab1 = NetworkAddress.from_str_ip("10.255.6.61", 3251)
 
 stabilizer_devices = {}
+
 stabilizer_devices["lab1_729"] = {
     "mac-address": "80-34-28-5f-4f-5d",
     "application": "fnc",
@@ -35,4 +36,10 @@ stabilizer_devices["lab1_674"] = {
     "wand-address": wand_lab1,
     "wand-channel": "lab1_674",
     "solstis-host": "10.179.22.23",
+}
+
+stabilizer_devices["test"] = {
+    "mac-address": "80-34-28-5f-59-0b",
+    "application": "dual_iir",
+    "broker": broker_255_6_4,
 }
