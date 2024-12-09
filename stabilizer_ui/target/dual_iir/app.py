@@ -77,6 +77,7 @@ def main():
             stream_target_queue,
             broker_address,
             loop,
+            stabilizer_interface,
         )
         stream_thread.start()
 

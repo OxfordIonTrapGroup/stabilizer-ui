@@ -10,6 +10,7 @@ from typing import Callable
 from PyQt5 import QtWidgets
 
 from . import MAX_BUFFER_PERIOD
+from ..interface import AbstractStabilizerInterface
 from ..mqtt import NetworkAddress
 from ..utils import AsyncQueueThreadsafe
 
@@ -21,15 +22,19 @@ logger = logging.getLogger(__name__)
 CallbackPayload = namedtuple("CallbackPayload", "values download loss")
 
 
-def launch_external_long_fft_scope(sample_period: float, opts: list = []):
+def launch_external_long_fft_scope(stabilizer_interface, sample_period: float, opts: list = []):
     
     def _scope_launcher():
         """Launches the stabilizer-stream scope for long FFTs in an external window."""
         logger.info("Launching external long FFT scope")
+
+        local_ip = ".".join(str(x) for x in stabilizer_interface.local_ip)
+        stream_port = str(stabilizer_interface.stream_port)
+
         try:
             scopeProcessStatus = subprocess.Popen(
                 [
-                    "cargo", "run", "--bin", "psd", "--release", "--",
+                    "cargo", "run", "--bin", "psd", "--release", "--", "-i", local_ip, "-p", stream_port,
                     *opts
                 ],
                 cwd="./stabilizer_ui/stream/long-scope",
@@ -64,14 +69,16 @@ class StreamThread:
                  stream_target_queue: asyncio.Queue[NetworkAddress],
                  broker_address: NetworkAddress,
                  main_event_loop: asyncio.AbstractEventLoop,
-                 max_buffer_period: float = MAX_BUFFER_PERIOD):
+                 stabilizer_interface: AbstractStabilizerInterface,
+                 max_buffer_period: float = MAX_BUFFER_PERIOD,
+                 ):
 
         parser = fftScopeWidget.stream_parser
         precondition_data = fftScopeWidget.precondition_data()
         callback_interval = fftScopeWidget.update_period
         maxlen = int(max_buffer_period / fftScopeWidget.sample_period)
 
-        fftScopeWidget.longFftButton.clicked.connect(launch_external_long_fft_scope(fftScopeWidget.long_scope_options))
+        fftScopeWidget.longFftButton.clicked.connect(launch_external_long_fft_scope(stabilizer_interface, fftScopeWidget.long_scope_options))
 
         self._terminate = threading.Event()
         self._thread = threading.Thread(
@@ -160,7 +167,7 @@ def stream_worker(
         """This coroutine doesn't run in the main thread's loop!
 
         We first get the stream target from the queue, and queue back the allocated
-        port for streaming. 
+        port for streaming.
 
         The stream is then processed until it is requested to terminate.
         """

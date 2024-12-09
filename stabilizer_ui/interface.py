@@ -36,6 +36,8 @@ class AbstractStabilizerInterface:
         self.app_root = app_root
         # Default stream target topic if not specified by subclass.
         self.stream_target_topic = app_root.path() + f"/{self.stream_target_topic}"
+        self.local_ip = None
+        self.stream_port = 0
 
     def set_interface(self, interface: MqttInterface) -> None:
         self._interface = interface
@@ -60,6 +62,9 @@ class AbstractStabilizerInterface:
         stream_target = await stream_target_queue.get()
         stream_target_queue.task_done()
         logger.debug("Got stream target from stream thread.")
+
+        self.local_ip = stream_target.ip
+        self.stream_port = stream_target.port
 
         settings_map = ui.set_mqtt_configs(stream_target)
 
