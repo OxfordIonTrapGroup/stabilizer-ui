@@ -124,7 +124,7 @@
            </widget>
           </item>
           <item row="0" column="1">
-           <widget class="ScientificSpinBox" name="KpBox">
+           <widget class="AdaptiveSpinBox" name="KpBox">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -199,7 +199,7 @@
            </widget>
           </item>
           <item row="0" column="2">
-           <widget class="ScientificSpinBox" name="KiBox">
+           <widget class="AdaptiveSpinBox" name="KiBox">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -263,7 +263,7 @@
              <bool>false</bool>
             </property>
             <property name="decimals">
-             <number>10</number>
+             <number>6</number>
             </property>
             <property name="stepType">
              <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
@@ -297,7 +297,7 @@
            </widget>
           </item>
           <item row="4" column="2">
-           <widget class="ScientificSpinBox" name="KiiBox">
+           <widget class="AdaptiveSpinBox" name="KiiBox">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -358,7 +358,7 @@
              <bool>false</bool>
             </property>
             <property name="decimals">
-             <number>10</number>
+             <number>6</number>
             </property>
             <property name="stepType">
              <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
@@ -521,7 +521,7 @@
              <bool>false</bool>
             </property>
             <property name="decimals">
-             <number>10</number>
+             <number>4</number>
             </property>
             <property name="stepType">
              <enum>QAbstractSpinBox::AdaptiveDecimalStepType</enum>
@@ -542,7 +542,7 @@
            </widget>
           </item>
           <item row="1" column="1">
-           <widget class="ScientificSpinBox" name="KdBox">
+           <widget class="AdaptiveSpinBox" name="KdBox">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -584,7 +584,7 @@
            </widget>
           </item>
           <item row="5" column="1">
-           <widget class="ScientificSpinBox" name="KddBox">
+           <widget class="AdaptiveSpinBox" name="KddBox">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
               <horstretch>0</horstretch>
@@ -654,6 +654,11 @@
    <class>ScientificSpinBox</class>
    <extends>QDoubleSpinBox</extends>
    <header location="global">artiq.gui.scientific_spinbox</header>
+  </customwidget>
+  <customwidget>
+   <class>AdaptiveSpinBox</class>
+   <extends>QDoubleSpinBox</extends>
+   <header>stabilizer_ui.iir.widgets.adaptive_spinbox</header>
   </customwidget>
  </customwidgets>
  <resources/>
