@@ -23,7 +23,7 @@ wand_lab1 = NetworkAddress.from_str_ip("10.255.6.61", 3251)
 
 stabilizer_devices = {}
 stabilizer_devices["lab1_729"] = {
-    "mac-address": "80-34-28-5f-4f-5d",
+    "mac-address": "68-27-19-80-72-9e",
     "application": "fnc",
     "broker": broker_255_6_4,
 }
