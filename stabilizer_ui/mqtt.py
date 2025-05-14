@@ -33,13 +33,16 @@ class MqttInterface:
                  maxsize: int = 512):
         self._client = client
         self._topic_base = topic_base
-        self._pending = {}
+
+        #: Stores, for each in-flight RPC request, the future waiting for a response,
+        #: indexed by the sequence id we used as the MQTT correlation data.
+        self._pending = dict[bytes, asyncio.Future]()
+
+        #: Use incrementing sequence id as correlation data to map responses to requests.
+        self._next_seq_id = 0
+
         self._timeout = timeout
         self._maxsize = maxsize
-
-        #: Use incrementing sequence id as correlation data to map responses to requests
-        #: (together with client id).
-        self._next_seq_id = 0
 
         # Generate a random client ID (no real reason to use UUID here over another
         # source of randomness).
@@ -53,7 +56,7 @@ class MqttInterface:
         if len(self._pending) > self._maxsize:
             # By construction, `correlation_data` should always be removed from
             # `_pending` either by `_on_message()` or after `_timeout`. If something
-            # goes wrong, however the dictionary could grow indefinitely.
+            # goes wrong, however, the dictionary could grow indefinitely.
             raise RuntimeError("Too many unhandled requests")
         result = asyncio.Future()
         correlation_data = _int_to_bytes(self._next_seq_id)
