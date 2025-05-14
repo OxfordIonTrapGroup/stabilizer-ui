@@ -32,8 +32,8 @@ class UiWindow(AbstractUiWindow):
         self.setWindowTitle(title)
 
         # Set main window layout
-        self.setCentralWidget(QtWidgets.QWidget(self))
-        centralLayout = QtWidgets.QHBoxLayout(self.centralWidget())
+        splitter = QtWidgets.QSplitter(self)
+        self.setCentralWidget(splitter)
 
         # Create UI for channel settings.
         self.channels = [
@@ -43,15 +43,12 @@ class UiWindow(AbstractUiWindow):
         self.channelTabWidget = QtWidgets.QTabWidget()
         for i, channel in enumerate(self.channels):
             self.channelTabWidget.addTab(channel, f"Channel {i}")
-        centralLayout.addWidget(self.channelTabWidget)
+        splitter.addWidget(self.channelTabWidget)
 
         # Create UI for FFT scope.
         streamParser = Parser([AdcDecoder(), DacDecoder()])
         self.fftScopeWidget = FftScope(streamParser, DEFAULT_DUAL_IIR_SAMPLE_PERIOD)
-        centralLayout.addWidget(self.fftScopeWidget)
-
-        # # Give any excess space to the FFT scope
-        # centralLayout.setStretchFactor(self.fftScopeWidget, 1)
+        splitter.addWidget(self.fftScopeWidget)
 
         for i in range(NUM_CHANNELS):
             self.fftScopeWidget.graphics_view.getItem(
