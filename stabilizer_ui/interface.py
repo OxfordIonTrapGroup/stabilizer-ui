@@ -76,7 +76,8 @@ class AbstractStabilizerInterface:
             bridge = await UiMqttBridge.new(broker_address,
                                             settings_map,
                                             will_message=will_message)
-            ui.set_comm_status(f"Connected to MQTT broker at {broker_address.get_ip()}.")
+            ui.update_comm_status(
+                True, f"Connected to MQTT broker at {broker_address.get_ip()}.")
 
             await bridge.load_ui(lambda x: x, self.app_root.path(), ui)
             keys_to_write, ui_updated = bridge.connect_ui()
@@ -109,7 +110,7 @@ class AbstractStabilizerInterface:
             if not err_msg:
                 # Show message for things like timeout errors.
                 err_msg = repr(e)
-            ui.set_comm_status(f"Stabilizer connection error: {err_msg}")
+            ui.update_comm_status(False, f"Stabilizer connection error: {err_msg}")
             logger.exception(f"Stabilizer communication failure: {err_msg}")
 
     async def set_pi_gains(self, channel: int, iir_idx: int, p_gain: float,

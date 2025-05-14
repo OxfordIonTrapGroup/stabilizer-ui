@@ -16,7 +16,7 @@ class AbstractUiWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.stabilizerOnline = True
+        self._connection_is_nominal = True
         self.stylesheet = {}
 
         self.statusbar = QStatusBar(self)
@@ -36,6 +36,15 @@ class AbstractUiWindow(QMainWindow):
         self._offlineMessageBox.setStandardButtons(QMessageBox.Ok)
         self._offlineMessageBox.setModal(True)
 
+        # Message box indicating Stabilizer failed to respond.
+        self._commErrorMessageBox = QMessageBox()
+        self._commErrorMessageBox.setText("Stabilizer failed to respond")
+        self._commErrorMessageBox.setInformativeText(
+            "Check the stabilizer's network connection.")
+        self._commErrorMessageBox.setIcon(QMessageBox.Warning)
+        self._commErrorMessageBox.setStandardButtons(QMessageBox.Ok)
+        self._commErrorMessageBox.setModal(True)
+
         # Message box showing panic message upon stabilizer reboot after panic
         self._panicMessageBox = QMessageBox()
         self._panicMessageBox.setText("Stabilizer panicked!")
@@ -44,16 +53,13 @@ class AbstractUiWindow(QMainWindow):
             "You may need to change some settings if the issue persists.")
         self._panicMessageBox.setStandardButtons(QMessageBox.Ok)
 
-    def set_comm_status(self, status: str):
-        self.comm_status_label.setText(status)
-
     def _setStyleSheet(self):
         stylesheet_str = ";".join(
             [f"{key}: {value}" for key, value in self.stylesheet.items()])
         self.setStyleSheet(stylesheet_str)
 
-    def onPanicStatusChange(self, isPanicked: bool, value: Optional[str]):
-        if not isPanicked:
+    def update_panic_status(self, has_panicked: bool, value: Optional[str]):
+        if not has_panicked:
             self.stylesheet.pop("background-color")
             self.setWindowTitle(self._windowTitle)
             return
@@ -61,32 +67,38 @@ class AbstractUiWindow(QMainWindow):
         self._panicMessageBox.setDetailedText(f"Diagnostic information: \n{value}")
         self._panicMessageBox.open()
 
-    def is_dark_theme(self):
-        r""" Guess whether the current theme is dark or light by comparing
-            the text and background color of a virtual label.
-            :return: True if the theme is dark, False otherwise.
+    def update_alive_status(self, is_alive: bool):
+        if self._connection_is_nominal == is_alive:
+            return
+        self._connection_is_nominal = is_alive
+        if not is_alive:
+            self._offlineMessageBox.open()
+        self._set_hardware_live_styling(is_alive)
 
+    def update_comm_status(self, is_nominal: bool, message: str):
+        self.comm_status_label.setText(message)
+        if self._connection_is_nominal == is_nominal:
+            return
+        if not is_nominal:
+            self._commErrorMessageBox.setDetailedText(message)
+            self._commErrorMessageBox.show()
+        self._set_hardware_live_styling(is_nominal)
+
+    def is_dark_theme(self):
+        """Guess whether the current theme is dark or light by comparing the default text and
+        background colors.
         """
-        # Virtual label that is deleted after use
-        label = QLabel("am I in the dark?")
-        text_hsv_value = label.palette().color(QPalette.WindowText).value()
-        bg_hsv_value = label.palette().color(QPalette.Background).value()
+        text_hsv_value = self.palette().color(QPalette.WindowText).value()
+        bg_hsv_value = self.palette().color(QPalette.Background).value()
         return text_hsv_value > bg_hsv_value
 
-    def onlineStatusChange(self, isOnline: bool):
-        if self.stabilizerOnline == isOnline:
-            return
-
-        self.stabilizerOnline = isOnline
-
-        if self.stabilizerOnline:
+    def _set_hardware_live_styling(self, is_live: bool):
+        if is_live:
             self.stylesheet.pop("background-color")
             self.setWindowTitle(self._windowTitle)
         else:
-            self.stylesheet["background-color"] = "maroon" if self.is_dark_theme(
-            ) else "mistyrose"
-            self._offlineMessageBox.open()
-
+            bg = "maroon" if self.is_dark_theme() else "mistyrose"
+            self.stylesheet["background-color"] = bg
             self._windowTitle = self.windowTitle()
             self.setWindowTitle(f"{self._windowTitle} [OFFLINE]")
 

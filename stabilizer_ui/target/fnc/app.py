@@ -65,7 +65,8 @@ def main():
         ui.setWindowTitle(f"FNC [{args.stabilizer_name}]")
         ui.show()
 
-        ui.set_comm_status(f"Connecting to MQTT broker at {broker_address.get_ip()}…")
+        ui.update_comm_status(True,
+                              f"Connecting to MQTT broker at {broker_address.get_ip()}…")
 
         stabilizer_interface = StabilizerInterface()
 

@@ -120,7 +120,8 @@ async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterf
         bridge = await UiMqttBridge.new(broker_address,
                                         settings_map,
                                         will_message=will_message)
-        ui.set_comm_status(f"Connected to MQTT broker at {broker_address.get_ip()}.")
+        ui.update_comm_status(True,
+                              f"Connected to MQTT broker at {broker_address.get_ip()}.")
         await bridge.load_ui(Settings, root_topic)
         keys_to_write, ui_updated = bridge.connect_ui()
 
@@ -161,7 +162,7 @@ async def update_stabilizer(ui: UiWindow, stabilizer_interface: StabilizerInterf
         if not text:
             # Show message for things like timeout errors.
             text = repr(e)
-        ui.set_comm_status(f"Stabilizer connection error: {text}")
+        ui.update_comm_status(False, f"Stabilizer connection error: {text}")
         raise
 
 
@@ -230,7 +231,8 @@ def main():
 
         stabilizer_interface = StabilizerInterface()
 
-        ui.set_comm_status(f"Connecting to MQTT broker at {broker_address.get_ip()}…")
+        ui.update_comm_status(True,
+                              f"Connecting to MQTT broker at {broker_address.get_ip()}…")
 
         stream_target_queue = AsyncQueueThreadsafe(maxsize=1)
         stream_target_queue.put_nowait(requested_stream_target)
