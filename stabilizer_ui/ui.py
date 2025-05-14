@@ -19,13 +19,13 @@ class AbstractUiWindow(QMainWindow):
         self._connection_is_nominal = True
         self.stylesheet = {}
 
-        self.statusbar = QStatusBar(self)
-        self.statusbar.setObjectName("statusbar")
-        self.setStatusBar(self.statusbar)
-
         # Add a label to the status bar to show the connection status
         self.comm_status_label = QLabel()
-        self.statusbar.addPermanentWidget(self.comm_status_label)
+        self.statusBar().addPermanentWidget(self.comm_status_label)
+
+        # Avoid the small lines to the right of every status bar item, since we
+        # only have one here.
+        self.statusBar().setStyleSheet("QStatusBar::item { border-width: 0px; }")
 
         # Message box indicating stabilizer is offline
         self._offlineMessageBox = QMessageBox()

@@ -41,7 +41,7 @@ class UiWindow(AbstractUiWindow):
         self._link_paired_widgets()
 
         self.comm_status_label = QtWidgets.QLabel()
-        self.statusbar.addPermanentWidget(self.comm_status_label)
+        self.statusBar().addPermanentWidget(self.comm_status_label)
 
         # Explicitly create button group to prevent shortcuts from un-selecting buttons.
         # (It's not clear to me whether this is a Qt bug or not, as the buttons are set
