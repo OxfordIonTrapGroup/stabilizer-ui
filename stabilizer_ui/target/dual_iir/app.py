@@ -24,7 +24,9 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser(description="Interface for the Dual-IIR Stabilizer.")
-    parser.add_argument("stabilizer_name", metavar="stabilizer", type=str,
+    parser.add_argument("stabilizer_name",
+                        metavar="DEVICE_NAME",
+                        type=str,
                         help="Stabilizer name as entered in the device database")
     parser.add_argument("--stream-port", default=0, type=int)
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
