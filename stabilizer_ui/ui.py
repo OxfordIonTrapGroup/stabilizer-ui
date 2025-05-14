@@ -97,29 +97,32 @@ class AbstractUiWindow(QMainWindow):
 
     async def update_transfer_function(self, setting):
         """Update transfer function plot based on setting change."""
-        if setting.app_root().name == "ui" and (
-                ui_iir :=
-                setting.get_parent_until(lambda x: x.name.startswith("iir"))) is not None:
-            (_ch, _iir) = (int(ui_iir.get_parent().name[2:]), int(ui_iir.name[3:]))
+        if setting.app_root().name != "ui":
+            return
+        ui_iir = setting.get_parent_until(lambda x: x.name.startswith("iir"))
+        if ui_iir is None:
+            return
 
-            filter_type = ui_iir.child("filter").value
-            filter_topic = ui_iir.child(filter_type)
+        ch = int(ui_iir.get_parent().name[2:])
+        iir = int(ui_iir.name[3:])
 
-            if filter_type in ["though", "block"]:
-                ba = get_filter(filter_type).get_coefficients()
-            else:
-                filter_params = {
-                    setting.name: setting.value
-                    for setting in filter_topic.children()
-                }
-                ba = get_filter(filter_type).get_coefficients(
-                    self.fftScopeWidget.sample_period, **filter_params)
+        filter_type = ui_iir.child("filter").value
+        filter_topic = ui_iir.child(filter_type)
 
-            try:
-                _iir_widgets = self.channels[_ch].iir_widgets[_iir]
-                _iir_widgets.update_transfer_function(ba)
-            except NameError:
-                logger.error("Unable to update transfer function: widget not found")
-            except KeyError:
-                logger.error(
-                    "Unable to update transfer function: incorrect number of channels")
+        if filter_type in ["though", "block"]:
+            ba = get_filter(filter_type).get_coefficients()
+        else:
+            filter_params = {
+                setting.name: setting.value
+                for setting in filter_topic.children()
+            }
+            ba = get_filter(filter_type).get_coefficients(
+                self.fftScopeWidget.sample_period, **filter_params)
+
+        try:
+            self.channels[ch].iir_widgets[iir].update_transfer_function(ba)
+        except NameError:
+            logger.error("Unable to update transfer function: widget not found")
+        except KeyError:
+            logger.error(
+                "Unable to update transfer function: incorrect number of channels")
