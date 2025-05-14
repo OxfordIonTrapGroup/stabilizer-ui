@@ -202,16 +202,18 @@ def main():
         sys.exit(1)
 
     if stabilizer["application"] != "l674":
-        logger.error(f"Device '{args.stabilizer_name}' is not listed as running l674 lock.")
+        logger.error(
+            f"Device '{args.stabilizer_name}' is not listed as running l674 lock.")
         sys.exit(1)
 
     broker_address = stabilizer["broker"]
 
-    # Find out which local IP address we are going to direct the stream to. 
+    # Find out which local IP address we are going to direct the stream to.
     # Assume the local IP address is the same for the broker and the stabilizer.
     local_ip = get_local_ip(broker_address.get_ip())
     requested_stream_target = NetworkAddress(local_ip, args.stream_port)
-    stabilizer_topic = f"dt/sinara/l674/{stabilizer.get("net_id", fmt_mac(stabilizer["mac-address"]))}"
+    net_id = stabilizer.get("net_id", fmt_mac(stabilizer["mac-address"]))
+    stabilizer_topic = f"dt/sinara/l674/{net_id}"
 
     app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")

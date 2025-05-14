@@ -291,7 +291,8 @@ async def monitor_lock_state(ui: UiWindow, stabilizer_interface: StabilizerInter
 
     # Connect to wavemeter server (but gracefully fail to allow using the UI for manual
     # operation even if the wavemeter is offline).
-    wand = WavemeterInterface(wand_host.get_ip(), wand_host.port, wand_channel, WAVEMETER_TIMEOUT)
+    wand = WavemeterInterface(wand_host.get_ip(), wand_host.port, wand_channel,
+                              WAVEMETER_TIMEOUT)
     await wand.try_connect()
     wavemeter_task = None
     if not wand.is_connected():

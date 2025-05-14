@@ -36,12 +36,13 @@ SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 # Conversion factor from mrad/V to turns/ADC code LSB
 # for gains
-MRAD_PER_V_TO_ADC_LSB = 1e-3/(2 * pi) * ADC_VOLTS_PER_LSB
+MRAD_PER_V_TO_ADC_LSB = 1e-3 / (2 * pi) * ADC_VOLTS_PER_LSB
 
 pid_gain_readwrite = (
     lambda w: mqtt.read(w) * MRAD_PER_V_TO_ADC_LSB,
     lambda w, v: mqtt.write(w, v / MRAD_PER_V_TO_ADC_LSB),
 )
+
 
 class ChannelSettings(AbstractChannelSettings):
     """ Channel settings"""
@@ -230,7 +231,7 @@ class UiWindow(AbstractUiWindow):
                     [pidWidget.KiiBox], *pid_gain_readwrite)
                 settings_map[pidTopic.child("Kdd").path()] = UiMqttConfig(
                     [pidWidget.KddBox], *pid_gain_readwrite)
-                
+
                 pidWidget.KpBox.setSuffix(" mrad/V")
                 pidWidget.KiBox.setSuffix(" mrad/Vs")
                 pidWidget.KiiBox.setSuffix(" mrad/Vs²")
