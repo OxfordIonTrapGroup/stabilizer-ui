@@ -8,9 +8,8 @@ from .topics import StabilizerSettings, UiSettings
 from ...ui import AbstractUiWindow
 from ...mqtt import NetworkAddress, UiMqttConfig
 from ...iir.channel_settings import ChannelSettings
-from ...iir.filters import FILTERS, get_filter
 from ...stream.fft_scope import FftScope
-from ...utils import kilo, kilo2, link_spinbox_to_is_inf_checkbox
+
 
 #
 # Parameters for the FNC ui.

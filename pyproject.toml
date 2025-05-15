@@ -13,11 +13,10 @@ websockets = "^15.0.1"
 pyqtgraph = "^0.13.7"
 numpy = "^2.2.5"
 gmqtt = "^0.7.0"
+pyqt6 = "^6.9.0"
 
 sipyco = { git = "https://github.com/m-labs/sipyco.git" }
 stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
-pyqt6 = "^6.9.0"
-
 
 [tool.poetry.group.dev.dependencies]
 poethepoet = "^0.22.1"
@@ -27,8 +26,8 @@ toml = "^0.10.2"
 # YAPF 0.33–0.40 split before comparison operators, rather than after, not matching the
 # default behaviour for arithmetic operators, so stay on 0.32 for now – though at some
 # point we might just update and not care.
-yapf = "0.32.0"
-flake8 = "6.1.0"
+yapf = "0.43.0"
+flake8 = "7.1.1"
 
 [tool.poetry.scripts]
 l674_lock_ui = "stabilizer_ui.target.l674.app:main"

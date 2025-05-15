@@ -49,7 +49,8 @@ class AbstractUiWindow(QMainWindow):
         self._panicMessageBox = QMessageBox()
         self._panicMessageBox.setText("Stabilizer panicked!")
         self._panicMessageBox.setIcon(QMessageBox.Icon.Critical)
-        self._panicMessageBox.setInformativeText(f"Stabilizer had panicked, but has since restarted. "\
+        self._panicMessageBox.setInformativeText(
+            "Stabilizer had panicked, but has since restarted. " +
             "You may need to change some settings if the issue persists.")
         self._panicMessageBox.setStandardButtons(QMessageBox.StandardButton.Ok)
 

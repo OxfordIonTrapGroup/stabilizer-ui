@@ -3,7 +3,6 @@ from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD
 
 from .topics import app_root, StabilizerSettings
 from ...interface import AbstractStabilizerInterface
-from ...iir.filters import get_filter
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +28,5 @@ class StabilizerInterface(AbstractStabilizerInterface):
         elif setting_root.name == "ui":
             self.publish_ui_change(setting.path(), setting.value)
 
-            if (ui_iir := setting.get_parent_until(lambda x: x.name.startswith("iir"))
-                ) is not None:
+            if ui_iir := setting.get_parent_until(lambda x: x.name.startswith("iir")):
                 await self._change_filter_setting(ui_iir)

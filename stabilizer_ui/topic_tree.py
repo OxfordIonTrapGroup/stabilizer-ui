@@ -57,8 +57,8 @@ class TopicTree:
     def get_parent_until(self, predicate: Callable[[Self], bool]):
         """Recursively traverse up the tree until the predicate is true.
         args:
-        * predicate: Callable(Self) -> bool 
-        
+        * predicate: Callable(Self) -> bool
+
         returns: The node where the predicate is true."""
         if predicate(self):
             return self
