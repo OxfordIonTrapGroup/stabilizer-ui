@@ -38,7 +38,7 @@ stabilizer_devices["lab1_674"] = {
 }
 
 stabilizer_devices["lab1_raman_phaselock"] = {
-    "mac-address": "80-34-28-5f-59-0b",
+    "mac-address": "44-b7-d0-c7-7d-24",
     "application": "dual_iir",
     "broker": broker_255_6_4,
 }
