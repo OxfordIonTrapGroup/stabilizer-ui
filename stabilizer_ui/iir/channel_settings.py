@@ -83,24 +83,22 @@ class _IIRWidget(QtWidgets.QWidget):
             self.filterComboBox.setItemData(self.filterComboBox.count() - 1, _tooltip,
                                             QtCore.Qt.ItemDataRole.ToolTipRole)
 
-        self.widgets["transferFunctionView"] = self.transferFunctionView.addPlot(row=0,
-                                                                                 col=0)
+        plot = self.transferFunctionView.addPlot(row=0, col=0)
+        self.widgets["transferFunctionView"] = plot
 
         self.frequencies = np.logspace(-8.5, 0, 1024,
                                        endpoint=False) * (0.5 / self.sample_period)
-        plot_config = {
-            "ylabel": "Magnitude (dB)",
-            "xlabel": "Frequency (Hz)",
-            "log": [True, False],
-            "xrange": [np.log10(min(self.frequencies)),
-                       np.log10(max(self.frequencies))],
-        }
 
-        self.widgets["transferFunctionView"].setLogMode(*plot_config["log"])
-        self.widgets["transferFunctionView"].setRange(xRange=plot_config["xrange"],
-                                                      update=False)
-        self.widgets["transferFunctionView"].setLabels(left=plot_config["ylabel"],
-                                                       bottom=plot_config["xlabel"])
+        # With a log axis, there is no point in also having a power of ten taken out
+        # (just leads to ticks with small values and a "(x1e06)" addition to the label).
+        plot.getAxis("bottom").enableAutoSIPrefix(False)
+
+        plot.setLogMode(True, False)
+        plot.setRange(
+            xRange=[np.log10(min(self.frequencies)),
+                    np.log10(max(self.frequencies))],
+            update=False)
+        plot.setLabels(left="Magnitude (dB)", bottom="Frequency (Hz)")
 
         # Disable divide by zero warnings
         np.seterr(divide='ignore')
