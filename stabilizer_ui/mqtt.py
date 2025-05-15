@@ -7,7 +7,7 @@ import uuid
 
 from typing import NamedTuple, List, Callable, Any, Dict, Optional
 from contextlib import suppress
-from PyQt5 import QtWidgets
+from PyQt6 import QtWidgets
 from gmqtt import Client as MqttClient, Message as MqttMessage
 
 logger = logging.getLogger(__name__)

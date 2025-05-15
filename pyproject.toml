@@ -7,24 +7,17 @@ readme = "README.md"
 license = "GPL-3.0-or-later"
 
 [tool.poetry.dependencies]
-SiPyCo = { git = "https://github.com/m-labs/sipyco.git" }
-python = "^3.9"
-gmqtt = "^0.6.14"
+python = "^3.12"
 qasync = "^0.27.1"
-websockets = "^12.0"
-pyqtgraph = "^0.13.4"
-numpy = "^1.21.0"
-artiq = { git = "https://github.com/m-labs/artiq.git" }
-stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
+websockets = "^15.0.1"
+pyqtgraph = "^0.13.7"
+numpy = "^2.2.5"
+gmqtt = "^0.7.0"
 
-# As of 2024-04-19, the newer releases of PyQt5-Qt5 on PyPi only have MacOS wheels.
-# 5.15.2 is the latest release to support other platforms, but MacOS ARM builds 
-# are only supported 5.15.11 onwards, so we pin platform-dependent dependencies.
-PyQt5 = "^5.15.9"
-PyQt5-Qt5 = [
-    { platform = "darwin", version = "^5.15.11" },
-    { markers = "sys_platform != 'darwin'", version = "=5.15.2" },
-]
+sipyco = { git = "https://github.com/m-labs/sipyco.git" }
+stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
+pyqt6 = "^6.9.0"
+
 
 [tool.poetry.group.dev.dependencies]
 poethepoet = "^0.22.1"

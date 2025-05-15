@@ -653,7 +653,7 @@
   <customwidget>
    <class>ScientificSpinBox</class>
    <extends>QDoubleSpinBox</extends>
-   <header location="global">artiq.gui.scientific_spinbox</header>
+   <header location="global">stabilizer_ui.scientific_spinbox</header>
   </customwidget>
  </customwidgets>
  <resources/>

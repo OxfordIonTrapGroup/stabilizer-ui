@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-from PyQt5.QtWidgets import QMainWindow, QMessageBox, QLabel, QStatusBar
-from PyQt5.QtGui import QPalette
+from PyQt6.QtWidgets import QMainWindow, QMessageBox, QLabel
+from PyQt6.QtGui import QPalette
 from typing import Optional
 
 from .iir.filters import get_filter
@@ -32,8 +32,8 @@ class AbstractUiWindow(QMainWindow):
         self._offlineMessageBox.setText("Stabilizer offline")
         self._offlineMessageBox.setInformativeText(
             "Check the stabilizer's network connection.")
-        self._offlineMessageBox.setIcon(QMessageBox.Warning)
-        self._offlineMessageBox.setStandardButtons(QMessageBox.Ok)
+        self._offlineMessageBox.setIcon(QMessageBox.Icon.Warning)
+        self._offlineMessageBox.setStandardButtons(QMessageBox.StandardButton.Ok)
         self._offlineMessageBox.setModal(True)
 
         # Message box indicating Stabilizer failed to respond.
@@ -41,17 +41,17 @@ class AbstractUiWindow(QMainWindow):
         self._commErrorMessageBox.setText("Stabilizer failed to respond")
         self._commErrorMessageBox.setInformativeText(
             "Check the stabilizer's network connection.")
-        self._commErrorMessageBox.setIcon(QMessageBox.Warning)
-        self._commErrorMessageBox.setStandardButtons(QMessageBox.Ok)
+        self._commErrorMessageBox.setIcon(QMessageBox.Icon.Warning)
+        self._commErrorMessageBox.setStandardButtons(QMessageBox.StandardButton.Ok)
         self._commErrorMessageBox.setModal(True)
 
         # Message box showing panic message upon stabilizer reboot after panic
         self._panicMessageBox = QMessageBox()
         self._panicMessageBox.setText("Stabilizer panicked!")
-        self._panicMessageBox.setIcon(QMessageBox.Critical)
+        self._panicMessageBox.setIcon(QMessageBox.Icon.Critical)
         self._panicMessageBox.setInformativeText(f"Stabilizer had panicked, but has since restarted. "\
             "You may need to change some settings if the issue persists.")
-        self._panicMessageBox.setStandardButtons(QMessageBox.Ok)
+        self._panicMessageBox.setStandardButtons(QMessageBox.StandardButton.Ok)
 
     def _setStyleSheet(self):
         stylesheet_str = ";".join(

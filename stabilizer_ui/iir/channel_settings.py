@@ -1,8 +1,8 @@
 import os
 import numpy as np
 from scipy import signal
-from PyQt5 import QtWidgets, QtCore, uic
-from artiq.gui.scientific_spinbox import ScientificSpinBox
+from PyQt6 import QtWidgets, QtCore, uic
+from stabilizer_ui.scientific_spinbox import ScientificSpinBox
 
 from . import filters
 from .filters import FILTERS
@@ -81,7 +81,7 @@ class _IIRWidget(QtWidgets.QWidget):
             self.widgets[_filter] = _widget
             self.filterParamsStack.addWidget(_widget)
             self.filterComboBox.setItemData(self.filterComboBox.count() - 1, _tooltip,
-                                            QtCore.Qt.ToolTipRole)
+                                            QtCore.Qt.ItemDataRole.ToolTipRole)
 
         self.widgets["transferFunctionView"] = self.transferFunctionView.addPlot(row=0,
                                                                                  col=0)

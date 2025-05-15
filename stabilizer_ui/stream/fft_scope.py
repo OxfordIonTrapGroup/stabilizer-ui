@@ -1,5 +1,5 @@
 import os
-from PyQt5 import QtWidgets, uic
+from PyQt6 import QtWidgets, uic
 from stabilizer.stream import Parser
 import numpy as np
 import numpy.fft

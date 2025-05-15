@@ -1,6 +1,6 @@
 import logging
 import os
-from PyQt5 import QtWidgets, uic
+from PyQt6 import QtWidgets, uic
 from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD, ADC_VOLTS_PER_LSB
 from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
 from numpy import pi
@@ -147,8 +147,8 @@ class UiWindow(AbstractUiWindow):
 
         # Set FFT scope to take max available space
         centralLayout.setStretchFactor(self.fftScopeWidget, 1)
-        fftScopeSizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding,
-                                                   QtWidgets.QSizePolicy.Expanding)
+        fftScopeSizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                                                   QtWidgets.QSizePolicy.Policy.Expanding)
         self.fftScopeWidget.setSizePolicy(fftScopeSizePolicy)
         self.fftScopeWidget.setMinimumSize(400, 200)
 

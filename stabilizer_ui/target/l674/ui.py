@@ -1,7 +1,7 @@
 import os
 import logging
 
-from PyQt5 import QtGui, QtWidgets, uic
+from PyQt6 import QtGui, QtWidgets, uic
 from stabilizer.stream import Parser, AdcDecoder, DacDecoder
 from stabilizer import DEFAULT_L674_SAMPLE_PERIOD
 

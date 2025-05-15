@@ -5,7 +5,7 @@ import sys
 
 from contextlib import suppress
 from gmqtt import Message as MqttMessage
-from PyQt5 import QtWidgets
+from PyQt6 import QtWidgets
 from qasync import QEventLoop
 from sipyco import common_args, pc_rpc
 from stabilizer.stream import get_local_ip
