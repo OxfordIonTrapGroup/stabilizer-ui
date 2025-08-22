@@ -88,6 +88,12 @@ class _IIRWidget(QtWidgets.QWidget):
 
         self.frequencies = np.logspace(-8.5, 0, 1024,
                                        endpoint=False) * (0.5 / self.sample_period)
+        
+        # Change default precision and step size for dac settings
+        for setting in ["y_offset", "y_min", "y_max", "x_offset"]:
+            spinBox = getattr(self, setting + "Box")
+            spinBox.setDecimals(4)
+            spinBox.setSingleStep(1e-2)
 
         # With a log axis, there is no point in also having a power of ten taken out
         # (just leads to ticks with small values and a "(x1e06)" addition to the label).
