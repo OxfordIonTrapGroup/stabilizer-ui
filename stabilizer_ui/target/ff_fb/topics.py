@@ -36,7 +36,7 @@ class StabilizerSettings:
             for ch in range(NUM_CHANNELS)
         ]
 
-        # haramonic_wave_parameters/0/1 represents order 1 parameters for channel 0
+        # harmonic_wave_parameters/0/1 represents order 1 parameters for channel 0
         cls.harm_param = [cls.harm_param_root.create_children(
                 [f"{ch}/{order}" for order in range(NUM_OF_HARMONIC_ORDERS)]
         ) for ch in range(NUM_CHANNELS)]
@@ -61,9 +61,9 @@ class UiSettings:
         ]
 
         # Added harmonic parameters into UI settings too
-        cls.haram_params = [
+        cls.h_params = [
             ui_channels[ch].create_children(
-                [f"haram_params{order}" for order in range(NUM_OF_HARMONIC_ORDERS)]
+                [f"h_params{order}" for order in range(NUM_OF_HARMONIC_ORDERS)]
             ) for ch in range(NUM_CHANNELS)
         ]
 
@@ -71,7 +71,7 @@ class UiSettings:
 
         for ch in range(NUM_CHANNELS):
             for order in range(NUM_OF_HARMONIC_ORDERS):
-                cls.haram_params[ch][order].create_children(["amp", "phase"])
+                cls.h_params[ch][order].create_children(["amp", "phase"])
 
         for ch in range(NUM_CHANNELS):
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
