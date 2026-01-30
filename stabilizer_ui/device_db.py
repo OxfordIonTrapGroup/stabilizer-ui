@@ -42,3 +42,10 @@ stabilizer_devices["lab1_raman_phaselock"] = {
     "application": "dual_iir",
     "broker": broker_255_6_4,
 }
+
+# Our stabilizer device
+stabilizer_devices["dungeon_109_ff_fb"] = {
+    "mac-address": "68-27-19-80-3d-4d",
+    "application": "dual_iir",
+    "broker": broker_255_6_4,
+}
