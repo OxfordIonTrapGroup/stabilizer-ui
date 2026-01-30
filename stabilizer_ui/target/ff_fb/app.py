@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    parser = argparse.ArgumentParser(description="Interface for the Dual-IIR Stabilizer.")
+    parser = argparse.ArgumentParser(description="Interface for the FF_FB Stabilizer.")
     parser.add_argument("stabilizer_name",
                         metavar="DEVICE_NAME",
                         type=str,
@@ -41,9 +41,9 @@ def main():
         logger.error(f"Device '{args.stabilizer_name}' not found in device database.")
         sys.exit(1)
 
-    if stabilizer["application"] != "dual_iir":
+    if stabilizer["application"] != "ff_fb":
         logger.error(
-            f"Device '{args.stabilizer_name}' is not listed as running dual_iir.")
+            f"Device '{args.stabilizer_name}' is not listed as running ff_fb.")
         sys.exit(1)
 
     topics.app_root.name = stabilizer.get("net_id", fmt_mac(stabilizer["mac-address"]))
@@ -62,7 +62,7 @@ def main():
     with QEventLoop(app) as loop:
         asyncio.set_event_loop(loop)
 
-        ui = UiWindow(f"Dual_IIR [{args.stabilizer_name}]")
+        ui = UiWindow(f"Dual_iir_w_ff_fb [{args.stabilizer_name}]")
         ui.show()
 
         ui.update_comm_status(True,
