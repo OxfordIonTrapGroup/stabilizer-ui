@@ -85,7 +85,7 @@ class UiSettings:
 UiSettings.set()
 
 global app_root
-app_root = TopicTree.new("dt/sinara/dual-iir/<MAC>")
+app_root = TopicTree.new("dt/sinara/ff_fb/<MAC>")
 app_root.set_children([StabilizerSettings.root, UiSettings.root])
 app_root.create_children(["meta", "alive"])
 app_root.set_app_root()

@@ -26,7 +26,7 @@ SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 class UiWindow(AbstractUiWindow):
 
-    def __init__(self, title: str = "Dual IIR"):
+    def __init__(self, title: str = "Dual IIR with FF"):
         super().__init__()
         self.setWindowTitle(title)
 
