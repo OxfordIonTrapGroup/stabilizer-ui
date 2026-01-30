@@ -33,6 +33,7 @@ flake8 = "7.1.1"
 l674_lock_ui = "stabilizer_ui.target.l674.app:main"
 dual_iir_ui = "stabilizer_ui.target.dual_iir.app:main"
 fnc_ui = "stabilizer_ui.target.fnc.app:main"
+ff_fb_ui = "stabilizer_ui.target.ff_fb.app:main"
 
 [tool.poe.tasks]
 fmt = "yapf -ir stabilizer_ui"
