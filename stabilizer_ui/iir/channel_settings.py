@@ -26,11 +26,6 @@ class AbstractChannelSettings(QtWidgets.QWidget):
         self.iir_widgets = [_IIRWidget(sample_period), _IIRWidget(sample_period)]
         for i, iir in enumerate(self.iir_widgets):
             self.IIRTabs.addTab(iir, f"Filter {i}")
-            
-    # def _add_harm_param_tabWidgets(self):
-    #     self.h_param_widgets = _HarmParamWidget()
-    #     self.IIRTabs.addTab(self.h_param_widgets, f"Harmonic Parameters")
-
 
 class ChannelSettings(AbstractChannelSettings):
     """ Minimal channel settings widget for a dual-iir-like application
@@ -45,15 +40,6 @@ class ChannelSettings(AbstractChannelSettings):
 
         self._add_afe_options()
         self._add_iir_tabWidget(sample_period)
-        # self._add_harm_param_tabWidgets()
-
-# class _HarmParamWidget(QtWidgets.QWidget):
-    
-#     def __init__(self):
-#         super().__init__()
-#         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "widgets/harmonic_parameters.ui")
-#         uic.loadUi(ui_path, self)
-        
         
         
         
