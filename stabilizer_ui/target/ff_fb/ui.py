@@ -82,6 +82,15 @@ class UiWindow(AbstractUiWindow):
             settings_map[StabilizerSettings.afes[ch].path()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])
 
+
+            # Harmonic Parameters
+            hparamWidget = self.channels[ch].h_param_widgets      
+            # Iterate for each order
+    
+            hparam_topic = UiSettings.h_params[ch]
+            hparamWidget.set_mqtt_configs(settings_map, hparam_topic)
+            
+
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
                 iirWidget = self.channels[ch].iir_widgets[iir]

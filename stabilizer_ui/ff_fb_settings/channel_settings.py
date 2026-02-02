@@ -54,6 +54,16 @@ class _HarmParamWidget(QtWidgets.QWidget):
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "widgets/harmonic_parameters.ui")
         uic.loadUi(ui_path, self)
         
+    def set_mqtt_configs(self, settings_map, hparam_topic):
+        
+        for order, topic in enumerate(hparam_topic):
+            amp_box = getattr(self, f"ampOrder{order+1}Box")
+            phase_box = getattr(self, f"phaseOrder{order+1}Box")
+            
+            settings_map[topic.child("amp").path()] = UiMqttConfig([amp_box])
+            settings_map[topic.child("phase").path()] = UiMqttConfig([phase_box])
+
+        
         
         
         

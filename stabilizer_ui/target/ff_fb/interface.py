@@ -13,6 +13,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
     """
 
     iir_ch_topic_base = StabilizerSettings.iir_root.path()
+    hparam_topic_base = StabilizerSettings.harm_param_root.path()
 
     def __init__(self):
         super().__init__(DEFAULT_DUAL_IIR_SAMPLE_PERIOD, app_root)
@@ -28,5 +29,8 @@ class StabilizerInterface(AbstractStabilizerInterface):
         elif setting_root.name == "ui":
             self.publish_ui_change(setting.path(), setting.value)
 
-            if ui_iir := setting.get_parent_until(lambda x: x.name.startswith("ff_fb_settings")): # changed to access new ff_fb_settings folder instead of iir
+            if ui_iir := setting.get_parent_until(lambda x: x.name.startswith("iir")):
                 await self._change_filter_setting(ui_iir)
+                
+            elif ui_harm := setting.get_parent_until(lambda x: x.name.startswith("h_params")):
+                await self._change_harmonic_settings(ui_harm)

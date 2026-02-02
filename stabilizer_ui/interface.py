@@ -119,6 +119,7 @@ class AbstractStabilizerInterface:
         b1 = -p_gain
         await self.set_iir(channel, iir_idx, [b0, b1, 0, 1, 0])
 
+
     async def set_iir(
         self,
         channel: int,
@@ -157,6 +158,26 @@ class AbstractStabilizerInterface:
         msg = await self._interface.request(key, value, retain=True)
         if starts_with(msg, "Settings fail"):
             logger.warning("Stabilizer reported failure to write setting: '%s'", msg)
+
+    # Update the harmonic parameter settings
+    async def set_harmonic_parameters(self, channel: int, order: int, amp: float = 0.0, phase: float = 0.0):
+        
+        key = f"{self.hparam_topic_base}/{channel}/{order}"
+        value = {"amp": stabilizer.voltage_to_machine_units(amp), "phase": phase}
+        await self.request_settings_change(key, value)
+        
+    # Update the harmonic parameter settings
+    async def _change_harmonic_settings(self, hparam_settings):
+        
+        (_ch, _order) = int(hparam_settings.get_parent().name[2:]), int(hparam_settings.name[8:])
+    
+        _amplitude = hparam_settings.child("amp").value
+        _phase_deg = hparam_settings.child("phase").value        
+        
+        _phase = _phase_deg % 360.0 # not sure abou this
+    
+        await self.set_harmonic_parameters(channel=_ch, order=_order, amp=_amplitude, phase=_phase)
+
 
     async def _change_filter_setting(self, iir_setting):
         (_ch,
