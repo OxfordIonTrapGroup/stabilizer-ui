@@ -60,6 +60,12 @@ class AbstractStabilizerInterface:
         stream_target = await stream_target_queue.get()
         stream_target_queue.task_done()
         logger.debug("Got stream target from stream thread.")
+        
+        # I AM NOT SURE IF THE IP ADDRESS AND PORT IS UPDATED FOR STABILIZER SETTINGS - PERHAPS THIS MIGHT WORK - NEED TO TEST
+        await self.request_settings_change(
+                self.stream_target_topic,
+                stream_target._asdict()
+        )
 
         settings_map = ui.set_mqtt_configs(stream_target)
 
