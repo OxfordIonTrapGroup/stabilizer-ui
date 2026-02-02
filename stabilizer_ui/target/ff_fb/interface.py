@@ -28,5 +28,5 @@ class StabilizerInterface(AbstractStabilizerInterface):
         elif setting_root.name == "ui":
             self.publish_ui_change(setting.path(), setting.value)
 
-            if ui_iir := setting.get_parent_until(lambda x: x.name.startswith("iir")):
+            if ui_iir := setting.get_parent_until(lambda x: x.name.startswith("ff_fb_settings")): # changed to access new ff_fb_settings folder instead of iir
                 await self._change_filter_setting(ui_iir)

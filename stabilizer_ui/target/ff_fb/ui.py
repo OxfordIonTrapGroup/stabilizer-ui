@@ -7,7 +7,7 @@ from .topics import StabilizerSettings, UiSettings
 
 from ...ui import AbstractUiWindow
 from ...mqtt import NetworkAddress, UiMqttConfig
-from ...iir.channel_settings import ChannelSettings
+from ...ff_fb_settings.channel_settings import ChannelSettings
 from ...stream.fft_scope import FftScope
 
 
