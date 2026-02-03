@@ -35,10 +35,10 @@
        <item row="0" column="1">
         <widget class="QDoubleSpinBox" name="ampOrder1Box">
          <property name="maximum">
-          <double>9999.989999999999782</double>
+          <double>6553.39</double>
          </property>
          <property name="singleStep">
-          <double>1.000000000000000</double>
+          <double>0.0100000000000</double>
          </property>
         </widget>
        </item>
@@ -52,10 +52,10 @@
        <item row="1" column="1">
         <widget class="QDoubleSpinBox" name="ampOrder2Box">
          <property name="maximum">
-          <double>9999.989999999999782</double>
+          <double>6553.39</double>
          </property>
          <property name="singleStep">
-          <double>1.000000000000000</double>
+          <double>0.0100000000000</double>
          </property>
         </widget>
        </item>
@@ -83,30 +83,30 @@
        <item row="2" column="1">
         <widget class="QDoubleSpinBox" name="ampOrder3Box">
          <property name="maximum">
-          <double>9999.989999999999782</double>
+          <double>6553.39</double>
          </property>
          <property name="singleStep">
-          <double>1.000000000000000</double>
+          <double>0.0100000000000</double>
          </property>
         </widget>
        </item>
        <item row="3" column="1">
         <widget class="QDoubleSpinBox" name="ampOrder4Box">
          <property name="maximum">
-          <double>9999.989999999999782</double>
+          <double>6553.39</double>
          </property>
          <property name="singleStep">
-          <double>1.000000000000000</double>
+          <double>0.0100000000000</double>
          </property>
         </widget>
        </item>
        <item row="4" column="1">
         <widget class="QDoubleSpinBox" name="ampOrder5Box">
          <property name="maximum">
-          <double>9999.989999999999782</double>
+          <double>6553.39</double>
          </property>
          <property name="singleStep">
-          <double>1.000000000000000</double>
+          <double>0.0100000000000</double>
          </property>
         </widget>
        </item>
@@ -162,10 +162,10 @@
           <string> °</string>
          </property>
          <property name="minimum">
-          <double>-179.990000000000009</double>
+          <double>-359.990000000000009</double>
          </property>
          <property name="maximum">
-          <double>180.000000000000000</double>
+          <double>360.000000000000000</double>
          </property>
          <property name="singleStep">
           <double>1.000000000000000</double>
@@ -178,10 +178,10 @@
           <string> °</string>
          </property>
          <property name="minimum">
-          <double>-179.990000000000009</double>
+          <double>-359.990000000000009</double>
          </property>
          <property name="maximum">
-          <double>180.000000000000000</double>
+          <double>360.000000000000000</double>
          </property>
         </widget>
        </item>
@@ -191,10 +191,10 @@
           <string> °</string>
          </property>
          <property name="minimum">
-          <double>-179.990000000000009</double>
+          <double>-359.990000000000009</double>
          </property>
          <property name="maximum">
-          <double>180.000000000000000</double>
+          <double>360.000000000000000</double>
          </property>
         </widget>
        </item>
@@ -204,10 +204,10 @@
           <string> °</string>
          </property>
          <property name="minimum">
-          <double>-179.990000000000009</double>
+          <double>-359.990000000000009</double>
          </property>
          <property name="maximum">
-          <double>180.000000000000000</double>
+          <double>360.000000000000000</double>
          </property>
         </widget>
        </item>
@@ -217,10 +217,10 @@
           <string> °</string>
          </property>
          <property name="minimum">
-          <double>-179.990000000000009</double>
+          <double>-359.990000000000009</double>
          </property>
          <property name="maximum">
-          <double>180.000000000000000</double>
+          <double>360.000000000000000</double>
          </property>
         </widget>
        </item>
