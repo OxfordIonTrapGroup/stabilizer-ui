@@ -62,10 +62,12 @@ class AbstractStabilizerInterface:
         logger.debug("Got stream target from stream thread.")
         
         # I AM NOT SURE IF THE IP ADDRESS AND PORT IS UPDATED FOR STABILIZER SETTINGS - PERHAPS THIS MIGHT WORK - NEED TO TEST
-        await self.request_settings_change(
-                self.stream_target_topic,
-                stream_target._asdict()
-        )
+        # print("Update stream target")
+        # print(f"{stream_target._asdict()}")
+        # await self.request_settings_change(
+        #         self.stream_target_topic,
+        #         stream_target._asdict()
+        # )
 
         settings_map = ui.set_mqtt_configs(stream_target)
 
@@ -169,7 +171,7 @@ class AbstractStabilizerInterface:
     async def set_harmonic_parameters(self, channel: int, order: int, amp: float = 0.0, phase: float = 0.0):
         
         key = f"{self.hparam_topic_base}/{channel}/{order}"
-        value = {"amp": stabilizer.voltage_to_machine_units(amp), "phase": phase}
+        value = {"amp": amp, "phase": phase}
         await self.request_settings_change(key, value)
         
     # Update the harmonic parameter settings
