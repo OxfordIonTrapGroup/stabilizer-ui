@@ -174,6 +174,17 @@ class AbstractStabilizerInterface:
         value = {"amp": amp, "phase": phase}
         await self.request_settings_change(key, value)
         
+    # async def set_offset_settings(self, offset):
+        
+    #     key = f"{self.offset_topic_base}"
+    #     value = offset
+    #     await self.request_settings_change(key, value)
+
+    # async def _change_offset_settings(self, offset_setting):
+    #     _offset = offset_setting.value
+    #     await self.set_offset_settings(offset_setting)
+
+
     # Update the harmonic parameter settings
     async def _change_harmonic_settings(self, hparam_settings):
         

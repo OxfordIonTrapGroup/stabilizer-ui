@@ -1,4 +1,4 @@
-from PyQt6 import QtWidgets
+from PyQt6 import QtWidgets, QtCore
 from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD
 from stabilizer.stream import Parser, AdcDecoder, DacDecoder
 
@@ -7,7 +7,7 @@ from .topics import StabilizerSettings, UiSettings
 
 from ...ui import AbstractUiWindow
 from ...mqtt import NetworkAddress, UiMqttConfig
-from ...ff_fb_settings.channel_settings import ChannelSettings
+from ...ff_fb_settings.channel_settings import ChannelSettings, OffsetSettings
 from ...stream.fft_scope import FftScope
 
 
@@ -31,18 +31,35 @@ class UiWindow(AbstractUiWindow):
         self.setWindowTitle(title)
 
         # Set main window layout
-        splitter = QtWidgets.QSplitter(self)
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal, self)
         self.setCentralWidget(splitter)
+
+
+
+        # Left side (offset and channel)
+        left_container = QtWidgets.QWidget()
+        left_layout = QtWidgets.QVBoxLayout(left_container)
+        left_layout.setContentsMargins(0,0,0,0)
+
+        # Offset tab
+        self.offset_widget = OffsetSettings()
+        left_layout.addWidget(self.offset_widget)
 
         # Create UI for channel settings.
         self.channels = [
             ChannelSettings(DEFAULT_DUAL_IIR_SAMPLE_PERIOD) for _ in range(NUM_CHANNELS)
         ]
-
+        
         self.channelTabWidget = QtWidgets.QTabWidget()
         for i, channel in enumerate(self.channels):
             self.channelTabWidget.addTab(channel, f"Channel {i}")
-        splitter.addWidget(self.channelTabWidget)
+        
+        left_layout.addWidget(self.channelTabWidget)
+        
+        left_layout.setStretch(0, 1)  # Offset smaller
+        left_layout.setStretch(1, 3)  # Channels larger
+        splitter.addWidget(left_container)
+
 
         # Create UI for FFT scope.
         streamParser = Parser([AdcDecoder(), DacDecoder()])
@@ -78,10 +95,16 @@ class UiWindow(AbstractUiWindow):
             )
         }
 
+        # Linked offset to MQTT Topic Tree
+        #offsetTopic = UiSettings.offset
+        #self.offset_widget.set_mqtt_configs(settings_map, offsetTopic)
+
+        settings_map[StabilizerSettings.v_offset.path()] = UiMqttConfig([self.offset_widget.offsetBox])
+
         for ch in range(NUM_CHANNELS):
             settings_map[StabilizerSettings.afes[ch].path()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])
-
+    
 
             # Harmonic Parameters
             hparamWidget = self.channels[ch].h_param_widgets      
@@ -97,5 +120,8 @@ class UiWindow(AbstractUiWindow):
                 iir_topic = UiSettings.iirs[ch][iir]
 
                 iirWidget.set_mqtt_configs(settings_map, iir_topic)
+
+
+            
 
         return settings_map

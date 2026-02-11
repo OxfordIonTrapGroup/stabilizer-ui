@@ -14,6 +14,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
 
     iir_ch_topic_base = StabilizerSettings.iir_root.path()
     hparam_topic_base = StabilizerSettings.harm_param_root.path()
+    
 
     def __init__(self):
         super().__init__(DEFAULT_DUAL_IIR_SAMPLE_PERIOD, app_root)
@@ -34,3 +35,6 @@ class StabilizerInterface(AbstractStabilizerInterface):
                 
             elif ui_harm := setting.get_parent_until(lambda x: x.name.startswith("h_params")):
                 await self._change_harmonic_settings(ui_harm)
+
+            # elif ui_offset := setting.get_parent_until(lambda x: x.name.startswith("ui_offset")):
+            #     await self._change_offset_settings(ui_offset)

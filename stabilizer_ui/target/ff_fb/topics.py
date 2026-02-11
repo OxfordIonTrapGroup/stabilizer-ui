@@ -15,7 +15,7 @@ class StabilizerSettings:
     @classmethod
     def set(cls):
         cls.root = TopicTree("settings")
-
+        cls.v_offset = cls.root.create_child("v_offset")
         (afe, cls.iir_root, cls.harm_param_root) = cls.root.create_children(["afe", "iir_ch", "harmonic_wave_parameters"])
 
         # Create setting tree for harmonic parameters
@@ -28,7 +28,7 @@ class StabilizerSettings:
 
         cls.stream_target = cls.root.create_child("stream_target")
         cls.afes = afe.create_children(["0", "1"])
-
+        
         # iir_ch/0/1 represents the IIR filter 1 for channel 0
         cls.iirs = [
             cls.iir_root.create_children(
@@ -53,7 +53,10 @@ class UiSettings:
     def set(cls):
         cls.root = TopicTree("ui")
 
+        #offset = cls.root.create_child("offset")
         ui_channels = cls.root.create_children([f"ch{ch}" for ch in range(NUM_CHANNELS)])
+        
+        
         cls.iirs = [
             ui_channels[ch].create_children(
                 [f"iir{iir}" for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])

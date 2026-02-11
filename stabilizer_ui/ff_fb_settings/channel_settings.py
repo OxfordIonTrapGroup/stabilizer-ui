@@ -29,7 +29,17 @@ class AbstractChannelSettings(QtWidgets.QWidget):
             
     def _add_harm_param_tabWidgets(self):
         self.h_param_widgets = _HarmParamWidget()
-        self.IIRTabs.addTab(self.h_param_widgets, f"Harmonic Parameters")
+        self.IIRTabs.addTab(self.h_param_widgets, f"FeedForward Settings")
+
+class OffsetSettings(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+
+        uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)),"widgets/offset.ui"), self)
+    
+    def set_mqtt_configs(self, settings_map, topic):
+        offset_box = getattr(self, f"offsetBox")
+        settings_map[topic.path()] = UiMqttConfig([offset_box])
 
 
 class ChannelSettings(AbstractChannelSettings):
