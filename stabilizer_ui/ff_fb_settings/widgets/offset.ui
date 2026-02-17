@@ -33,7 +33,13 @@
          <number>5</number>
         </property>
         <property name="minimum">
-         <double>-99.000000000000000</double>
+         <double>0.0</double>
+        </property>
+        <property name="maximum">
+         <double>2.5</double>
+        </property>
+        <property name="suffix">
+            <string>V</string>
         </property>
        </widget>
       </item>
