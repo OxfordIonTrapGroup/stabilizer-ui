@@ -101,6 +101,9 @@ class UiWindow(AbstractUiWindow):
 
         settings_map[StabilizerSettings.v_offset.path()] = UiMqttConfig([self.offset_widget.offsetBox])
 
+        settings_map[StabilizerSettings.ki_ff.path()] = UiMqttConfig([self.offset_widget.kiffBox])
+        settings_map[StabilizerSettings.kp_ff.path()] = UiMqttConfig([self.offset_widget.kpffBox])
+
         for ch in range(NUM_CHANNELS):
             settings_map[StabilizerSettings.afes[ch].path()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])

@@ -16,6 +16,8 @@ class StabilizerSettings:
     def set(cls):
         cls.root = TopicTree("settings")
         cls.v_offset = cls.root.create_child("v_offset")
+        cls.ki_ff = cls.root.create_child("ki_alpha")
+        cls.kp_ff = cls.root.create_child("kp_alpha")
         (afe, cls.iir_root, cls.harm_param_root) = cls.root.create_children(["afe", "iir_ch", "harmonic_wave_parameters"])
 
         # Create setting tree for harmonic parameters
