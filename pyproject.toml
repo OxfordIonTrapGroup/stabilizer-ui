@@ -16,7 +16,7 @@ gmqtt = "^0.7.0"
 pyqt6 = "^6.9.0"
 
 sipyco = { git = "https://github.com/m-labs/sipyco.git" }
-stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
+stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", branch = "katie-stabilizer", subdirectory = "py" }
 
 [tool.poetry.group.dev.dependencies]
 poethepoet = "^0.22.1"
