@@ -91,9 +91,9 @@ class StreamStats:
     @property
     def loss(self):
         """Fraction of batches lost"""
-        #received, lost = sum([[s.received, s.lost] for s in self._stat], axis=0)
         received = sum(s.received for s in self._stat)
         lost = sum(s.lost for s in self._stat)
+        
         sent = received + lost
         return lost / sent if sent else 1
 
@@ -120,7 +120,6 @@ def stream_worker(
     stat = StreamStats()
 
     async def handle_stream():
-        print("handle_stream coroutine started")
         """This coroutine doesn't run in the main thread's loop!
 
         We first get the stream target from the queue, and queue back the allocated
@@ -136,7 +135,6 @@ def stream_worker(
                                                         stream_target.port,
                                                         broker_address.get_ip(), [parser],
                                                         maxsize=1)
-       
 
         allocated_stream_port = transport.get_extra_info("sockname")[1]
         stream_target = NetworkAddress(stream_target.ip, allocated_stream_port)
@@ -151,7 +149,6 @@ def stream_worker(
         try:
             while not terminate.is_set():
                 frame = await stream.queue.get()
-                print("---- FRAME RECEIVED ----")
                 stat.update(frame)
                 for buf, values in zip(buffer, frame.to_si()):
                     buf.extend(values)
@@ -181,29 +178,30 @@ def stream_worker(
         return True
 
     # Wait for the future to return.
-    #asyncio.run_coroutine_threadsafe(_wait_for_main_loop(), main_loop).result()
-    # Wait for main loop handshake
-    asyncio.run_coroutine_threadsafe(
-        _wait_for_main_loop(), main_loop
-    ).result()
+    asyncio.run_coroutine_threadsafe(_wait_for_main_loop(), main_loop).result()
 
-    # Create proper loop for this thread
-    new_loop = asyncio.new_event_loop()
+    new_loop = asyncio.SelectorEventLoop()
+    # Setting the event loop here only applies locally to this thread.
     asyncio.set_event_loop(new_loop)
+    print("Loop type:", type(new_loop))
 
-    print("New loop created. Running?", new_loop.is_running())
-    print("thread loop:", new_loop)
-    print("Thread loop id:", id(new_loop))
-    # Schedule background tasks
-    new_loop.create_task(handle_stream())
-    new_loop.create_task(handle_callback())
+    async def runner():
+        await asyncio.gather(handle_callback(), handle_stream())
 
-    print("Starting event loop...")
-    new_loop.run_forever()
-    # new_loop = asyncio.SelectorEventLoop()
-    # # Setting the event loop here only applies locally to this thread.
+    new_loop.run_until_complete(runner())
+    
+    # tasks = asyncio.gather(handle_callback(), handle_stream())
+    # new_loop.run_until_complete(tasks)
+    new_loop.close()
+
+    # try:
+    #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # except AttributeError:
+    #     # Not Windows
+    #     pass
+
+    # new_loop = asyncio.new_event_loop()
     # asyncio.set_event_loop(new_loop)
-    # print("New loop created. Running?", new_loop.is_running())
 
     # tasks = asyncio.gather(handle_callback(), handle_stream())
     # new_loop.run_until_complete(tasks)
