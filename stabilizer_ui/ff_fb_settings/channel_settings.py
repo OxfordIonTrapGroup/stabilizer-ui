@@ -11,8 +11,15 @@ from ..utils import link_spinbox_to_is_inf_checkbox, kilo, kilo2
 
 
 class AbstractChannelSettings(QtWidgets.QWidget):
-    """ Abstract class for creating custom channel widgets.
-    Sets up AFE gains and IIR filter settings.
+    """
+    Base class for per-channel configuration widgets.
+
+    Provides:
+    - AFE gain selection
+    - IIR filter configuration (2 cascaded stages)
+    - Harmonic feedforward parameter configuration
+
+    Concrete subclasses load the appropriate UI layout.
     """
     afe_options = ["G1", "G2", "G5", "G10"]
 
@@ -20,30 +27,51 @@ class AbstractChannelSettings(QtWidgets.QWidget):
         super().__init__()
 
     def _add_afe_options(self):
+        """Populate the AFE gain combo box."""
         self.afeGainBox.addItems(self.afe_options)
 
     def _add_iir_tabWidget(self, sample_period):
+        """
+        Create two IIR filter stage widgets (cascade length = 2)
+        and add them as tabs.
+        """
         self.iir_widgets = [_IIRWidget(sample_period), _IIRWidget(sample_period)]
         for i, iir in enumerate(self.iir_widgets):
             self.IIRTabs.addTab(iir, f"Filter {i}")
             
     def _add_harm_param_tabWidgets(self):
+        """
+        Add harmonic feedforward configuration tab.
+        """
         self.h_param_widgets = _HarmParamWidget()
         self.IIRTabs.addTab(self.h_param_widgets, f"FeedForward Settings")
 
 class OffsetSettings(QtWidgets.QWidget):
+    """
+    Widget for configuring the DC offset applied via
+    the Current Sense DAC.
+    """
     def __init__(self):
         super().__init__()
 
         uic.loadUi(os.path.join(os.path.dirname(os.path.realpath(__file__)),"widgets/offset.ui"), self)
     
     def set_mqtt_configs(self, settings_map, topic):
+        """
+        Map UI offset widget to MQTT topic path.
+        """
         offset_box = getattr(self, f"offsetBox")
         settings_map[topic.path()] = UiMqttConfig([offset_box])
 
 
 class ChannelSettings(AbstractChannelSettings):
-    """ Minimal channel settings widget for a dual-iir-like application
+    """
+    Complete channel configuration widget.
+
+    Includes:
+    - AFE gain
+    - Two cascaded IIR filter stages
+    - Harmonic feedforward configuration
     """
 
     def __init__(self, sample_period):
@@ -58,14 +86,22 @@ class ChannelSettings(AbstractChannelSettings):
         self._add_harm_param_tabWidgets()
 
 class _HarmParamWidget(QtWidgets.QWidget):
-    
+    """
+    Harmonic feedforward configuration widget.
+
+    Provides amplitude and phase controls
+    for each harmonic order.
+    """
     def __init__(self):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "widgets/harmonic_parameters.ui")
         uic.loadUi(ui_path, self)
         
     def set_mqtt_configs(self, settings_map, hparam_topic):
-        
+        """
+        Bind amplitude and phase spinboxes to their
+        corresponding MQTT settings paths.
+        """
         for order, topic in enumerate(hparam_topic):
             amp_box = getattr(self, f"ampOrder{order+1}Box")
             phase_box = getattr(self, f"phaseOrder{order+1}Box")
@@ -78,7 +114,15 @@ class _HarmParamWidget(QtWidgets.QWidget):
         
         
 class _IIRWidget(QtWidgets.QWidget):
+    """
+    Widget representing a single IIR filter stage.
 
+    Responsibilities:
+    - Select filter type (PID, notch, lowpass, etc.)
+    - Configure filter parameters
+    - Display transfer function magnitude response
+    - Bind all parameters to MQTT topics
+    """
     def __init__(self, sample_period):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -144,6 +188,12 @@ class _IIRWidget(QtWidgets.QWidget):
         np.seterr(divide='ignore')
 
     def update_transfer_function(self, coefficients):
+        """
+        Compute and display magnitude response of current IIR filter.
+
+        Coefficients format:
+            [b0, b1, b2, a1, a2]
+        """
         f, h = signal.freqz(
             coefficients[:3],
             np.r_[1, [c for c in coefficients[3:]]],
@@ -156,6 +206,10 @@ class _IIRWidget(QtWidgets.QWidget):
         self.widgets["transferFunctionView"].plot(f, 20 * np.log10(np.absolute(h)))
 
     def set_mqtt_configs(self, settings_map, iir_topic):
+        """
+        Bind all IIR parameters and visualization controls
+        to their corresponding MQTT settings topics.
+        """
         for child in iir_topic.children(["y_offset", "y_min", "y_max", "x_offset"]):
             settings_map[child.path()] = UiMqttConfig([getattr(self, child.name + "Box")])
 
@@ -187,7 +241,12 @@ class _IIRWidget(QtWidgets.QWidget):
 
 
 class _PIDWidget(QtWidgets.QWidget):
+    """
+    PID filter configuration widget.
 
+    Supports proportional, integral, and derivative terms,
+    including optional second-order extensions.
+    """
     def __init__(self):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -199,7 +258,7 @@ class _PIDWidget(QtWidgets.QWidget):
 
 
 class _NotchWidget(QtWidgets.QWidget):
-
+    """Notch filter configuration widget."""
     def __init__(self):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -208,7 +267,7 @@ class _NotchWidget(QtWidgets.QWidget):
 
 
 class _XPassWidget(QtWidgets.QWidget):
-
+    """Lowpass / Highpass / Allpass configuration widget."""
     def __init__(self):
         super().__init__()
         ui_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),

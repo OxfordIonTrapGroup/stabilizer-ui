@@ -183,26 +183,6 @@ def stream_worker(
     new_loop = asyncio.SelectorEventLoop()
     # Setting the event loop here only applies locally to this thread.
     asyncio.set_event_loop(new_loop)
-    print("Loop type:", type(new_loop))
-
-    async def runner():
-        await asyncio.gather(handle_callback(), handle_stream())
-
-    new_loop.run_until_complete(runner())
-    
-    # tasks = asyncio.gather(handle_callback(), handle_stream())
-    # new_loop.run_until_complete(tasks)
+    tasks = asyncio.gather(handle_callback(), handle_stream())
+    new_loop.run_until_complete(tasks)
     new_loop.close()
-
-    # try:
-    #     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    # except AttributeError:
-    #     # Not Windows
-    #     pass
-
-    # new_loop = asyncio.new_event_loop()
-    # asyncio.set_event_loop(new_loop)
-
-    # tasks = asyncio.gather(handle_callback(), handle_stream())
-    # new_loop.run_until_complete(tasks)
-    # new_loop.close()

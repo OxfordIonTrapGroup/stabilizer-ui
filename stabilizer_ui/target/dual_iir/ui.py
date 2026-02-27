@@ -76,8 +76,7 @@ class UiWindow(AbstractUiWindow):
                 lambda _: stream_target._asdict(),
                 lambda _w, _v: stream_target._asdict(),
             )
-        }
-        
+        }        
         for ch in range(NUM_CHANNELS):
             settings_map[StabilizerSettings.afes[ch].path()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])

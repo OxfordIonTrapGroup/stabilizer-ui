@@ -60,14 +60,6 @@ class AbstractStabilizerInterface:
         stream_target = await stream_target_queue.get()
         stream_target_queue.task_done()
         logger.debug("Got stream target from stream thread.")
-        
-        # I AM NOT SURE IF THE IP ADDRESS AND PORT IS UPDATED FOR STABILIZER SETTINGS - PERHAPS THIS MIGHT WORK - NEED TO TEST
-        # print("Update stream target")
-        # print(f"{stream_target._asdict()}")
-        # await self.request_settings_change(
-        #         self.stream_target_topic,
-        #         stream_target._asdict()
-        # )
 
         settings_map = ui.set_mqtt_configs(stream_target)
 
@@ -167,9 +159,22 @@ class AbstractStabilizerInterface:
         if starts_with(msg, "Settings fail"):
             logger.warning("Stabilizer reported failure to write setting: '%s'", msg)
 
-    # Update the harmonic parameter settings
+    # Update harmonic parameters via network (Miniconf)
     async def set_harmonic_parameters(self, channel: int, order: int, amp: float = 0.0, phase: float = 0.0):
-        
+        """
+            Send harmonic amplitude and phase update to firmware.
+
+            Parameters
+            ----------
+            channel : int
+                Output channel index.
+            order : int
+                Harmonic order index.
+            amp : float
+                Harmonic amplitude (controller units).
+            phase : float
+                Harmonic phase in degrees.
+        """
         key = f"{self.hparam_topic_base}/{channel}/{order}"
         value = {"amp": amp, "phase": phase}
         await self.request_settings_change(key, value)
@@ -177,15 +182,19 @@ class AbstractStabilizerInterface:
 
 
 
-    # Update the harmonic parameter settings
+    # Called when UI harmonic parameter widget changes
     async def _change_harmonic_settings(self, hparam_settings):
-        
+        """
+            Extract channel + harmonic order from UI node
+            and push updated amplitude/phase to firmware.
+        """
         (_ch, _order) = int(hparam_settings.get_parent().name[2:]), int(hparam_settings.name[8:])
     
         _amplitude = hparam_settings.child("amp").value
         _phase_deg = hparam_settings.child("phase").value        
         
-        _phase = _phase_deg % 360.0 # not sure abou this
+        # Normalize phase to [0, 360)
+        _phase = _phase_deg % 360.0
     
         await self.set_harmonic_parameters(channel=_ch, order=_order, amp=_amplitude, phase=_phase)
 
