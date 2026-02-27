@@ -1,6 +1,0 @@
-[package.source]
-type = "git"
-url = "https://github.com/OxfordIonTrapGroup/stabilizer.git"
-reference = "HEAD"
-resolved_reference = "43064e14b235412be7dc91cb0ff91db13b97c021"
-subdirectory = "py"
