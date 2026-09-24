@@ -1,12 +1,12 @@
 import logging
 import os
 from PyQt6 import QtWidgets, uic
-from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD, ADC_VOLTS_PER_LSB
+from stabilizer import ADC_VOLTS_PER_LSB
 from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
 from numpy import pi
 
-from .topics import StabilizerSettings, UiSettings
 from . import *
+from .topics import StabilizerSettings, UiSettings
 
 from ... import mqtt
 from ...pounder.ui import ClockWidget
@@ -47,7 +47,7 @@ pid_gain_readwrite = (
 class ChannelSettings(AbstractChannelSettings):
     """ Channel settings"""
 
-    def __init__(self, sample_period=DEFAULT_FNC_SAMPLE_PERIOD):
+    def __init__(self, sample_period=FNC_STREAM_SAMPLE_PERIOD):
         super().__init__()
 
         uic.loadUi(
@@ -130,7 +130,7 @@ class UiWindow(AbstractUiWindow):
         settingsLayout = QtWidgets.QVBoxLayout()
 
         streamParser = Parser([AdcDecoder(), PhaseOffsetDecoder()])
-        self.fftScopeWidget = FftScope(streamParser, DEFAULT_FNC_SAMPLE_PERIOD)
+        self.fftScopeWidget = FftScope(streamParser, FNC_STREAM_SAMPLE_PERIOD)
         centralLayout.addLayout(settingsLayout)
         centralLayout.addWidget(self.fftScopeWidget)
 

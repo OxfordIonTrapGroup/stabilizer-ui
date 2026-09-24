@@ -1,6 +1,6 @@
 import logging
-from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD
 
+from . import FNC_STREAM_SAMPLE_PERIOD
 from .topics import app_root, StabilizerSettings
 from ...interface import AbstractStabilizerInterface
 
@@ -14,7 +14,7 @@ class StabilizerInterface(AbstractStabilizerInterface):
     iir_ch_topic_base = StabilizerSettings.iir_root.path()
 
     def __init__(self):
-        super().__init__(DEFAULT_FNC_SAMPLE_PERIOD, app_root)
+        super().__init__(FNC_STREAM_SAMPLE_PERIOD, app_root)
         self.stream_target_topic = StabilizerSettings.stream_target.path(
             from_app_root=False)
 
