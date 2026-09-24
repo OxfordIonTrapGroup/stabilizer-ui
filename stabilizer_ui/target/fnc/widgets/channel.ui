@@ -139,6 +139,32 @@
             </property>
            </widget>
           </item>
+          <item row="2" column="1">
+           <widget class="QLabel" name="ddsOutPhaseLabel">
+            <property name="text">
+             <string>Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QDoubleSpinBox" name="ddsOutPhaseBox">
+            <property name="suffix">
+             <string> turns</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.000000000000000</double>
+            </property>
+           </widget>
+          </item>
           <item row="1" column="4">
            <widget class="QDoubleSpinBox" name="ddsOutAttenuationBox">
             <property name="suffix">
@@ -246,6 +272,32 @@
             </property>
             <property name="value">
              <double>31.500000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="ddsInPhaseLabel">
+            <property name="text">
+             <string>Phase</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QDoubleSpinBox" name="ddsInPhaseBox">
+            <property name="suffix">
+             <string> turns</string>
+            </property>
+            <property name="decimals">
+             <number>4</number>
+            </property>
+            <property name="maximum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.010000000000000</double>
+            </property>
+            <property name="value">
+             <double>0.000000000000000</double>
             </property>
            </widget>
           </item>

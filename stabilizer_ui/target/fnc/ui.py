@@ -202,6 +202,10 @@ class UiWindow(AbstractUiWindow):
                 [self.channels[ch].ddsInAmplitudeBox])
             settings_map[StabilizerSettings.amplitude_dds_outs[ch].path()] = UiMqttConfig(
                 [self.channels[ch].ddsOutAmplitudeBox])
+            settings_map[StabilizerSettings.phase_offset_dds_ins[ch].path()] = UiMqttConfig(
+                [self.channels[ch].ddsInPhaseBox])
+            settings_map[StabilizerSettings.phase_offset_dds_outs[ch].path()] = UiMqttConfig(
+                [self.channels[ch].ddsOutPhaseBox])
 
             settings_map[StabilizerSettings.frequency_dds_outs[ch].path()] = UiMqttConfig(
                 [self.channels[ch].ddsOutFrequencyBox], *mega)

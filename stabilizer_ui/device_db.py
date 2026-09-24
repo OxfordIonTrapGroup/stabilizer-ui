@@ -42,3 +42,9 @@ stabilizer_devices["lab1_raman_phaselock"] = {
     "application": "dual_iir",
     "broker": broker_255_6_4,
 }
+
+stabilizer_devices["lab2_vecsel"] = {
+    "mac-address": "44-b7-d0-c7-9f-39",
+    "application": "fnc",
+    "broker": broker_255_6_4,
+}

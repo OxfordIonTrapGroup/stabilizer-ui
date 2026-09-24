@@ -38,7 +38,8 @@ class StabilizerSettings:
 
         for topic in [
                 "frequency_dds_out", "frequency_dds_in", "amplitude_dds_out",
-                "amplitude_dds_in", "attenuation_out", "attenuation_in"
+                "amplitude_dds_in", "phase_offset_dds_out", "phase_offset_dds_in",
+                "attenuation_out", "attenuation_in"
         ]:
             setattr(cls, f"{topic}s",
                     [pounder_ch.create_child(topic) for pounder_ch in pounder_channels])

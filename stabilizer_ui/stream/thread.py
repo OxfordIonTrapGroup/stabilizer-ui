@@ -85,7 +85,7 @@ class StreamStats:
     def download(self):
         """Bytes per second"""
         duration = (self._stat[-1].time - self._stat[0].time + 1) / 1e9
-        bytes = np.sum(s.bytes for s in self._stat)
+        bytes = sum(s.bytes for s in self._stat)
         return bytes / duration
 
     @property

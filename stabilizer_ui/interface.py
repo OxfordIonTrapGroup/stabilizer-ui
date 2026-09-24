@@ -43,7 +43,17 @@ class AbstractStabilizerInterface:
 
     async def change(self, *args, **kwargs):
         await self._interface_set.wait()
-        await self.triage_setting_change(*args, **kwargs)
+        try:
+            await self.triage_setting_change(*args, **kwargs)
+        except TimeoutError:
+            setting = args[0] if args else None
+            if setting is not None and hasattr(setting, "path"):
+                logger.warning(
+                    "Setting %s timed out; ignoring unsupported target setting.",
+                    setting.path(),
+                )
+            else:
+                logger.warning("Setting update timed out; ignoring unsupported target setting.")
 
     async def update(
         self,
@@ -154,7 +164,15 @@ class AbstractStabilizerInterface:
         string message as a reply; should really be JSON/… instead, see
         quartiq/miniconf#32.
         """
-        msg = await self._interface.request(key, value, retain=True)
+        try:
+            msg = await self._interface.request(key, value, retain=True)
+        except TimeoutError:
+            logger.warning(
+                "Stabilizer did not respond to setting %s (value=%s); assuming target does not support this optional setting.",
+                key,
+                value,
+            )
+            return
         if starts_with(msg, "Settings fail"):
             logger.warning("Stabilizer reported failure to write setting: '%s'", msg)
 
