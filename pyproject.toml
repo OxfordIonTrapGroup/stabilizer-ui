@@ -1,46 +1,52 @@
-[tool.poetry]
+[project]
 name = "stabilizer-ui"
 version = "0.1"
 description = "Stabilizer GUI to control an ARTIQ stabilizer over MQTT and visualise its data streams."
-authors = ["OxfordIonTrapGroup"]
+authors = [{ name = "OxfordIonTrapGroup" }]
+requires-python = ">=3.12,<4"
 readme = "README.md"
 license = "GPL-3.0-or-later"
+dependencies = [
+    "qasync>=0.27.1,<0.28",
+    "websockets>=15.0.1,<16",
+    "pyqtgraph>=0.13.7,<0.14",
+    "numpy>=2.2.5,<3",
+    "gmqtt>=0.7.0,<0.8",
+    "pyqt6>=6.9.0,<7",
+    "sipyco",
+    "stabilizer",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-qasync = "^0.27.1"
-websockets = "^15.0.1"
-pyqtgraph = "^0.13.7"
-numpy = "^2.2.5"
-gmqtt = "^0.7.0"
-pyqt6 = "^6.9.0"
-
-sipyco = { git = "https://github.com/m-labs/sipyco.git" }
-stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
-
-[tool.poetry.group.dev.dependencies]
-poethepoet = "^0.22.1"
-toml = "^0.10.2"
-
-# Pin exact versions of linters to avoid inconsistencies between CI environments.
-# YAPF 0.33–0.40 split before comparison operators, rather than after, not matching the
-# default behaviour for arithmetic operators, so stay on 0.32 for now – though at some
-# point we might just update and not care.
-yapf = "0.43.0"
-flake8 = "7.1.1"
-
-[tool.poetry.scripts]
+[project.scripts]
 l674_lock_ui = "stabilizer_ui.target.l674.app:main"
 dual_iir_ui = "stabilizer_ui.target.dual_iir.app:main"
 fnc_ui = "stabilizer_ui.target.fnc.app:main"
 
+[dependency-groups]
+dev = [
+    "poethepoet>=0.22.1,<0.23",
+    "toml>=0.10.2,<0.11",
+    "yapf==0.43.0",
+    "flake8==7.1.1",
+]
+
+[tool.uv]
+default-groups = "all"
+
+[tool.uv.sources]
+sipyco = { git = "https://github.com/m-labs/sipyco.git" }
+stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+
 [tool.poe.tasks]
 fmt = "yapf -ir stabilizer_ui"
 lint = "flake8 stabilizer_ui"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
 
 [tool.poetry-dynamic-versioning]
 enable = true
