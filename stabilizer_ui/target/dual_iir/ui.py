@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets
 from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD
-from stabilizer.stream_parser import Parser, AdcDecoder, DacDecoder
+from stabilizer.stream_parser import Parser, AdcDecoder
 
 from . import *
 from .topics import StabilizerSettings, UiSettings
@@ -9,6 +9,7 @@ from ...ui import AbstractUiWindow
 from ...mqtt import NetworkAddress, UiMqttConfig
 from ...iir.channel_settings import ChannelSettings
 from ...stream.fft_scope import FftScope
+from ...stream.decoders import DacDecoder
 
 
 #
