@@ -3,7 +3,6 @@ A UI for communicating with and visualising live data streamed from the ARTIQ St
 
 ## Applications:
 * `dual_iir`: For Stabilizers running the `dual_iir` binary. 
-* `l674_lock`: For the `l674` binary available [here](https://github.com/OxfordIonTrapGroup/stabilizer/tree/l674)
 * `fnc`: For the binary on fibre noise cancellation
 
 ## Getting started
