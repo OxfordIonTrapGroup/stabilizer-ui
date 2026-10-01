@@ -26,10 +26,17 @@ FILE_VERSION = 1
 
 #: Data captured before triggering the sweep, in seconds.
 PRE_TRIGGER = 0.1
-#: Additional data captured after the expected end, for the latency of the trigger.
-POST_TRIGGER_MARGIN = 0.3
+#: Additional data captured after the expected end (for the latency of the trigger), in
+#: seconds and relative to the sweep duration.
+POST_TRIGGER_MARGIN = (0.3, 0.1)
 #: Time to wait for the first stream data, in seconds.
 STREAM_TIMEOUT = 2.0
+
+
+def post_trigger_duration(sweep: ess.Sweep, ir_window: float) -> float:
+    """Time to capture after triggering the sweep, in seconds."""
+    margin, relative_margin = POST_TRIGGER_MARGIN
+    return ((1 + relative_margin) * sweep.duration + ess.capture_tail(ir_window) + margin)
 
 
 @dataclass
@@ -356,8 +363,7 @@ class SweepRunner:
                     running = True
                     await self.interface.set_setting("settings/trigger", True)
                     # The sweep starts right after the trigger is acknowledged.
-                    duration = (sweep.duration + ess.capture_tail(ir_window) +
-                                POST_TRIGGER_MARGIN)
+                    duration = post_trigger_duration(sweep, ir_window)
                     capture.stop_after(math.ceil(duration / batch_period))
 
                     async def report():

@@ -15,7 +15,7 @@ from PyQt6 import QtCore, QtWidgets
 from scipy import signal
 
 from . import ess
-from .measurement import Measurement, SweepRunner
+from .measurement import (Measurement, SweepRunner, PRE_TRIGGER, post_trigger_duration)
 from ..scientific_spinbox import ScientificSpinBox
 
 logger = logging.getLogger(__name__)
@@ -447,7 +447,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
             self.window_box.blockSignals(False)
         self.window_box.setEnabled(not self.auto_window_box.isChecked())
 
-        capture = (sweep.duration + ess.capture_tail(ir_window))
+        capture = PRE_TRIGGER + post_trigger_duration(sweep, ir_window)
         lines = [
             f"{_format_frequency(sweep.f_start)} to {_format_frequency(sweep.f_stop)} "
             f"in {sweep.duration:.3g} s",
