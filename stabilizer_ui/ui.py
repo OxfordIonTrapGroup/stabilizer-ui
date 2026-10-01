@@ -61,8 +61,6 @@ class AbstractUiWindow(QMainWindow):
 
     def update_panic_status(self, has_panicked: bool, value: Optional[str]):
         if not has_panicked:
-            self.stylesheet.pop("background-color")
-            self.setWindowTitle(self._windowTitle)
             return
 
         self._panicMessageBox.setDetailedText(f"Diagnostic information: \n{value}")
@@ -80,6 +78,7 @@ class AbstractUiWindow(QMainWindow):
         self.comm_status_label.setText(message)
         if self._connection_is_nominal == is_nominal:
             return
+        self._connection_is_nominal = is_nominal
         if not is_nominal:
             self._commErrorMessageBox.setDetailedText(message)
             self._commErrorMessageBox.show()
@@ -89,13 +88,13 @@ class AbstractUiWindow(QMainWindow):
         """Guess whether the current theme is dark or light by comparing the default text and
         background colors.
         """
-        text_hsv_value = self.palette().color(QPalette.WindowText).value()
-        bg_hsv_value = self.palette().color(QPalette.Background).value()
+        text_hsv_value = self.palette().color(QPalette.ColorRole.WindowText).value()
+        bg_hsv_value = self.palette().color(QPalette.ColorRole.Window).value()
         return text_hsv_value > bg_hsv_value
 
     def _set_hardware_live_styling(self, is_live: bool):
         if is_live:
-            self.stylesheet.pop("background-color")
+            self.stylesheet.pop("background-color", None)
             self.setWindowTitle(self._windowTitle)
         else:
             bg = "maroon" if self.is_dark_theme() else "mistyrose"
