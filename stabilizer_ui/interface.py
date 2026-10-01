@@ -38,7 +38,9 @@ class AbstractStabilizerInterface:
     * Only what the device reports is shown for the device settings (`settings/...`),
       as it can refuse or modify a request. They are read when connecting (and after the
       device has reconnected) instead of being written, and read back after each
-      request, by us or by another client.
+      request, by us or by another client. If the device has rejected or modified one
+      of our (retained) requests, we retain its value instead, which is what it is to
+      have after restarting.
     * The UI state (`ui/...`) is retained on the broker, and the changes other clients
       publish are shown (see `UiMqttBridge`). Only the client which made a change writes
       the biquad coefficients following from it. All clients compare the coefficients
@@ -69,6 +71,8 @@ class AbstractStabilizerInterface:
         self._connect_timer: Optional[asyncio.TimerHandle] = None
         #: Device settings to read.
         self._keys_to_read = set()
+        #: The values of our retained requests which are still to be read back.
+        self._retained = dict[str, Any]()
 
         #: The UI state of each biquad (`ui/chN/iirM`), by the key of its coefficients
         #: on the device.
@@ -135,6 +139,7 @@ class AbstractStabilizerInterface:
                 await bridge.connected.wait()
                 try:
                     bridge.keys_to_write.clear()
+                    self._retained.clear()
                     await bridge.load_ui(self.app_root.path(), ui, interface)
                     self._syncing = True
                     self._keys_to_read.update(key for key in bridge.configs
@@ -172,6 +177,7 @@ class AbstractStabilizerInterface:
             self._connect_timer.cancel()
             self._connect_timer = None
         self._keys_to_read.clear()
+        self._retained.clear()
         self._device_biquads.clear()
         self._stream_requested = False
         self._ui.set_settings_enabled(False)
@@ -292,27 +298,49 @@ class AbstractStabilizerInterface:
             # If the stream then turns out to be off, it is not because the device did
             # not accept our request.
             self._stream_requested = False
+        # The setting is now that client's to keep in step with the broker.
+        self._retained.pop(key, None)
         self._keys_to_read.add(key)
         self._bridge.updated.set()
 
-    def _read_back(self, key: str):
-        """Read back a setting we have requested to be changed."""
+    def _read_back(self, key: str, value: Any, retain: bool):
+        """Read back a setting we have requested to be changed to `value`."""
         watched = self._watched_key(key)
-        if watched is not None:
-            self._keys_to_read.add(watched)
-            self._bridge.updated.set()
+        if watched is None:
+            return
+        if retain and watched == key:
+            self._retained[key] = value
+        self._keys_to_read.add(watched)
+        self._bridge.updated.set()
 
     async def _read(self, key: str):
-        """Read a setting from the device, and show it."""
+        """Read a setting from the device, and show it.
+
+        If the device has something else than what we have requested last (retained),
+        retain its value instead. Otherwise, the device would have the value it has
+        rejected (or modified) after restarting, and lose the one it has now.
+        """
         try:
             value = await self._interface.get(key)
         except MiniconfError as e:
+            self._retained.pop(key, None)
             if key not in self._iirs:
                 error = ConnectionError(f"Failed to read {key}: {e}")
                 self._bridge.interrupt(error)
                 raise error from e
             value = e
         self._device_value_read(key, value)
+
+        requested = self._retained.pop(key, None)
+        if (requested is None or isinstance(value, MiniconfError)
+                or key in self._bridge.keys_to_write or values_match(value, requested)):
+            return
+        logger.warning("Stabilizer has '%s' = %s instead of %s, retaining that", key,
+                       value, requested)
+        try:
+            await self._interface.request(key, value, retain=True)
+        except MiniconfError as e:
+            logger.warning("Stabilizer reported failure to write setting: '%s'", e)
 
     def _device_value_read(self, key: str, value: Any):
         if key in self._bridge.keys_to_write:
@@ -469,7 +497,7 @@ class AbstractStabilizerInterface:
             logger.warning("Stabilizer reported failure to write setting: '%s'", e)
             return False
         finally:
-            self._read_back(key)
+            self._read_back(key, value, retain)
 
     async def _change_filter_setting(self, iir_setting):
         (_ch,
@@ -500,4 +528,4 @@ class AbstractStabilizerInterface:
             if await self.request_settings_change(f"{biquad}/typ", "Raw", retain=False):
                 await self.request_settings_change(raw_key, value)
         finally:
-            self._read_back(raw_key)
+            self._read_back(raw_key, value, retain=True)

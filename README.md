@@ -44,6 +44,10 @@ The UI always shows the settings the device has:
   Both use the MQTT reconnect path: subscriptions are restored, retained UI state is
   reloaded, and device settings are reread before editing is enabled. Pending edits are
   discarded; commands and measurements are not automatically retried.
+* The device gets the settings retained on the broker when it restarts. The UI retains
+  every change it makes, and if the device rejects or modifies one, it retains the value
+  the device has instead. Other clients have to retain their changes themselves
+  (`retain=True` with the miniconf Python client), or a restart undoes them.
 * The filter settings (type, gains, …) are stored on the broker, as one topic for each
   filter (`ui/chN/iirM`), and the UI in which they are changed computes the filter
   coefficients for the device from them. (Filter settings stored by earlier versions, as
