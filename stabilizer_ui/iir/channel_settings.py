@@ -10,6 +10,11 @@ from ..mqtt import UiMqttConfig
 from ..utils import link_spinbox_to_is_inf_checkbox, kilo, kilo2
 
 
+#: Time for which the filter on the device has to differ from the one given by the
+#: settings before a warning is shown, in seconds.
+MISMATCH_DELAY = 2.0
+
+
 class AbstractChannelSettings(QtWidgets.QWidget):
     """ Abstract class for creating custom channel widgets.
     Sets up AFE gains and IIR filter settings.
@@ -28,6 +33,12 @@ class AbstractChannelSettings(QtWidgets.QWidget):
         self.iir_widgets = [_IIRWidget(sample_period), _IIRWidget(sample_period)]
         for i, iir in enumerate(self.iir_widgets):
             self.IIRTabs.addTab(iir, f"Filter {i}")
+
+    def set_iir_available(self, index: int, available: bool):
+        """Disable the tab of a filter which the firmware of the device does not have."""
+        self.IIRTabs.setTabEnabled(index, available)
+        self.IIRTabs.setTabToolTip(
+            index, "" if available else "Not available in the firmware of the device")
 
 
 class ChannelSettings(AbstractChannelSettings):
@@ -87,6 +98,23 @@ class _IIRWidget(QtWidgets.QWidget):
             self.filterComboBox.setItemData(self.filterComboBox.count() - 1, _tooltip,
                                             QtCore.Qt.ItemDataRole.ToolTipRole)
 
+        # Warning for when the filter on the device is not the one these settings give
+        # (see `set_device_mismatch()`).
+        self.deviceMismatchLabel = QtWidgets.QLabel()
+        self.deviceMismatchLabel.setWordWrap(True)
+        self.deviceMismatchLabel.setStyleSheet("color: darkorange")
+        self.writeToDeviceButton = QtWidgets.QPushButton("Write to device")
+        self.writeToDeviceButton.setToolTip(
+            "Replace the filter on the device by the one given by these settings")
+        for widget in [self.deviceMismatchLabel, self.writeToDeviceButton]:
+            self.filterParamsLayout.addWidget(widget)
+            widget.hide()
+        self._mismatch = None
+        self._mismatch_timer = QtCore.QTimer(self)
+        self._mismatch_timer.setSingleShot(True)
+        self._mismatch_timer.setInterval(int(MISMATCH_DELAY * 1e3))
+        self._mismatch_timer.timeout.connect(self._show_device_mismatch)
+
         plot = self.transferFunctionView.addPlot(row=0, col=0)
         self.widgets["transferFunctionView"] = plot
 
@@ -126,6 +154,28 @@ class _IIRWidget(QtWidgets.QWidget):
         # TODO: setData isn't working?
         self.widgets["transferFunctionView"].clear()
         self.widgets["transferFunctionView"].plot(f, 20 * np.log10(np.absolute(h)))
+
+    def set_device_mismatch(self, message: str | None, can_write: bool = True):
+        """Warn that the filter on the device is not the one given by these settings
+        (`None` if it is), with `can_write` offering to write it to the device.
+
+        The warning only appears once this has been the case for `MISMATCH_DELAY`, as
+        the settings and the filter arrive separately when another client changes them.
+        """
+        self._mismatch = None if message is None else (message, can_write)
+        if message is None:
+            self._mismatch_timer.stop()
+            self._show_device_mismatch()
+        elif not self.deviceMismatchLabel.isHidden():
+            self._show_device_mismatch()
+        elif not self._mismatch_timer.isActive():
+            self._mismatch_timer.start()
+
+    def _show_device_mismatch(self):
+        message, can_write = self._mismatch or ("", False)
+        self.deviceMismatchLabel.setText(message)
+        self.deviceMismatchLabel.setVisible(self._mismatch is not None)
+        self.writeToDeviceButton.setVisible(can_write)
 
     def set_mqtt_configs(self, settings_map, iir_topic):
         for child in iir_topic.children(["y_offset", "y_min", "y_max", "x_offset"]):

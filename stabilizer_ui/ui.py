@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from PyQt6.QtWidgets import QMainWindow, QMessageBox, QLabel
+from PyQt6.QtWidgets import QMainWindow, QDialog, QMessageBox, QLabel, QPushButton
 from PyQt6.QtGui import QPalette
 from typing import Optional
 
@@ -11,13 +11,28 @@ logger = logging.getLogger(__name__)
 
 
 class AbstractUiWindow(QMainWindow):
-    """Abstract class for main UI window"""
+    """Abstract class for main UI window
+
+    Subclasses are expected to have the widgets for the device settings in
+    `channelTabWidget`, and the scope as `fftScopeWidget`.
+    """
 
     def __init__(self):
         super().__init__()
 
         self._connection_is_nominal = True
         self.stylesheet = {}
+
+        # Shown in the status bar while the stream is not directed to this client
+        self.stream_status_label = QLabel()
+        self.stream_status_label.setStyleSheet("color: darkorange")
+        self.streamTakeOverButton = QPushButton("Take over stream")
+        self.streamTakeOverButton.setToolTip(
+            "Direct the data stream of the device to this window. It can only go to "
+            "one client at a time.")
+        for widget in [self.stream_status_label, self.streamTakeOverButton]:
+            self.statusBar().addPermanentWidget(widget)
+            widget.hide()
 
         # Add a label to the status bar to show the connection status
         self.comm_status_label = QLabel()
@@ -76,6 +91,9 @@ class AbstractUiWindow(QMainWindow):
 
     def update_comm_status(self, is_nominal: bool, message: str):
         self.comm_status_label.setText(message)
+        if is_nominal:
+            self._commErrorMessageBox.hide()
+            self._offlineMessageBox.hide()
         if self._connection_is_nominal == is_nominal:
             return
         self._connection_is_nominal = is_nominal
@@ -83,6 +101,21 @@ class AbstractUiWindow(QMainWindow):
             self._commErrorMessageBox.setDetailedText(message)
             self._commErrorMessageBox.show()
         self._set_hardware_live_styling(is_nominal)
+
+    def update_stream_status(self, message: Optional[str]):
+        """Show why the stream is not directed to this client (`None` if it is)."""
+        self.stream_status_label.setText(message or "")
+        self.stream_status_label.setVisible(message is not None)
+        self.streamTakeOverButton.setVisible(message is not None)
+        self.fftScopeWidget.set_stream_active(message is None)
+
+    def set_settings_enabled(self, enabled: bool):
+        """Disable hardware controls and plots while their state is unconfirmed."""
+        self.centralWidget().setEnabled(enabled)
+        self.menuBar().setEnabled(enabled)
+        self.streamTakeOverButton.setEnabled(enabled)
+        for child in self.findChildren(QDialog):
+            child.setEnabled(enabled)
 
     def is_dark_theme(self):
         """Guess whether the current theme is dark or light by comparing the default text and
@@ -107,7 +140,7 @@ class AbstractUiWindow(QMainWindow):
     def set_mqtt_configs(self, _stream_target: NetworkAddress):
         raise NotImplementedError
 
-    async def update_transfer_function(self, setting):
+    def update_transfer_function(self, setting):
         """Update transfer function plot based on setting change."""
         if setting.app_root().name != "ui":
             return

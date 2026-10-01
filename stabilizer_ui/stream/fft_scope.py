@@ -32,6 +32,7 @@ class FftScope(QtWidgets.QWidget):
         self.stream_parser = parser
         self.sample_period = sample_period
         self.update_period = update_period
+        self._stream_active = True
 
         self.DEFAULT_FFT_X_RANGE = (-0.5,
                                     -np.log10(0.5 * SCOPE_TIME_SCALE / sample_period))
@@ -87,8 +88,19 @@ class FftScope(QtWidgets.QWidget):
         self.en_fft_box.stateChanged.connect(update_axes)
         update_axes(self.en_fft_box.isChecked())
 
+    def set_stream_active(self, active: bool):
+        """Stop showing data while the stream is not directed here, as the stream thread
+        keeps reporting the last data it has received."""
+        self._stream_active = active
+        if not active:
+            self.status_line.setText("No stream")
+            for plot in self._scope_plot_data_items:
+                plot.setData([], [])
+
     def update(self, payload: CallbackPayload):
         """Callback for the stream thread"""
+        if not self._stream_active:
+            return
         message = "Speed: {:.2f} MB/s ({:.3f} % batches lost)".format(
             payload.download / 1e6, 100 * payload.loss)
         self.status_line.setText(message)

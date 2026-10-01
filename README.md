@@ -23,6 +23,40 @@ quartiq/stabilizer, which uses the miniconf-mqtt v0.20 settings protocol).
 
     This should launch the application. On the right hand side should be a live stream of the IO data of the stabilizer -- you may need to disable some firewall restrictions to get this to work properly.
 
+## Several clients
+
+Several UIs, and other MQTT clients such as scripts, can control the same device at the
+same time. This needs firmware built with the minimq fix of the OxfordIonTrapGroup fork
+(minimq branch `v0.10-in-flight-limit`). Earlier firmware can leave requests unanswered
+when several clients make them at once, which the UI reports as a connection error.
+
+The UI always shows the settings the device has:
+
+* The settings are read from the device when the UI starts, and again when the device has
+  restarted. They cannot be edited before that, or while the device is offline. Starting a
+  UI does not change any settings (apart from directing the stream to it).
+* Changes made by another client appear right away. Every setting is read back from the
+  device after a change, so a request which the device rejects or modifies shows as what
+  the device actually has.
+* Rapid edits are coalesced: when a setting is ready to be sent, the UI sends its latest
+  value. It does not replay every intermediate widget value.
+* A lost connection or unanswered request disables the controls and marks the UI offline.
+  Both use the MQTT reconnect path: subscriptions are restored, retained UI state is
+  reloaded, and device settings are reread before editing is enabled. Pending edits are
+  discarded; commands and measurements are not automatically retried.
+* The filter settings (type, gains, …) are stored on the broker, and the UI in which they
+  are changed computes the filter coefficients for the device from them. If the
+  coefficients on the device are not those which the settings shown give (for instance
+  because a script has written them), a warning appears below the filter settings, with a
+  button to write the filter to the device.
+  Simultaneous edits can also leave a recipe/coefficients mismatch; clients show the
+  warning instead of automatically rewriting coefficients to choose a winner.
+* A filter which the firmware does not have (currently, the second one of each channel) is
+  greyed out.
+* The device streams to one client only: the UI which was started last. The others say so
+  in the status bar, where the stream can be taken over, and take it back by themselves
+  once the UI receiving it has been closed.
+
 ## Feedforward (`current_sense`)
 
 Channel 1 is a regular `dual_iir` channel. Channel 0, which the current sense board is
@@ -37,8 +71,7 @@ connected to, additionally has:
   settling times of the PLL are given as powers of two of 10 ns.
 * No *External* run mode, as DI0 is the mains reference input.
 
-These are stored as device settings only (there is no separate UI state), so values
-written by other MQTT clients (retained) are picked up when the UI starts.
+These are stored as device settings only (there is no separate UI state).
 
 ## Transfer function measurements (`dual_iir`, `current_sense`)
 

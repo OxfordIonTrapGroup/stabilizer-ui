@@ -3,11 +3,12 @@ import asyncio
 import logging
 import json
 
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 from gmqtt import Message as MqttMessage
 
 from .ui import AbstractUiWindow
-from .mqtt import MiniconfError, MqttInterface, NetworkAddress, UiMqttBridge
+from .mqtt import (MiniconfError, MqttInterface, NetworkAddress, UiMqttBridge,
+                   values_match)
 from .iir.filters import get_filter
 from .topic_tree import TopicTree
 
@@ -15,26 +16,75 @@ logger = logging.getLogger(__name__)
 
 Y_MAX = stabilizer.voltage_to_machine_units(stabilizer.DAC_FULL_SCALE)
 
+#: Time to wait for a device which has just connected to the broker to start publishing
+#: its settings, in seconds. (It does so 2 s after having subscribed to them.)
+SETTINGS_DUMP_TIMEOUT = 5.0
+
+#: Time after the last setting published by a device which has just connected until we
+#: start making requests, in seconds.
+SETTINGS_DUMP_QUIET = 1.0
+
+#: Time to wait for the device to stop the stream when closing, in seconds.
+CLOSE_TIMEOUT = 1.0
+
 
 class AbstractStabilizerInterface:
     """
     Shim for controlling stabilizer over MQTT
+
+    Several clients can control the same device, so what the UI shows follows the device
+    and the broker, rather than the other way round:
+
+    * Only what the device reports is shown for the device settings (`settings/...`),
+      as it can refuse or modify a request. They are read when connecting (and after the
+      device has reconnected) instead of being written, and read back after each
+      request, by us or by another client.
+    * The UI state (`ui/...`) is retained on the broker, and the changes other clients
+      publish are shown (see `UiMqttBridge`). Only the client which made a change writes
+      the biquad coefficients following from it. All clients compare the coefficients
+      on the device to those their UI state gives, and show a warning if they differ.
+    * The stream can only go to one client. The last client to start takes it, and the
+      others take it back once nobody receives it.
     """
 
     def __init__(self, sample_period: float, app_root: TopicTree):
-        self._interface_set = asyncio.Event()
         self._interface: Optional[MqttInterface] = None
         self.sample_period = sample_period
         self.app_root = app_root
         self.stream_target_topic = f"{app_root.path()}/settings/stream"
 
-    def set_interface(self, interface: MqttInterface) -> None:
-        self._interface = interface
-        self._interface_set.set()
+        self._bridge: Optional[UiMqttBridge] = None
+        self._ui: Optional[AbstractUiWindow] = None
+        self._stream_key = "settings/stream"
+        #: The address we receive the stream at, as in the stream target setting.
+        self._stream_target = ""
+        #: Whether the stream of the device was directed here when last read.
+        self._owns_stream = False
+        #: Whether we have requested the stream since last reading its target.
+        self._stream_requested = False
 
-    async def change(self, *args, **kwargs):
-        await self._interface_set.wait()
-        await self.triage_setting_change(*args, **kwargs)
+        #: Whether the device is connected to the broker, and ready for requests.
+        self._device_ready = False
+        self._syncing = True
+        self._connect_timer: Optional[asyncio.TimerHandle] = None
+        #: Device settings to read.
+        self._keys_to_read = set()
+
+        #: The UI state of each biquad (`ui/chN/iirM`), by the key of its coefficients
+        #: on the device.
+        self._iirs = dict[str, TopicTree]()
+        #: The value of each biquad on the device (or the error from reading it).
+        self._device_biquads = dict[str, Any]()
+
+    async def change(self, setting):
+        """Write a bound setting, compiling filter recipes to raw coefficients."""
+        if setting.app_root().name == "settings":
+            await self.request_settings_change(setting.path(), setting.value)
+        else:
+            for leaf in setting.get_leaves([]):
+                self._interface.publish(leaf.path(), leaf.value, retain=True)
+            if iir := setting.get_parent_until(lambda node: node.name.startswith("iir")):
+                await self._change_filter_setting(iir)
 
     async def update(
         self,
@@ -42,6 +92,8 @@ class AbstractStabilizerInterface:
         broker_address: NetworkAddress,
         stream_target_queue: asyncio.Queue,
     ):
+        self._ui = ui
+        ui.set_settings_enabled(False)
         # Wait for the stream thread to read the initial port.
         # A bit hacky, would ideally use a join but that seems to lead to a deadlock.
         # TODO: Get rid of this hack.
@@ -53,15 +105,14 @@ class AbstractStabilizerInterface:
         logger.debug("Got stream target from stream thread.")
 
         settings_map = ui.set_mqtt_configs(stream_target)
+        self._stream_target = str(stream_target)
 
-        def update_all_topics():
-            for key, cfg in settings_map.items():
-                self.app_root.child(key).value = cfg.read_handler(cfg.widgets)
-
-        # Close the stream upon bad disconnect. gmqtt sends `str` payloads as they are,
-        # so explicitly JSON-encode the string.
+        # Stop the stream upon bad disconnect, also for devices connecting later
+        # (retained). gmqtt sends `str` payloads as they are, so explicitly JSON-encode
+        # the string.
         will_message = MqttMessage(self.stream_target_topic,
                                    json.dumps(str(NetworkAddress.UNSPECIFIED)),
+                                   retain=True,
                                    will_delay_interval=3)
 
         try:
@@ -71,65 +122,376 @@ class AbstractStabilizerInterface:
             ui.update_comm_status(
                 True, f"Connected to MQTT broker at {broker_address.get_ip()}.")
 
-            await bridge.load_ui(lambda x: x, self.app_root.path(), ui)
-            keys_to_write, ui_updated = bridge.connect_ui()
+            self._bridge = bridge
+            self._connect_ui(ui, bridge)
 
-            #
-            # Relay user input to MQTT.
-            #
             interface = MqttInterface(bridge.client,
                                       self.app_root.path(),
                                       timeout=10.0,
-                                      fallback_handler=bridge.handle_status_message)
-            self.set_interface(interface)
-
-            # trigger initial update
-            ui_updated.set()
+                                      fallback_handler=bridge.handle_message,
+                                      on_error=bridge.interrupt)
+            self._interface = interface
+            take_stream = True
             while True:
-                await ui_updated.wait()
-                while keys_to_write:
-                    # Use while/pop instead of for loop, as UI task might push extra
-                    # elements while we are executing requests.
-                    setting = self.app_root.child(keys_to_write.pop())
-                    update_all_topics()
-                    await self.change(setting)
-                    await ui.update_transfer_function(setting)
-                ui_updated.clear()
+                await bridge.connected.wait()
+                try:
+                    bridge.keys_to_write.clear()
+                    await bridge.load_ui(self.app_root.path(), ui, interface)
+                    self._syncing = True
+                    self._keys_to_read.update(key for key in bridge.configs
+                                              if key.startswith("settings/"))
+                    self._keys_to_read.update(self._iirs)
+                    if take_stream:
+                        bridge.queue_write(self._stream_key)
+                        take_stream = False
+                    bridge.updated.set()
+                    while True:
+                        await bridge.updated.wait()
+                        bridge.updated.clear()
+                        interface.check_connection()
+                        while await self._step():
+                            interface.check_connection()
+                except (ConnectionError, TimeoutError):
+                    # gmqtt also calls reconnect on transport loss, and prevents
+                    # overlapping reconnects. Request failures use exactly this path.
+                    await bridge.client.reconnect(delay=True)
 
-        except BaseException as e:
-            if isinstance(e, asyncio.CancelledError):
-                return
-            err_msg = str(e)
-            if not err_msg:
-                # Show message for things like timeout errors.
-                err_msg = repr(e)
-            ui.update_comm_status(False, f"Stabilizer connection error: {err_msg}")
-            logger.exception(f"Stabilizer communication failure: {err_msg}")
+        except asyncio.CancelledError:
+            pass
+        except Exception as error:
+            ui.update_comm_status(False, f"Stabilizer connection error: {error!r}")
+            ui.set_settings_enabled(False)
+            logger.exception("Stabilizer communication failure")
+        finally:
+            await self._close()
 
-    async def set_iir(
-        self,
-        channel: int,
-        iir_idx: int,
-        ba: Iterable,
-        x_offset: float = 0.0,
-        y_offset: float = 0.0,
-        y_min: float = -Y_MAX,
-        y_max: float = Y_MAX,
-    ):
+    def _disconnected(self, error):
+        """Forget pending edits and disable controls until a full resynchronisation."""
+        self._device_ready = False
+        self._syncing = True
+        if self._connect_timer is not None:
+            self._connect_timer.cancel()
+            self._connect_timer = None
+        self._keys_to_read.clear()
+        self._device_biquads.clear()
+        self._stream_requested = False
+        self._ui.set_settings_enabled(False)
+        self._ui.update_comm_status(False, f"{error}. Reconnecting…")
+        self._ui.update_stream_status("Reconnecting…")
+
+    def _connect_ui(self, ui: AbstractUiWindow, bridge: UiMqttBridge):
+        bridge.on_disconnect = self._disconnected
+        bridge.on_device_value = self._device_value_published
+        bridge.on_settings_request = self._settings_request_seen
+        bridge.on_ui_value = self._ui_value_received
+        bridge.on_alive = self._alive_changed
+        bridge.connect_ui()
+
+        ui.streamTakeOverButton.clicked.connect(
+            lambda: bridge.queue_write(self._stream_key))
+
+        for ui_channel in self.app_root.child("ui").children():
+            for iir in ui_channel.children():
+                if not (ui_channel.name.startswith("ch") and iir.name.startswith("iir")):
+                    continue
+                ch, idx = int(ui_channel.name[2:]), int(iir.name[3:])
+                raw_key = f"settings/ch/{ch}/biquad/{idx}/repr/Raw"
+                self._iirs[raw_key] = iir
+
+                # Capture loop variable.
+                def write(_checked=False, key=iir.path()):
+                    bridge.queue_write(key)
+
+                ui.channels[ch].iir_widgets[idx].writeToDeviceButton.clicked.connect(
+                    write)
+
+        # Show the transfer functions of the initial UI state.
+        for iir in self._iirs.values():
+            self._ui_value_received(iir.path())
+
+    def _update_all_topics(self):
+        for key, cfg in self._bridge.configs.items():
+            self.app_root.child(key).value = cfg.read_handler(cfg.widgets)
+
+    async def _step(self) -> bool:
+        """Do the most urgent outstanding piece of work. Returns whether there was any."""
+        bridge = self._bridge
+        if not self._device_ready:
+            return False
+        elif self._syncing and self._keys_to_read:
+            await self._read(self._keys_to_read.pop())
+        elif bridge.keys_to_write:
+            # Changes in the UI come first: they supersede what was requested before.
+            key = bridge.keys_to_write.pop()
+            setting = self.app_root.child(key)
+            self._update_all_topics()
+            self._stream_requested |= key == self._stream_key
+            await self.change(setting)
+            self._ui_value_received(key)
+        elif self._keys_to_read:
+            await self._read(self._keys_to_read.pop())
+        elif self._syncing:
+            # Everything shown is now what the device has.
+            self._syncing = False
+            self._ui.set_settings_enabled(True)
+            self._ui.update_comm_status(True, "Connected to Stabilizer")
+        else:
+            return False
+        return True
+
+    #
+    # Following the device.
+    #
+
+    def _alive_changed(self, is_alive: bool, retained: bool):
+        if is_alive and not retained and self._device_ready:
+            self._bridge.interrupt(ConnectionError("Stabilizer reconnected"))
+            return
+        if is_alive and retained:
+            self._device_connected()
+            return
+        self._device_ready = False
+        self._ui.set_settings_enabled(False)
+        if is_alive:
+            # The device has just connected to the broker. It only subscribes to the
+            # settings after publishing `alive` (requests before that are lost), then
+            # applies the ones retained on the broker, and finally publishes all its
+            # settings. So wait until it is done (the settings are shown as they
+            # arrive).
+            self._await_device(SETTINGS_DUMP_TIMEOUT)
+        else:
+            self._bridge.interrupt(ConnectionError("Stabilizer offline"))
+
+    def _await_device(self, delay: float):
+        if self._connect_timer is not None:
+            self._connect_timer.cancel()
+        self._connect_timer = asyncio.get_running_loop().call_later(
+            delay, self._device_connected)
+
+    def _device_connected(self):
+        if self._connect_timer is not None:
+            self._connect_timer.cancel()
+            self._connect_timer = None
+        self._device_ready = True
+        self._bridge.updated.set()
+
+    def _watched_key(self, key: str) -> Optional[str]:
+        """The key of the device setting we follow which a request for `key` affects."""
+        for raw_key in self._iirs:
+            # Writing the type or another representation of a biquad replaces it.
+            if key.startswith(raw_key[:-len("repr/Raw")]):
+                return raw_key
+        return key if key in self._bridge.configs else None
+
+    def _settings_request_seen(self, key: str):
+        """Another client has requested a setting to be changed. Only that client learns
+        whether the device has accepted the request, so read the setting back."""
+        key = self._watched_key(key)
+        if key is None:
+            return
+        if key == self._stream_key:
+            # If the stream then turns out to be off, it is not because the device did
+            # not accept our request.
+            self._stream_requested = False
+        self._keys_to_read.add(key)
+        self._bridge.updated.set()
+
+    def _read_back(self, key: str):
+        """Read back a setting we have requested to be changed."""
+        watched = self._watched_key(key)
+        if watched is not None:
+            self._keys_to_read.add(watched)
+            self._bridge.updated.set()
+
+    async def _read(self, key: str):
+        """Read a setting from the device, and show it."""
+        try:
+            value = await self._interface.get(key)
+        except MiniconfError as e:
+            if key not in self._iirs:
+                error = ConnectionError(f"Failed to read {key}: {e}")
+                self._bridge.interrupt(error)
+                raise error from e
+            value = e
+        self._device_value_read(key, value)
+
+    def _device_value_read(self, key: str, value: Any):
+        if key in self._bridge.keys_to_write:
+            # Changed in the UI in the meantime, which is written and read back next.
+            return
+        self._show_device_value(key, value)
+
+    def _device_value_published(self, key: str, value: Any):
+        if self._connect_timer is not None:
+            # The device is publishing its settings after connecting.
+            self._await_device(SETTINGS_DUMP_QUIET)
+        self._device_value_read(key, value)
+
+    def _show_device_value(self, key: str, value: Any):
+        if key == self._stream_key:
+            self._stream_target_read(value)
+        elif key in self._iirs:
+            self._device_biquads[key] = value
+            self._check_biquad(key)
+        elif key in self._bridge.configs:
+            self._bridge.show(key, value)
+
+    def _stream_target_read(self, target: str):
+        requested, self._stream_requested = self._stream_requested, False
+        self._owns_stream = target == self._stream_target
+        if self._owns_stream:
+            self._ui.update_stream_status(None)
+        elif not str(target).startswith("0.0.0.0:"):
+            logger.info("Stream directed to another client (%s)", target)
+            self._ui.update_stream_status(f"Stream is going to another client ({target})")
+        elif requested:
+            logger.warning("Stabilizer did not accept the stream target")
+            self._ui.update_stream_status("Stream is off")
+        else:
+            # Nobody receives the stream (the client which did has closed, or the
+            # device has restarted), so take it.
+            self._bridge.queue_write(self._stream_key)
+
+    def _ui_value_received(self, key: str):
+        for raw_key, iir in self._iirs.items():
+            if iir.path() == key or key.startswith(iir.path() + "/"):
+                self._update_all_topics()
+                self._update_transfer_function(iir)
+                self._check_biquad(raw_key)
+
+    def _update_transfer_function(self, setting: TopicTree):
+        try:
+            self._ui.update_transfer_function(setting)
+        except Exception as e:
+            # The coefficient calculation fails for some combinations of parameters.
+            logger.warning("Failed to update transfer function: %s", e)
+
+    def _check_biquad(self, raw_key: str):
+        """Compare the biquad on the device to the one the UI state gives."""
+        device = self._device_biquads.get(raw_key)
+        if device is None:
+            # Not read yet.
+            return
+        iir_setting = self._iirs[raw_key]
+        ch, idx = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
+        channel = self._ui.channels[ch]
+        is_error = isinstance(device, MiniconfError)
+        # `Variant absent` means that the biquad is in another representation.
+        available = not is_error or "Variant absent" in device.message
+        channel.set_iir_available(idx, available)
+        if not available:
+            return
+
+        widget = channel.iir_widgets[idx]
+        self._update_all_topics()
+        try:
+            expected = self._biquad_value(iir_setting)
+        except Exception as e:
+            widget.set_device_mismatch(
+                f"Not on the device, as the settings are invalid: {e}", can_write=False)
+            return
+        if not isinstance(device, dict) or not all(
+                values_match(device.get(k), expected[k]) for k in expected):
+            widget.set_device_mismatch(
+                "The filter on the device differs from these settings.")
+        else:
+            widget.set_device_mismatch(None)
+
+    async def _close(self):
+        """Release our stream and always disconnect, including after a failed request."""
+        if self._bridge is None:
+            return
+        try:
+            if self._owns_stream and self._bridge.connected.is_set():
+                await self._interface.request(self._stream_key,
+                                              str(NetworkAddress.UNSPECIFIED),
+                                              retain=True,
+                                              timeout=CLOSE_TIMEOUT)
+        except Exception as error:
+            logger.warning("Failed to release stream: %r", error)
+        finally:
+            if self._connect_timer is not None:
+                self._connect_timer.cancel()
+            self._bridge.client.on_disconnect = lambda *_: None
+            await self._bridge.client.disconnect()
+
+    #
+    # Writing settings.
+    #
+
+    def _biquad_value(self, iir_setting: TopicTree) -> dict:
+        """The biquad (as the `Raw` representation of the device) for the UI state."""
+        filter_type = iir_setting.child("filter").value
+        filter_params = {
+            filter_param.name: filter_param.value
+            for filter_param in iir_setting.child(filter_type).children()
+        }
+        ba = get_filter(filter_type).get_coefficients(self.sample_period, **filter_params)
+
+        x_offset = iir_setting.child("x_offset").value
         forward_gain = sum(ba[:3])
         if forward_gain == 0 and x_offset != 0:
             logger.warning("Filter has no DC gain but x_offset is non-zero")
-        biquad = f"settings/ch/{channel}/biquad/{iir_idx}"
-        value = {
+        y_offset = iir_setting.child("y_offset").value
+        return {
             "coeff": {
                 "ba": list(ba)
             },
             "u": stabilizer.voltage_to_machine_units(y_offset + forward_gain * x_offset),
-            "min": stabilizer.voltage_to_machine_units(y_min),
-            "max": stabilizer.voltage_to_machine_units(y_max),
+            "min": stabilizer.voltage_to_machine_units(iir_setting.child("y_min").value),
+            "max": stabilizer.voltage_to_machine_units(iir_setting.child("y_max").value),
         }
+
+    async def set_setting(self, key: str, value: Any, retain: bool = False):
+        """Set a device setting, raising `MiniconfError` if the device reports an error.
+
+        Unlike `request_settings_change()`, this is not retained by default.
+        """
+        if self._interface is None or not self._device_ready or self._syncing:
+            raise ConnectionError("Not connected to Stabilizer")
+        await self._interface.request(key, value, retain=retain)
+
+    async def get_setting(self, key: str) -> Any:
+        """Get the value of a device setting."""
+        if self._interface is None or not self._device_ready or self._syncing:
+            raise ConnectionError("Not connected to Stabilizer")
+        return await self._interface.get(key)
+
+    async def request_settings_change(self,
+                                      key: str,
+                                      value: Any,
+                                      retain: bool = True) -> bool:
+        """
+        Write to the miniconf-provided topics, logging any error reported by the device.
+
+        Returns whether the device reported success. Either way, the setting is read
+        back afterwards if it is shown in the UI, as the device might have modified it.
+        """
         try:
-            await self._interface.request(f"{biquad}/repr/Raw", value, retain=True)
+            await self._interface.request(key, value, retain=retain)
+            return True
+        except MiniconfError as e:
+            logger.warning("Stabilizer reported failure to write setting: '%s'", e)
+            return False
+        finally:
+            self._read_back(key)
+
+    async def _change_filter_setting(self, iir_setting):
+        (_ch,
+         _iir_idx) = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
+        biquad = f"settings/ch/{_ch}/biquad/{_iir_idx}"
+        raw_key = f"{biquad}/repr/Raw"
+
+        try:
+            value = self._biquad_value(iir_setting)
+        except Exception as e:
+            # The coefficient calculation fails for some combinations of parameters.
+            logger.warning("Invalid settings for %s, not written: %s", biquad, e)
+            self._check_biquad(raw_key)
+            return
+
+        try:
+            await self._interface.request(raw_key, value, retain=True)
         except MiniconfError as e:
             if "Variant absent" not in e.message:
                 logger.warning("Stabilizer reported failure to write setting: '%s'", e)
@@ -141,66 +503,6 @@ class AbstractStabilizerInterface:
             # the device receives the retained messages.
             logger.info("Switching %s to the Raw representation", biquad)
             if await self.request_settings_change(f"{biquad}/typ", "Raw", retain=False):
-                await self.request_settings_change(f"{biquad}/repr/Raw", value)
-
-    async def set_setting(self, key: str, value: Any, retain: bool = False):
-        """Set a device setting, raising `MiniconfError` if the device reports an error.
-
-        Unlike `request_settings_change()`, this is not retained by default.
-        """
-        if self._interface is None:
-            raise ConnectionError("Not connected to Stabilizer")
-        await self._interface.request(key, value, retain=retain)
-
-    async def get_setting(self, key: str) -> Any:
-        """Get the value of a device setting."""
-        if self._interface is None:
-            raise ConnectionError("Not connected to Stabilizer")
-        return await self._interface.get(key)
-
-    def publish_ui_change(self, topic: str, argument: Any):
-        payload = json.dumps(argument).encode("utf-8")
-        self._interface._client.publish(f"{self._interface._topic_base}/{topic}",
-                                        payload,
-                                        qos=0,
-                                        retain=True)
-
-    async def request_settings_change(self,
-                                      key: str,
-                                      value: Any,
-                                      retain: bool = True) -> bool:
-        """
-        Write to the miniconf-provided topics, logging any error reported by the device.
-
-        Returns whether the device reported success.
-        """
-        try:
-            await self._interface.request(key, value, retain=retain)
-            return True
-        except MiniconfError as e:
-            logger.warning("Stabilizer reported failure to write setting: '%s'", e)
-            return False
-
-    async def _change_filter_setting(self, iir_setting):
-        (_ch,
-         _iir_idx) = int(iir_setting.get_parent().name[2:]), int(iir_setting.name[3:])
-
-        filter_type = iir_setting.child("filter").value
-        filters = iir_setting.child(filter_type)
-
-        filter_params = {
-            filter_param.name: filter_param.value
-            for filter_param in filters.children()
-        }
-
-        ba = get_filter(filter_type).get_coefficients(self.sample_period, **filter_params)
-
-        await self.set_iir(
-            channel=_ch,
-            iir_idx=_iir_idx,
-            ba=ba,
-            x_offset=iir_setting.child("x_offset").value,
-            y_offset=iir_setting.child("y_offset").value,
-            y_min=iir_setting.child("y_min").value,
-            y_max=iir_setting.child("y_max").value,
-        )
+                await self.request_settings_change(raw_key, value)
+        finally:
+            self._read_back(raw_key)
