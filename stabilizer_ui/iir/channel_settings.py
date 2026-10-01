@@ -15,12 +15,14 @@ class AbstractChannelSettings(QtWidgets.QWidget):
     Sets up AFE gains and IIR filter settings.
     """
     afe_options = ["G1", "G2", "G5", "G10"]
+    run_options = ["Run", "Hold", "External"]
 
     def __init__(self):
         super().__init__()
 
     def _add_afe_options(self):
         self.afeGainBox.addItems(self.afe_options)
+        self.runModeBox.addItems(self.run_options)
 
     def _add_iir_tabWidget(self, sample_period):
         self.iir_widgets = [_IIRWidget(sample_period), _IIRWidget(sample_period)]

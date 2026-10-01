@@ -82,6 +82,8 @@ class UiWindow(AbstractUiWindow):
         for ch in range(NUM_CHANNELS):
             settings_map[StabilizerSettings.afes[ch].path()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])
+            settings_map[StabilizerSettings.runs[ch].path()] = UiMqttConfig(
+                [self.channels[ch].runModeBox])
 
             # IIR settings
             for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):

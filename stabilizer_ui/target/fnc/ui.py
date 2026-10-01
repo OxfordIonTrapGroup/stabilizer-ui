@@ -179,6 +179,8 @@ class UiWindow(AbstractUiWindow):
         for ch in range(NUM_CHANNELS):
             settings_map[StabilizerSettings.afes[ch].path()] = UiMqttConfig(
                 [self.channels[ch].afeGainBox])
+            settings_map[StabilizerSettings.runs[ch].path()] = UiMqttConfig(
+                [self.channels[ch].runModeBox])
 
             settings_map[StabilizerSettings.attenuation_ins[ch].path()] = UiMqttConfig(
                 [self.channels[ch].ddsInAttenuationBox])
