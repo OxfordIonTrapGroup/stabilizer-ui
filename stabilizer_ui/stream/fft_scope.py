@@ -3,7 +3,6 @@ from PyQt6 import QtWidgets, uic
 from stabilizer.stream_parser import Parser
 import numpy as np
 import numpy.fft
-from math import floor
 from typing import Iterable
 from .thread import CallbackPayload
 
@@ -82,8 +81,8 @@ class FftScope(QtWidgets.QWidget):
         self.sample_times = np.linspace(-self.buf_len * self.sample_period, 0,
                                         self.buf_len) / SCOPE_TIME_SCALE
         self.hamming = np.hamming(self.buf_len)
-        self.spectrum_frequencies = np.linspace(
-            0, 0.5 / self.sample_period, floor((self.buf_len + 1) / 2)) * SCOPE_TIME_SCALE
+        self.spectrum_frequencies = np.fft.rfftfreq(self.buf_len,
+                                                    self.sample_period) * SCOPE_TIME_SCALE
 
         self.en_fft_box.stateChanged.connect(update_axes)
         update_axes(self.en_fft_box.isChecked())
