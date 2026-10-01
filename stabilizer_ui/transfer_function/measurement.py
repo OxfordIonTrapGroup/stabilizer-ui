@@ -1,0 +1,406 @@
+"""Running transfer function measurements, and storing them."""
+
+from __future__ import annotations
+
+import asyncio
+import csv
+import datetime
+import json
+import logging
+import math
+from dataclasses import dataclass, field
+from typing import Callable
+
+import h5py
+import numpy as np
+from stabilizer.stream_parser import Parser
+
+from . import ess
+from ..interface import AbstractStabilizerInterface
+from ..stream.thread import StreamCapture, StreamThread
+
+logger = logging.getLogger(__name__)
+
+FILE_FORMAT = "stabilizer-ui transfer function measurement"
+FILE_VERSION = 1
+
+#: Data captured before triggering the sweep, in seconds.
+PRE_TRIGGER = 0.1
+#: Additional data captured after the expected end, for the latency of the trigger.
+POST_TRIGGER_MARGIN = 0.3
+#: Time to wait for the first stream data, in seconds.
+STREAM_TIMEOUT = 2.0
+
+
+@dataclass
+class Measurement:
+    """The captured data of a transfer function measurement, and its analysis."""
+
+    sweep: ess.Sweep
+    #: The excited channel.
+    channel: int
+    #: Names of the captured channels (stream sources, e.g. ADC0, ADC1, DAC0, DAC1).
+    channel_names: list[str]
+    #: Scale of the raw data to volts (input-referred for ADCs), for each channel.
+    scales: np.ndarray
+    batch_size: int
+    #: Captured raw data, as (channel, sample) arrays of machine units, for each run.
+    runs: list[np.ndarray]
+    #: Indices of the batches lost in each run (interpolated).
+    lost_batches: list[np.ndarray]
+    device: str = ""
+    timestamp: str = field(
+        default_factory=lambda: datetime.datetime.now().isoformat(timespec="seconds"))
+    #: Snapshot of the device and UI settings (topic path to value).
+    settings: dict = field(default_factory=dict)
+    name: str = ""
+    analysis_settings: ess.AnalysisSettings | None = None
+    analysis: ess.Analysis | None = None
+
+    @property
+    def reference(self) -> int:
+        """Index of the channel containing the stimulus (the excited channel's DAC)."""
+        return self.channel_names.index(f"DAC{self.channel}")
+
+    @property
+    def response_names(self) -> list[str]:
+        """Names of the channels of the analysis results."""
+        return self.channel_names + [ess.filter_output_name(self.channel)]
+
+    @property
+    def label(self) -> str:
+        return self.name or f"{self.timestamp} (channel {self.channel})"
+
+    def volts(self, run: int) -> np.ndarray:
+        """The data of a run in volts, with lost batches interpolated."""
+        data = self.runs[run] * self.scales[:, np.newaxis]
+        lost = self.lost_batches[run]
+        if len(lost):
+            n = data.shape[1]
+            mask = np.zeros(n, bool)
+            for batch in lost:
+                mask[batch * self.batch_size:(batch + 1) * self.batch_size] = True
+            index = np.arange(n)
+            for channel in data:
+                channel[mask] = np.interp(index[mask], index[~mask], channel[~mask])
+        return data
+
+    def analyse(self, settings: ess.AnalysisSettings) -> ess.Analysis:
+        offsets = self.analysis.offsets if self.analysis is not None else None
+        analysis = ess.analyse([self.volts(i) for i in range(len(self.runs))], self.sweep,
+                               self.reference, self.batch_size, settings, offsets)
+        lost = sum(len(lost) for lost in self.lost_batches)
+        if lost:
+            total = sum(run.shape[1] for run in self.runs) // self.batch_size
+            analysis.warnings.append(
+                f"{lost} of {total} stream batches lost (interpolated)")
+        self.analysis_settings = settings
+        self.analysis = analysis
+        return analysis
+
+    def responses(self) -> tuple[dict, dict]:
+        """The analysed responses and their noise, by channel name."""
+        names = self.response_names
+        return (dict(zip(names,
+                         self.analysis.responses)), dict(zip(names, self.analysis.noise)))
+
+    def quantity(self, quantity: str) -> tuple[np.ndarray, np.ndarray]:
+        """One of `ess.QUANTITIES` and its noise estimate."""
+        return ess.derived_quantity(quantity, *self.responses(), self.channel)
+
+    def save(self, path: str):
+        with h5py.File(path, "w") as f:
+            f.attrs["format"] = FILE_FORMAT
+            f.attrs["version"] = FILE_VERSION
+            f.attrs["name"] = self.name
+            f.attrs["device"] = self.device
+            f.attrs["timestamp"] = self.timestamp
+            f.attrs["settings"] = json.dumps(self.settings)
+            f.attrs["excited_channel"] = self.channel
+            f.attrs["channel_names"] = self.channel_names
+            f.attrs["batch_size"] = self.batch_size
+
+            sweep = f.create_group("sweep")
+            sweep.attrs["description"] = (
+                "Exponential sweep of the firmware SweptSine signal source, added to the "
+                "DAC output of the excited channel: amplitude * sin(2 pi phase[n]) for "
+                "0 <= n < length, with phase[n] = cycles * ((1 + rate / 2**32)**n - 1) "
+                "turns (up to fixed-point rounding), cycles = state / (2**32 rate).")
+            for key in ["rate", "state", "length", "amplitude", "sample_period"]:
+                sweep.attrs[key] = getattr(self.sweep, key)
+            for key in ["f_start", "f_stop", "duration", "cycles"]:
+                sweep.attrs[key] = getattr(self.sweep, key)
+
+            runs = f.create_group("runs")
+            runs.attrs["description"] = (
+                "Captured stream data in machine units (two's complement), as (channel, "
+                "sample). Multiply by `scales` for volts (input-referred for ADCs).")
+            runs.create_dataset("scales", data=self.scales)
+            for i, (data, lost) in enumerate(zip(self.runs, self.lost_batches)):
+                run = runs.create_dataset(str(i), data=data, compression="gzip")
+                run.attrs["lost_batches"] = lost
+
+            if self.analysis is not None:
+                self._save_analysis(f.create_group("analysis"))
+
+    def _save_analysis(self, group):
+        analysis, settings = self.analysis, self.analysis_settings
+        group.attrs["description"] = (
+            "Responses of each channel relative to the stimulus (V/V), on a logarithmic "
+            "frequency grid. The last channel is the excited channel's DAC output "
+            "without the stimulus (IIR filter output). `noise` is the 1 sigma "
+            "uncertainty.")
+        group.attrs["channel_names"] = self.response_names
+        group.attrs["ir_window"] = settings.ir_window
+        group.attrs["points_per_decade"] = settings.points_per_decade
+        group.attrs["max_harmonic"] = settings.max_harmonic
+        group.attrs["offsets"] = analysis.offsets
+        group.attrs["warnings"] = json.dumps(analysis.warnings)
+        group.create_dataset("frequencies", data=analysis.frequencies)
+        group.create_dataset("responses", data=analysis.responses)
+        group.create_dataset("noise", data=analysis.noise)
+        group.create_dataset("ir_time", data=analysis.ir_time)
+        group.create_dataset("impulse_responses",
+                             data=analysis.impulse_responses.astype(np.float32),
+                             compression="gzip")
+        group.attrs["ir_window_span"] = analysis.ir_window
+        if analysis.noise_window is not None:
+            group.attrs["noise_window_span"] = analysis.noise_window
+        harmonics = group.create_group("harmonics")
+        for k, values in analysis.harmonics.items():
+            harmonic = harmonics.create_group(str(k))
+            harmonic.create_dataset("frequencies", data=analysis.harmonic_frequencies[k])
+            harmonic.create_dataset("responses", data=values)
+            harmonic.attrs["window_span"] = analysis.harmonic_windows[k]
+        derived = group.create_group("derived")
+        for quantity in ess.QUANTITIES:
+            value, noise = self.quantity(quantity)
+            dataset = derived.create_dataset(quantity, data=value)
+            dataset.attrs["label"] = ess.quantity_label(quantity, self.channel)
+            derived.create_dataset(f"{quantity}_noise", data=noise)
+
+    @classmethod
+    def load(cls, path: str) -> Measurement:
+        with h5py.File(path, "r") as f:
+            if f.attrs.get("format") != FILE_FORMAT:
+                raise ValueError("Not a transfer function measurement file")
+            if f.attrs["version"] > FILE_VERSION:
+                raise ValueError("Unsupported file version")
+            sweep = f["sweep"].attrs
+            runs = f["runs"]
+            n_runs = len([key for key in runs if key.isdigit()])
+            measurement = cls(
+                sweep=ess.Sweep(int(sweep["rate"]), int(sweep["state"]),
+                                int(sweep["length"]), float(sweep["amplitude"]),
+                                float(sweep["sample_period"])),
+                channel=int(f.attrs["excited_channel"]),
+                channel_names=[str(name) for name in f.attrs["channel_names"]],
+                scales=runs["scales"][()],
+                batch_size=int(f.attrs["batch_size"]),
+                runs=[runs[str(i)][()] for i in range(n_runs)],
+                lost_batches=[runs[str(i)].attrs["lost_batches"] for i in range(n_runs)],
+                device=str(f.attrs["device"]),
+                timestamp=str(f.attrs["timestamp"]),
+                settings=json.loads(f.attrs["settings"]),
+                name=str(f.attrs["name"]),
+            )
+            if "analysis" in f:
+                measurement._load_analysis(f["analysis"])
+        return measurement
+
+    def _load_analysis(self, group):
+        self.analysis_settings = ess.AnalysisSettings(
+            ir_window=float(group.attrs["ir_window"]),
+            points_per_decade=int(group.attrs["points_per_decade"]),
+            max_harmonic=int(group.attrs["max_harmonic"]))
+        harmonics = group["harmonics"]
+        noise_window = group.attrs.get("noise_window_span")
+        self.analysis = ess.Analysis(
+            frequencies=group["frequencies"][()],
+            responses=group["responses"][()],
+            noise=group["noise"][()],
+            harmonic_frequencies={
+                int(k): harmonics[k]["frequencies"][()]
+                for k in harmonics
+            },
+            harmonics={int(k): harmonics[k]["responses"][()]
+                       for k in harmonics},
+            ir_time=group["ir_time"][()],
+            impulse_responses=group["impulse_responses"][()].astype(float),
+            ir_window=tuple(group.attrs["ir_window_span"]),
+            noise_window=tuple(noise_window) if noise_window is not None else None,
+            harmonic_windows={
+                int(k): tuple(harmonics[k].attrs["window_span"])
+                for k in harmonics
+            },
+            offsets=[int(offset) for offset in group.attrs["offsets"]],
+            warnings=json.loads(group.attrs["warnings"]),
+        )
+
+    def export_csv(self, path: str, quantity: str):
+        """Write a derived quantity (see `ess.QUANTITIES`) as CSV."""
+        value, noise = self.quantity(quantity)
+        with open(path, "w", newline="") as f:
+            f.write(f"# {self.label}: {ess.quantity_label(quantity, self.channel)}\n")
+            writer = csv.writer(f)
+            writer.writerow([
+                "frequency_Hz", "magnitude_dB", "phase_deg", "real", "imag", "noise_abs"
+            ])
+            with np.errstate(divide="ignore"):
+                magnitude = 20 * np.log10(np.abs(value))
+            phase = np.degrees(np.unwrap(np.angle(value)))
+            for row in zip(self.analysis.frequencies, magnitude, phase, value.real,
+                           value.imag, noise):
+                writer.writerow([f"{x:.9g}" for x in row])
+
+
+def _source_scales(parser: Parser) -> np.ndarray:
+    """Volts per machine unit for each stream source."""
+    scales = np.ones((parser.n_sources, 1))
+    for i, decoder in enumerate(parser.decoders):
+        decoder.to_si(scales, parser.decoder_endpoints[i],
+                      parser.decoder_endpoints[i + 1])
+    return scales[:, 0]
+
+
+def _to_machine_units(parser: Parser, data: np.ndarray):
+    """Convert raw stream data to machine units (in place)."""
+    for i, decoder in enumerate(parser.decoders):
+        decoder.to_mu(data, parser.decoder_endpoints[i], parser.decoder_endpoints[i + 1])
+
+
+class SweepRunner:
+    """Runs transfer function measurements: configures and triggers the signal source of
+    the device, and captures the stream data."""
+
+    def __init__(self, interface: AbstractStabilizerInterface,
+                 stream_thread: StreamThread, device: str,
+                 afe_gains: Callable[[], list[int]], settings: Callable[[], dict]):
+        """
+        :param afe_gains: Returns the current AFE gain of each channel.
+        :param settings: Returns a snapshot of the current settings to store.
+        """
+        self.interface = interface
+        self.stream_thread = stream_thread
+        self.device = device
+        self.afe_gains = afe_gains
+        self.settings = settings
+
+    @property
+    def sample_period(self) -> float:
+        return self.stream_thread.sample_period
+
+    async def _set_source(self, channel: int, config: dict):
+        for key, value in config.items():
+            await self.interface.set_setting(f"settings/ch/{channel}/source/{key}", value)
+
+    async def _stop_source(self, channel: int, stop_running: bool):
+        """Disable the source, so that it does not run again on the next trigger (of
+        either channel). If `stop_running`, also stop the current output."""
+        await self.interface.set_setting(f"settings/ch/{channel}/source/amplitude", 0.0)
+        if stop_running:
+            await self.interface.set_setting("settings/trigger", True)
+
+    async def run(
+            self,
+            sweep: ess.Sweep,
+            channel: int,
+            n_runs: int,
+            ir_window: float,
+            progress: Callable[[str, float], None] = lambda *_: None) -> Measurement:
+        """Measure the response to `n_runs` sweeps on the given channel.
+
+        :param ir_window: The impulse response window that will be used for the
+            analysis, which determines how long to capture after the sweep.
+        :param progress: Called with a status message and the fraction completed.
+        """
+        loop = asyncio.get_running_loop()
+        parser = self.stream_thread.parser
+        names = list(parser.StreamData._fields)
+        if f"DAC{channel}" not in names:
+            raise ValueError("The stream does not contain the DAC output")
+
+        scales = _source_scales(parser)
+        gains = self.afe_gains()
+        for i, name in enumerate(names):
+            if name.startswith("ADC"):
+                scales[i] /= gains[int(name[3:])]
+        settings = self.settings()
+
+        # A previous sweep on the other channel would run again on the trigger.
+        other = 1 - channel
+        if (await self.interface.get_setting(f"settings/ch/{other}/source/signal") ==
+                "SweptSine"):
+            logger.info("Disabling previous sweep on channel %d", other)
+            await self._stop_source(other, False)
+
+        progress("Configuring signal source…", 0)
+        await self._set_source(channel, sweep.source_config())
+
+        runs, lost_batches, batch_size = [], [], None
+        running = False
+        try:
+            for run in range(n_runs):
+                capture = StreamCapture(loop, parser.n_sources)
+                self.stream_thread.start_capture(capture)
+                try:
+                    try:
+                        await asyncio.wait_for(capture.started.wait(), STREAM_TIMEOUT)
+                    except asyncio.TimeoutError:
+                        raise RuntimeError("No stream data received") from None
+                    batch_period = capture.batch_size * self.sample_period
+                    while capture.batches * batch_period < PRE_TRIGGER:
+                        await asyncio.sleep(0.01)
+
+                    progress(f"Sweep {run + 1} of {n_runs}…", run / n_runs)
+                    running = True
+                    await self.interface.set_setting("settings/trigger", True)
+                    # The sweep starts right after the trigger is acknowledged.
+                    duration = (sweep.duration + ess.capture_tail(ir_window) +
+                                POST_TRIGGER_MARGIN)
+                    capture.stop_after(math.ceil(duration / batch_period))
+
+                    async def report():
+                        start = capture.batches
+                        while True:
+                            done = (capture.batches - start) / (capture.target - start)
+                            progress(f"Sweep {run + 1} of {n_runs}…",
+                                     (run + min(done, 1)) / n_runs)
+                            await asyncio.sleep(0.1)
+
+                    reporter = asyncio.create_task(report())
+                    try:
+                        await asyncio.wait_for(capture.done, duration + 10)
+                    except asyncio.TimeoutError:
+                        raise RuntimeError(
+                            "Stream data stopped during the sweep") from None
+                    finally:
+                        reporter.cancel()
+                    running = False
+                finally:
+                    self.stream_thread.stop_capture()
+
+                data, lost = capture.assemble()
+                batch_size = capture.batch_size
+                _to_machine_units(parser, data)
+                runs.append(data)
+                lost_batches.append(lost)
+                if len(lost):
+                    logger.warning("%d stream batches lost during sweep %d", len(lost),
+                                   run + 1)
+        finally:
+            try:
+                await self._stop_source(channel, running)
+            except Exception as e:
+                logger.warning("Failed to disable the signal source: %s", e)
+
+        progress("Captured", 1)
+        return Measurement(sweep=sweep,
+                           channel=channel,
+                           channel_names=names,
+                           scales=scales,
+                           batch_size=batch_size,
+                           runs=runs,
+                           lost_batches=lost_batches,
+                           device=self.device,
+                           settings=settings)

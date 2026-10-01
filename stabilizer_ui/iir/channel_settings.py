@@ -54,6 +54,8 @@ class _IIRWidget(QtWidgets.QWidget):
         uic.loadUi(ui_path, self)
 
         self.sample_period = sample_period
+        #: The biquad coefficients of the current settings (`idsp` convention).
+        self.coefficients = None
 
         # Obtains dict of filters from stabilizer.py module
         self.filters = (filters.filters())
@@ -112,6 +114,7 @@ class _IIRWidget(QtWidgets.QWidget):
         np.seterr(divide='ignore')
 
     def update_transfer_function(self, coefficients):
+        self.coefficients = list(coefficients)
         # The coefficients are in the `idsp` convention,
         # `y0 = b0*x0 + b1*x1 + b2*x2 + a1*y1 + a2*y2`.
         f, h = signal.freqz(

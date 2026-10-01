@@ -13,6 +13,7 @@ from .interface import StabilizerInterface
 from . import topics
 
 from ...stream.thread import StreamThread
+from ...transfer_function.measurement import SweepRunner
 from ...mqtt import NetworkAddress
 from ...utils import fmt_mac, AsyncQueueThreadsafe
 from ...device_db import stabilizer_devices
@@ -83,6 +84,10 @@ def main():
             loop,
         )
         stream_thread.start()
+
+        ui.set_sweep_runner(
+            SweepRunner(stabilizer_interface, stream_thread, args.stabilizer_name,
+                        ui.afe_gains, ui.settings_snapshot))
 
         try:
             sys.exit(loop.run_forever())

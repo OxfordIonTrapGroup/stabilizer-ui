@@ -10,6 +10,7 @@ from ...mqtt import NetworkAddress, UiMqttConfig
 from ...iir.channel_settings import ChannelSettings
 from ...stream.fft_scope import FftScope
 from ...stream.decoders import DacDecoder
+from ...transfer_function.dialog import TransferFunctionWindow
 
 
 #
@@ -63,6 +64,46 @@ class UiWindow(AbstractUiWindow):
 
         self.resize(*DEFAULT_WINDOW_SIZE)
 
+        self._settings_map = {}
+        self._sweep_runner = None
+        self._transfer_function_window = None
+        tools_menu = self.menuBar().addMenu("&Tools")
+        self.transferFunctionAction = tools_menu.addAction("&Transfer function…")
+        self.transferFunctionAction.setShortcut("Ctrl+T")
+        self.transferFunctionAction.setEnabled(False)
+        self.transferFunctionAction.triggered.connect(self.show_transfer_function)
+
+    def set_sweep_runner(self, runner):
+        """Enable transfer function measurements using the given `SweepRunner`."""
+        self._sweep_runner = runner
+        self.transferFunctionAction.setEnabled(True)
+
+    def show_transfer_function(self):
+        if self._transfer_function_window is None:
+            self._transfer_function_window = TransferFunctionWindow(
+                self._sweep_runner, self)
+        self._transfer_function_window.show()
+        self._transfer_function_window.raise_()
+        self._transfer_function_window.activateWindow()
+
+    def afe_gains(self) -> list[int]:
+        return [int(channel.afeGainBox.currentText()[1:]) for channel in self.channels]
+
+    def settings_snapshot(self) -> dict:
+        """The current settings (by topic), the AFE gains, and the coefficients of the
+        (first) biquad of each channel, to store with measurements."""
+        settings = {
+            key: cfg.read_handler(cfg.widgets)
+            for key, cfg in self._settings_map.items()
+        }
+        gains = self.afe_gains()
+        settings["afe_gains"] = {str(ch): gain for ch, gain in enumerate(gains)}
+        settings["biquads"] = {
+            str(ch): channel.iir_widgets[0].coefficients
+            for ch, channel in enumerate(self.channels)
+        }
+        return settings
+
     def update_stream(self, payload):
         self.fftScopeWidget.update(payload)
 
@@ -92,4 +133,5 @@ class UiWindow(AbstractUiWindow):
 
                 iirWidget.set_mqtt_configs(settings_map, iir_topic)
 
+        self._settings_map = settings_map
         return settings_map
