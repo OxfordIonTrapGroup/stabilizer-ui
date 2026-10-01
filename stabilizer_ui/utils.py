@@ -38,9 +38,11 @@ def link_spinbox_to_is_inf_checkbox():
 
     def write(widgets, value):
         """Expects widgets in the form [spinbox, checkbox]."""
-        if value == inf:
-            widgets[1].setChecked(True)
-        else:
+        is_inf = value == inf
+        widgets[1].setChecked(is_inf)
+        # Clicking the checkbox disables the spinbox (see the `.ui` files).
+        widgets[0].setDisabled(is_inf)
+        if not is_inf:
             widgets[0].setValue(value)
 
     return read, write
