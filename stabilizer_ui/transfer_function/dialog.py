@@ -445,7 +445,10 @@ class TransferFunctionWindow(QtWidgets.QDialog):
                 values[key] = default
         self.channel_box.setCurrentIndex(values["channel"])
         self.start_box.setValue(values["f_start"])
-        self.stop_box.setValue(values["f_stop"])
+        # The default (or a value from a target with a higher sample rate) can be above
+        # the limit for this sample rate (rounded down to a whole kHz).
+        max_stop = math.floor(ess.MAX_STOP_FREQUENCY / self.runner.sample_period / 1e3)
+        self.stop_box.setValue(min(values["f_stop"], max_stop * 1e3))
         self.duration_box.setValue(values["duration"])
         self.amplitude_box.setValue(values["amplitude"])
         self.runs_box.setValue(values["runs"])
