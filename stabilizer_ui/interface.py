@@ -143,6 +143,21 @@ class AbstractStabilizerInterface:
             if await self.request_settings_change(f"{biquad}/typ", "Raw", retain=False):
                 await self.request_settings_change(f"{biquad}/repr/Raw", value)
 
+    async def set_setting(self, key: str, value: Any, retain: bool = False):
+        """Set a device setting, raising `MiniconfError` if the device reports an error.
+
+        Unlike `request_settings_change()`, this is not retained by default.
+        """
+        if self._interface is None:
+            raise ConnectionError("Not connected to Stabilizer")
+        await self._interface.request(key, value, retain=retain)
+
+    async def get_setting(self, key: str) -> Any:
+        """Get the value of a device setting."""
+        if self._interface is None:
+            raise ConnectionError("Not connected to Stabilizer")
+        return await self._interface.get(key)
+
     def publish_ui_change(self, topic: str, argument: Any):
         payload = json.dumps(argument).encode("utf-8")
         self._interface._client.publish(f"{self._interface._topic_base}/{topic}",

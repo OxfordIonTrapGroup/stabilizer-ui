@@ -19,6 +19,98 @@ logger = logging.getLogger(__name__)
 CallbackPayload = namedtuple("CallbackPayload", "values download loss")
 
 
+class StreamCapture:
+    """Captures all stream frames (until a given length), for handing over to the main
+    thread.
+
+    Frames are added by the stream thread, whereas the other methods are to be used from
+    the main thread (running `loop`).
+    """
+
+    def __init__(self, loop: asyncio.AbstractEventLoop, n_sources: int):
+        self._loop = loop
+        self._n_sources = n_sources
+        #: The captured frames as (batch index, batch count, data).
+        self._frames: list[tuple[int, int, bytes]] = []
+        self._first_sequence = None
+        self._target = None
+        self._finished = False
+        #: Number of batches captured (including lost ones).
+        self.batches = 0
+        #: Number of samples per batch (known once started).
+        self.batch_size = None
+        #: Set once the first frame has been received.
+        self.started = asyncio.Event()
+        #: Completed once the requested number of batches has been captured.
+        self.done = loop.create_future()
+
+    def add(self, header, body: bytes):
+        """Add a frame (called from the stream thread)."""
+        if self._finished:
+            return
+        if self._first_sequence is None:
+            self._first_sequence = header.sequence
+            self.batch_size = len(body) // (2 * self._n_sources * header.batches)
+            self._loop.call_soon_threadsafe(self.started.set)
+        position = wrap(header.sequence - self._first_sequence)
+        if position >= 1 << 31:
+            # Reordered frame from before the start of the capture.
+            return
+        self._frames.append((position, header.batches, body))
+        self.batches = max(self.batches, position + header.batches)
+        if self._target is not None and self.batches >= self._target:
+            self._finished = True
+            self._loop.call_soon_threadsafe(self._finish)
+
+    def _finish(self):
+        if not self.done.done():
+            self.done.set_result(None)
+
+    def stop_after(self, batches: int):
+        """Finish the capture after the given number of further batches."""
+        self._target = self.batches + batches
+
+    @property
+    def target(self) -> int | None:
+        return self._target
+
+    def assemble(self) -> tuple[np.ndarray, np.ndarray]:
+        """Combine the captured frames.
+
+        Returns the raw data as (source, sample) array, and the indices of the batches
+        which were lost (and are filled with zeros).
+        """
+        if not self._frames:
+            raise ValueError("No data captured")
+        n_batches = self._target or self.batches
+        n_sources, batch_size = self._n_sources, self.batch_size
+        data = np.zeros((n_batches, n_sources, batch_size), np.int16)
+        received = np.zeros(n_batches, bool)
+        for position, batches, body in self._frames:
+            stop = min(position + batches, n_batches)
+            if stop <= position:
+                continue
+            frame = np.frombuffer(body, "<i2").reshape(batches, n_sources, batch_size)
+            data[position:stop] = frame[:stop - position]
+            received[position:stop] = True
+        data = data.transpose(1, 0, 2).reshape(n_sources, -1)
+        return data, np.flatnonzero(~received)
+
+
+class _CapturingStream(StabilizerStream):
+    """`StabilizerStream` which also passes the raw frames to a capture (if set)."""
+
+    capture: StreamCapture | None = None
+
+    def datagram_received(self, data, addr):
+        capture = self.capture
+        if capture is not None:
+            header = self.header._make(self.header_fmt.unpack_from(data))
+            if header.magic == self.magic:
+                capture.add(header, data[self.header_fmt.size:])
+        super().datagram_received(data, addr)
+
+
 class StreamThread:
 
     def __init__(self,
@@ -34,6 +126,14 @@ class StreamThread:
         callback_interval = fftScopeWidget.update_period
         maxlen = int(max_buffer_period / fftScopeWidget.sample_period)
 
+        #: The stream protocol, once the socket is open.
+        self._stream: _CapturingStream | None = None
+        self.parser = parser
+        self.sample_period = fftScopeWidget.sample_period
+
+        def set_stream(stream):
+            self._stream = stream
+
         self._terminate = threading.Event()
         self._thread = threading.Thread(
             target=stream_worker,
@@ -47,6 +147,7 @@ class StreamThread:
                 main_event_loop,
                 self._terminate,
                 maxlen,
+                set_stream,
             ),
         )
 
@@ -56,6 +157,16 @@ class StreamThread:
     def close(self):
         self._terminate.set()
         self._thread.join()
+
+    def start_capture(self, capture: StreamCapture):
+        """Start passing all received frames to `capture`."""
+        if self._stream is None:
+            raise RuntimeError("Stream not open")
+        self._stream.capture = capture
+
+    def stop_capture(self):
+        if self._stream is not None:
+            self._stream.capture = None
 
 
 _StatPoint = namedtuple("_StatPoint", "time received lost bytes")
@@ -107,6 +218,7 @@ def stream_worker(
     main_loop: asyncio.AbstractEventLoop,
     terminate: threading.Event,
     maxlen: int,
+    set_stream: Callable,
 ):
     """This function doesn't run in the main thread!
 
@@ -130,10 +242,11 @@ def stream_worker(
         stream_target_queue.task_done()
         logger.debug("Got initial requested stream target.")
 
-        transport, stream = await StabilizerStream.open(stream_target.get_ip(),
+        transport, stream = await _CapturingStream.open(stream_target.get_ip(),
                                                         stream_target.port,
                                                         broker_address.get_ip(), [parser],
                                                         maxsize=1)
+        set_stream(stream)
 
         allocated_stream_port = transport.get_extra_info("sockname")[1]
         stream_target = NetworkAddress(stream_target.ip, allocated_stream_port)

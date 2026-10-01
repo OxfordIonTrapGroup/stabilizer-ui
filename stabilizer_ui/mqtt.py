@@ -72,6 +72,15 @@ class MqttInterface:
         Returns the response message on success, and raises `MiniconfError` if the
         device reported an error.
         """
+        return await self._request(topic, json.dumps(argument).encode("utf-8"), retain)
+
+    async def get(self, topic: str) -> Any:
+        """Get the value of the miniconf leaf at `topic` (relative to the topic base)."""
+        # An empty payload requests the value. (It must not be retained, as that would
+        # clear the retained value instead.)
+        return json.loads(await self._request(topic, b"", retain=False))
+
+    async def _request(self, topic: str, payload: bytes, retain: bool) -> str:
         if len(self._pending) > self._maxsize:
             # By construction, `correlation_data` should always be removed from
             # `_pending` either by `_on_message()` or after `_timeout`. If something
@@ -82,7 +91,6 @@ class MqttInterface:
 
         self._pending[correlation_data] = result
 
-        payload = json.dumps(argument).encode("utf-8")
         self._client.publish(
             f"{self._topic_base}/{topic}",
             payload,
