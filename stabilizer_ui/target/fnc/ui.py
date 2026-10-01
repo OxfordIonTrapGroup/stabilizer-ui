@@ -9,7 +9,6 @@ from .topics import StabilizerSettings, UiSettings
 from . import *
 
 from ... import mqtt
-from ...pounder.ui import ClockWidget
 from ...stream.fft_scope import FftScope
 from ...mqtt import UiMqttConfig, NetworkAddress
 from ...iir.channel_settings import AbstractChannelSettings
@@ -136,13 +135,8 @@ class UiWindow(AbstractUiWindow):
 
         self.channelTabWidget = ChannelTabWidget()
         self.channels = self.channelTabWidget.channels
-        self.clockWidget = ClockWidget()
 
-        # As of 23/04/2024, updating the clock at runtime causes timing issues.
-        # Disable the clock widget until this is resolved.
-        self.clockWidget.setEnabled(False)
-
-        settingsLayout.addWidget(self.clockWidget)
+        # The DDS reference clock is not configurable in the `fnc` firmware.
         settingsLayout.addWidget(self.channelTabWidget)
 
         # Set FFT scope to take max available space
@@ -176,18 +170,11 @@ class UiWindow(AbstractUiWindow):
         settings_map = {}
 
         # `ui/#` are only used by the UI, the others by both UI and stabilizer
-        settings_map[StabilizerSettings.stream_target.path()] = UiMqttConfig(
+        settings_map[StabilizerSettings.stream.path()] = UiMqttConfig(
             [],
-            lambda _: stream_target._asdict(),
-            lambda _w, _v: stream_target._asdict(),
+            lambda _: str(stream_target),
+            lambda _w, _v: str(stream_target),
         )
-
-        settings_map[StabilizerSettings.ext_clk.path()] = UiMqttConfig(
-            [self.clockWidget.extClkCheckBox])
-        settings_map[StabilizerSettings.ref_clk_frequency.path()] = UiMqttConfig(
-            [self.clockWidget.refFrequencyBox], *mega)
-        settings_map[StabilizerSettings.clk_multiplier.path()] = UiMqttConfig(
-            [self.clockWidget.multiplierBox])
 
         for ch in range(NUM_CHANNELS):
             settings_map[StabilizerSettings.afes[ch].path()] = UiMqttConfig(

@@ -71,11 +71,11 @@ class UiWindow(AbstractUiWindow):
 
         # `ui/#` are only used by the UI, the others by both UI and stabilizer
         settings_map = {
-            StabilizerSettings.stream_target.path():
+            StabilizerSettings.stream.path():
             UiMqttConfig(
                 [],
-                lambda _: stream_target._asdict(),
-                lambda _w, _v: stream_target._asdict(),
+                lambda _: str(stream_target),
+                lambda _w, _v: str(stream_target),
             )
         }
 

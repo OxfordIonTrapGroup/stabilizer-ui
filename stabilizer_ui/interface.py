@@ -7,7 +7,7 @@ from typing import Any, Iterable, Optional
 from gmqtt import Message as MqttMessage
 
 from .ui import AbstractUiWindow
-from .mqtt import MqttInterface, NetworkAddress, UiMqttBridge
+from .mqtt import MiniconfError, MqttInterface, NetworkAddress, UiMqttBridge
 from .iir.filters import get_filter
 from .topic_tree import TopicTree
 
@@ -16,24 +16,17 @@ logger = logging.getLogger(__name__)
 Y_MAX = stabilizer.voltage_to_machine_units(stabilizer.DAC_FULL_SCALE)
 
 
-def starts_with(string, prefix) -> bool:
-    return len(string) >= len(prefix) and string[:len(prefix)] == prefix
-
-
 class AbstractStabilizerInterface:
     """
     Shim for controlling stabilizer over MQTT
     """
-
-    stream_target_topic = "settings/stream_target"
 
     def __init__(self, sample_period: float, app_root: TopicTree):
         self._interface_set = asyncio.Event()
         self._interface: Optional[MqttInterface] = None
         self.sample_period = sample_period
         self.app_root = app_root
-        # Default stream target topic if not specified by subclass.
-        self.stream_target_topic = app_root.path() + f"/{self.stream_target_topic}"
+        self.stream_target_topic = f"{app_root.path()}/settings/stream"
 
     def set_interface(self, interface: MqttInterface) -> None:
         self._interface = interface
@@ -65,9 +58,10 @@ class AbstractStabilizerInterface:
             for key, cfg in settings_map.items():
                 self.app_root.child(key).value = cfg.read_handler(cfg.widgets)
 
-        # Close the stream upon bad disconnect
+        # Close the stream upon bad disconnect. gmqtt sends `str` payloads as they are,
+        # so explicitly JSON-encode the string.
         will_message = MqttMessage(self.stream_target_topic,
-                                   NetworkAddress.UNSPECIFIED._asdict(),
+                                   json.dumps(str(NetworkAddress.UNSPECIFIED)),
                                    will_delay_interval=3)
 
         try:
@@ -83,7 +77,10 @@ class AbstractStabilizerInterface:
             #
             # Relay user input to MQTT.
             #
-            interface = MqttInterface(bridge.client, self.app_root.path(), timeout=10.0)
+            interface = MqttInterface(bridge.client,
+                                      self.app_root.path(),
+                                      timeout=10.0,
+                                      fallback_handler=bridge.handle_status_message)
             self.set_interface(interface)
 
             # trigger initial update
@@ -122,14 +119,29 @@ class AbstractStabilizerInterface:
         forward_gain = sum(ba[:3])
         if forward_gain == 0 and x_offset != 0:
             logger.warning("Filter has no DC gain but x_offset is non-zero")
-        key = f"{self.iir_ch_topic_base}/{channel}/{iir_idx}"
+        biquad = f"settings/ch/{channel}/biquad/{iir_idx}"
         value = {
-            "ba": list(ba),
+            "coeff": {
+                "ba": list(ba)
+            },
             "u": stabilizer.voltage_to_machine_units(y_offset + forward_gain * x_offset),
             "min": stabilizer.voltage_to_machine_units(y_min),
             "max": stabilizer.voltage_to_machine_units(y_max),
         }
-        await self.request_settings_change(key, value)
+        try:
+            await self._interface.request(f"{biquad}/repr/Raw", value, retain=True)
+        except MiniconfError as e:
+            if "Variant absent" not in e.message:
+                logger.warning("Stabilizer reported failure to write setting: '%s'", e)
+                return
+            # The biquad is configured using a different representation (e.g. `Pid`,
+            # through another client). Only switch it in this case, as writing `typ`
+            # resets the biquad to the representation's default. For the same reason,
+            # `typ` is not retained, as the broker does not guarantee the order in which
+            # the device receives the retained messages.
+            logger.info("Switching %s to the Raw representation", biquad)
+            if await self.request_settings_change(f"{biquad}/typ", "Raw", retain=False):
+                await self.request_settings_change(f"{biquad}/repr/Raw", value)
 
     def publish_ui_change(self, topic: str, argument: Any):
         payload = json.dumps(argument).encode("utf-8")
@@ -138,15 +150,21 @@ class AbstractStabilizerInterface:
                                         qos=0,
                                         retain=True)
 
-    async def request_settings_change(self, key: str, value: Any):
+    async def request_settings_change(self,
+                                      key: str,
+                                      value: Any,
+                                      retain: bool = True) -> bool:
         """
-        Write to the miniconf-provided topics, which currently returns a
-        string message as a reply; should really be JSON/… instead, see
-        quartiq/miniconf#32.
+        Write to the miniconf-provided topics, logging any error reported by the device.
+
+        Returns whether the device reported success.
         """
-        msg = await self._interface.request(key, value, retain=True)
-        if starts_with(msg, "Settings fail"):
-            logger.warning("Stabilizer reported failure to write setting: '%s'", msg)
+        try:
+            await self._interface.request(key, value, retain=retain)
+            return True
+        except MiniconfError as e:
+            logger.warning("Stabilizer reported failure to write setting: '%s'", e)
+            return False
 
     async def _change_filter_setting(self, iir_setting):
         (_ch,

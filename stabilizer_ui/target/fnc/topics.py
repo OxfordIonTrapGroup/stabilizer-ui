@@ -16,25 +16,22 @@ class StabilizerSettings:
     def set(cls):
         cls.root = TopicTree("settings")
 
-        (afe, cls.iir_root, cls.pounder, cls.dds_ref_clock) = cls.root.create_children(
-            ["afe", "iir_ch", "pounder", "dds_ref_clock"])
+        cls.stream = cls.root.create_child("stream")
 
-        cls.iir_root.create_children(["0", "1"])
+        channels = cls.root.create_child("ch").create_children(
+            [str(ch) for ch in range(NUM_CHANNELS)])
+        cls.afes = [channel.create_child("gain") for channel in channels]
+        cls.runs = [channel.create_child("run") for channel in channels]
 
-        cls.stream_target = cls.root.create_child("stream_target")
-        cls.afes = afe.create_children(["0", "1"])
-        cls.ext_clk, cls.ref_clk_frequency, cls.clk_multiplier = cls.dds_ref_clock.create_children(
-            ["external_clock", "reference_clock_frequency", "multiplier"])
-
-        # iir_ch/0/1 represents the IIR filter 1 for channel 0
+        # ch/0/biquad/1 represents the IIR filter 1 for channel 0
         cls.iirs = [
-            cls.iir_root.create_children(
-                [f"{ch}/{iir}" for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])
-            for ch in range(NUM_CHANNELS)
+            channel.create_child("biquad").create_children(
+                [str(iir) for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])
+            for channel in channels
         ]
 
         # Pounder settings
-        pounder_channels = cls.pounder.create_children(["0", "1"])
+        pounder_channels = [channel.create_child("pounder") for channel in channels]
 
         for topic in [
                 "frequency_dds_out", "frequency_dds_in", "amplitude_dds_out",

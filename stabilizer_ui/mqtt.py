@@ -17,6 +17,15 @@ def _int_to_bytes(i):
     return i.to_bytes(i.bit_length() // 8 + 1, byteorder="little")
 
 
+class MiniconfError(Exception):
+    """The device reported an error in response to a settings request."""
+
+    def __init__(self, topic: str, message: str):
+        super().__init__(f"{topic}: {message}")
+        self.topic = topic
+        self.message = message
+
+
 class MqttInterface:
     """
     Wraps a gmqtt Client to provide a request/response-type interface using the MQTT 5
@@ -30,9 +39,14 @@ class MqttInterface:
                  client: MqttClient,
                  topic_base: str,
                  timeout: float,
-                 maxsize: int = 512):
+                 maxsize: int = 512,
+                 fallback_handler: Optional[Callable] = None):
         self._client = client
         self._topic_base = topic_base
+
+        #: Called as `fallback_handler(topic, payload, properties)` for messages other
+        #: than responses to our requests (e.g. device status topics).
+        self._fallback_handler = fallback_handler
 
         #: Stores, for each in-flight RPC request, the future waiting for a response,
         #: indexed by the sequence id we used as the MQTT correlation data.
@@ -52,7 +66,12 @@ class MqttInterface:
 
         self._client.on_message = self._on_message
 
-    async def request(self, topic: str, argument: Any, retain: bool = False):
+    async def request(self, topic: str, argument: Any, retain: bool = False) -> str:
+        """Set the miniconf leaf at `topic` (relative to the topic base) to `argument`.
+
+        Returns the response message on success, and raises `MiniconfError` if the
+        device reported an error.
+        """
         if len(self._pending) > self._maxsize:
             # By construction, `correlation_data` should always be removed from
             # `_pending` either by `_on_message()` or after `_timeout`. If something
@@ -92,7 +111,10 @@ class MqttInterface:
 
     def _on_message(self, _client, topic, payload, _qos, properties) -> int:
         if not topic.startswith(self._response_base):
-            logger.debug("Ignoring unrelated topic: %s", topic)
+            if self._fallback_handler is not None:
+                self._fallback_handler(topic, payload, properties)
+            else:
+                logger.debug("Ignoring unrelated topic: %s", topic)
             return 0
 
         cd = properties.get("correlation_data", [])
@@ -106,6 +128,14 @@ class MqttInterface:
             return 0
         seq_id = cd[0]
 
+        # Success or failure is signalled through the `code` user property; the
+        # payload is just a message (`OK` or a description of the error).
+        code = dict(properties.get("user_property", [])).get("code")
+        if code == "Continue":
+            # Only sent for multi-part (list/dump) responses, which we do not request.
+            logger.debug("Ignoring multi-part response for '%s'", topic)
+            return 0
+
         if seq_id not in self._pending:
             # This is fine if Stabilizer restarts, though.
             logger.warning("Received unexpected/late response for '%s' (id %s)", topic,
@@ -113,15 +143,13 @@ class MqttInterface:
             return 0
 
         result = self._pending.pop(seq_id)
-        if not result.cancelled():
-            try:
-                # Would like to json.loads() here, but the miniconf responses are
-                # unfortunately plain strings still (see quartiq/miniconf#32).
-                result.set_result(payload)
-            except BaseException as e:
-                err = ValueError(f"Failed to parse response for '{topic}'")
-                err.__cause__ = e
-                result.set_exception(err)
+        if not result.done():
+            message = payload.decode("utf-8", errors="replace")
+            if code == "Ok":
+                result.set_result(message)
+            else:
+                request_topic = topic[len(self._response_base) + 1:]
+                result.set_exception(MiniconfError(request_topic, message))
         return 0
 
 
@@ -136,6 +164,10 @@ class NetworkAddress(NamedTuple):
 
     def get_ip(self) -> str:
         return ".".join(map(str, self.ip))
+
+    def __str__(self) -> str:
+        """Format as `a.b.c.d:port`, as used for the stream target setting."""
+        return f"{self.get_ip()}:{self.port}"
 
     def is_unspecified(self):
         """Mirrors `smoltcp::wire::IpAddress::is_unspecified` in Rust, for IPv4 addresses"""
@@ -202,6 +234,9 @@ class UiMqttBridge:
         self.client = client
         self.configs = configs
         self.panicked = False
+        self._root_topic = None
+        self._ui = None
+        self._alive_seen = False
 
     @classmethod
     async def new(cls, broker_address: NetworkAddress, *args, **kwargs):
@@ -229,22 +264,56 @@ class UiMqttBridge:
 
         return cls(client, *args, **kwargs)
 
+    def handle_status_message(self, topic: str, payload: bytes, _properties=None) -> bool:
+        """Handle the device status topics (`alive`, `meta`) below the root topic.
+
+        Returns whether `topic` was a status topic.
+        """
+        if self._root_topic is None or not topic.startswith(self._root_topic + "/"):
+            return False
+        subtopic = topic[len(self._root_topic) + 1:]
+
+        if subtopic == "alive":
+            # The device publishes a retained `1` while connected, and its will clears
+            # the retained message (empty payload) when it disconnects.
+            self._alive_seen = True
+            try:
+                is_alive = bool(payload) and bool(json.loads(payload))
+            except ValueError:
+                is_alive = True
+            self._ui.update_alive_status(is_alive)
+            logger.info(f"Stabilizer {'alive' if is_alive else 'offline'}")
+            return True
+
+        if subtopic == "meta":
+            # Published (not retained) once each time the device connects to the broker.
+            try:
+                meta = json.loads(payload)
+            except ValueError:
+                logger.warning("Failed to parse device metadata: %s", payload)
+                return True
+            logger.info("Stabilizer firmware %s (%s, hardware %s)",
+                        meta.get("firmware_version"), meta.get("profile"),
+                        meta.get("hardware_version"))
+            panic_info = meta.get("panic_info", "None")
+            has_panicked = panic_info != "None"
+            self.panicked = has_panicked
+            if has_panicked:
+                logger.error("Stabilizer had panicked, but has restarted: %s", panic_info)
+            self._ui.update_panic_status(has_panicked, panic_info)
+            return True
+
+        return False
+
     async def load_ui(self, objectify: Callable, root_topic: str, ui: AbstractUiWindow):
         """Load current settings from MQTT"""
         retained_settings = {}
-
-        def panic_handler(value):
-            has_panicked = (json.loads(value) is not None)
-            ui.update_panic_status(has_panicked, value)
-            if has_panicked:
-                logger.error("Stabilizer had panicked, but has restarted")
-
-        def alive_handler(value, is_initial_subscription=False):
-            is_alive = bool(json.loads(value))
-            ui.update_alive_status(is_alive)
-            logger.info(f"Stabilizer {'alive' if is_alive else 'offline'}")
+        self._root_topic = root_topic
+        self._ui = ui
 
         def collect_settings(_client, topic, value, _qos, _properties):
+            if self.handle_status_message(topic, value):
+                return 0
             subtopic = topic[len(root_topic) + 1:]
             try:
                 key = objectify(subtopic)
@@ -255,10 +324,6 @@ class UiMqttBridge:
                     subtopic,
                     decoded_value,
                 )
-                if subtopic == "meta/panic":
-                    panic_handler(value)
-                elif subtopic == "alive":
-                    alive_handler(value)
             except ValueError:
                 logger.info("Ignoring message topic '%s'", subtopic)
             return 0
@@ -273,8 +338,13 @@ class UiMqttBridge:
         await asyncio.sleep(1)
         self.client.unsubscribe(all_settings)
 
-        self.client.subscribe(f"{root_topic}/meta/panic")
+        self.client.subscribe(f"{root_topic}/meta")
         self.client.subscribe(f"{root_topic}/alive")
+
+        if not self._alive_seen:
+            # `alive` is only retained while the device is connected.
+            logger.warning("Stabilizer offline (no retained alive message)")
+            ui.update_alive_status(False)
 
         for retained_key, retained_value in retained_settings.items():
             if retained_key in self.configs:

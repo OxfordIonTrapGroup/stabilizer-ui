@@ -16,18 +16,19 @@ class StabilizerSettings:
     def set(cls):
         cls.root = TopicTree("settings")
 
-        (afe, cls.iir_root) = cls.root.create_children(["afe", "iir_ch"])
+        cls.stream = cls.root.create_child("stream")
+        cls.trigger = cls.root.create_child("trigger")
 
-        cls.iir_root.create_children(["0", "1"])
+        channels = cls.root.create_child("ch").create_children(
+            [str(ch) for ch in range(NUM_CHANNELS)])
+        cls.afes = [channel.create_child("gain") for channel in channels]
+        cls.runs = [channel.create_child("run") for channel in channels]
 
-        cls.stream_target = cls.root.create_child("stream_target")
-        cls.afes = afe.create_children(["0", "1"])
-
-        # iir_ch/0/1 represents the IIR filter 1 for channel 0
+        # ch/0/biquad/1 represents the IIR filter 1 for channel 0
         cls.iirs = [
-            cls.iir_root.create_children(
-                [f"{ch}/{iir}" for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])
-            for ch in range(NUM_CHANNELS)
+            channel.create_child("biquad").create_children(
+                [str(iir) for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])
+            for channel in channels
         ]
 
 
