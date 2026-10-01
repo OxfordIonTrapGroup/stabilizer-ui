@@ -4,6 +4,7 @@ import time
 import threading
 import logging
 from collections import deque, namedtuple
+from contextlib import suppress
 from typing import Callable
 
 from . import MAX_BUFFER_PERIOD
@@ -296,6 +297,18 @@ def stream_worker(
     # Setting the event loop here only applies locally to this thread.
     asyncio.set_event_loop(new_loop)
 
-    tasks = asyncio.gather(handle_callback(), handle_stream())
-    new_loop.run_until_complete(tasks)
+    async def run():
+        stream_task = asyncio.ensure_future(handle_stream())
+
+        async def callback():
+            await handle_callback()
+            # `handle_stream()` only notices the request to terminate when a frame
+            # arrives, which might never happen (e.g. if the device streams to another
+            # client).
+            stream_task.cancel()
+
+        with suppress(asyncio.CancelledError):
+            await asyncio.gather(callback(), stream_task)
+
+    new_loop.run_until_complete(run())
     new_loop.close()
