@@ -221,7 +221,7 @@ def write(widgets, value):
         ),
     ):
         widget.setChecked(value)
-    elif isinstance(widget, QtWidgets.QDoubleSpinBox):
+    elif isinstance(widget, (QtWidgets.QDoubleSpinBox, QtWidgets.QSpinBox)):
         widget.setValue(value)
     elif isinstance(widget, QtWidgets.QComboBox):
         options = [widget.itemText(i) for i in range(widget.count())]

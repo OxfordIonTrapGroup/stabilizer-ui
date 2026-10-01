@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>FeedforwardWidget</class>
+ <widget class="QWidget" name="FeedforwardWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>622</width>
+    <height>453</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayout">
+   <item>
+    <layout class="QVBoxLayout" name="settingsLayout">
+     <item>
+      <widget class="QGroupBox" name="harmonicsGroupBox">
+       <property name="toolTip">
+        <string>The feedforward waveform added to the channel 0 input is the sum of amplitude × sin(order × θ + phase) over the harmonics, where θ is the mains phase tracked by the PLL (zero at the rising edge of the reference on DI0).</string>
+       </property>
+       <property name="title">
+        <string>Mains Harmonics</string>
+       </property>
+       <layout class="QGridLayout" name="harmonicsLayout">
+        <item row="0" column="0">
+         <widget class="QLabel" name="orderLabel">
+          <property name="text">
+           <string>Order</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLabel" name="amplitudeLabel">
+          <property name="toolTip">
+           <string>Amplitude at the ADC (after the AFE gain, as shown on the scope).</string>
+          </property>
+          <property name="text">
+           <string>Amplitude</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="phaseLabel">
+          <property name="text">
+           <string>Phase</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="pllGroupBox">
+       <property name="title">
+        <string>Mains PLL</string>
+       </property>
+       <layout class="QGridLayout" name="pllLayout">
+        <item row="0" column="0">
+         <widget class="QLabel" name="pllFrequencyTcTitle">
+          <property name="text">
+           <string>Frequency settling: </string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QSpinBox" name="pllFrequencyTcBox">
+          <property name="toolTip">
+           <string>Settling time of the frequency lock, as a power of two of 10 ns timer ticks. Must be longer than one mains period (at least 2^22 at 50 Hz).</string>
+          </property>
+          <property name="keyboardTracking">
+           <bool>false</bool>
+          </property>
+          <property name="prefix">
+           <string>2^</string>
+          </property>
+          <property name="minimum">
+           <number>12</number>
+          </property>
+          <property name="maximum">
+           <number>32</number>
+          </property>
+          <property name="value">
+           <number>24</number>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="2">
+         <widget class="QLabel" name="pllFrequencyTcLabel"/>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="pllPhaseTcTitle">
+          <property name="text">
+           <string>Phase settling: </string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QSpinBox" name="pllPhaseTcBox">
+          <property name="toolTip">
+           <string>Settling time of the phase lock, as a power of two of 10 ns timer ticks. Usually one less than for the frequency lock.</string>
+          </property>
+          <property name="keyboardTracking">
+           <bool>false</bool>
+          </property>
+          <property name="prefix">
+           <string>2^</string>
+          </property>
+          <property name="minimum">
+           <number>12</number>
+          </property>
+          <property name="maximum">
+           <number>32</number>
+          </property>
+          <property name="value">
+           <number>23</number>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="2">
+         <widget class="QLabel" name="pllPhaseTcLabel"/>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item>
+      <spacer name="verticalSpacer">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>10</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="waveformGroupBox">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="title">
+      <string>Waveform</string>
+     </property>
+     <layout class="QVBoxLayout" name="waveformLayout">
+      <item>
+       <widget class="GraphicsLayoutWidget" name="waveformView" native="true">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>100</width>
+          <height>150</height>
+         </size>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>GraphicsLayoutWidget</class>
+   <extends>QWidget</extends>
+   <header>pyqtgraph</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

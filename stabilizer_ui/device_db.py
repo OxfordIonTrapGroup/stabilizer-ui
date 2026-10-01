@@ -8,7 +8,7 @@ Accepted format:
 
 <logical_name>: {
     "mac-address": str              # The MAC address of the device
-    "application": str,             # The application the device is running; in ["fnc", "dual_iir"]
+    "application": str,             # The application the device is running; in ["fnc", "dual_iir", "current_sense"]
     "broker": NetworkAddress,       # The IP address and connection port of the MQTT broker
     "net_id": str, optional         # The MQTT topic of the stabilizer, if different from the MAC address. Needs to match flash settings on the device.
 }
@@ -30,5 +30,12 @@ stabilizer_devices["lab1_729"] = {
 stabilizer_devices["lab1_raman_phaselock"] = {
     "mac-address": "44-b7-d0-c7-7d-24",
     "application": "dual_iir",
+    "broker": broker_255_6_4,
+}
+
+# Stabilizer v1.2 with the current sense board (dungeon)
+stabilizer_devices["dungeon_109_current_sense"] = {
+    "mac-address": "68-27-19-80-3d-4d",
+    "application": "current_sense",
     "broker": broker_255_6_4,
 }

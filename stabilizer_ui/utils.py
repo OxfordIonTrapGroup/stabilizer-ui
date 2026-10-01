@@ -21,6 +21,11 @@ mega = (
     lambda widgets, value: mqtt.write(widgets, value / 1e6),
 )
 
+milli = (
+    lambda widgets: mqtt.read(widgets) * 1e-3,
+    lambda widgets, value: mqtt.write(widgets, value * 1e3),
+)
+
 
 def link_spinbox_to_is_inf_checkbox():
 
