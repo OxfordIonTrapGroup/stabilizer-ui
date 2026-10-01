@@ -121,14 +121,14 @@ def test_rapid_edits_are_coalesced_and_incoming_values_do_not_overwrite_them(app
     bridge.connect_ui()
     for value in range(1, 50):
         widget.setValue(value)
-    bridge._handle_ui_message('ui/value', b'10', {})
+    bridge._handle_ui_message('ui/value', b'10', {}, False)
     assert bridge.keys_to_write == {'ui/value'}
     assert widget.value() == 49
 
     key = bridge.keys_to_write.pop()
     assert bridge.configs[key].read_handler([widget]) == 49
     # Once sent, our echo and subsequent clients' values follow broker order.
-    bridge._handle_ui_message(key, b'49', {})
-    bridge._handle_ui_message(key, b'51', {})
+    bridge._handle_ui_message(key, b'49', {}, False)
+    bridge._handle_ui_message(key, b'51', {}, False)
     assert widget.value() == 51
     assert not bridge.keys_to_write

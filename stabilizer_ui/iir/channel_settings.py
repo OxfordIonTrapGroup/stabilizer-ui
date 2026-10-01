@@ -6,7 +6,7 @@ from stabilizer_ui.scientific_spinbox import ScientificSpinBox
 
 from . import filters
 from .filters import FILTERS
-from ..mqtt import UiMqttConfig
+from ..mqtt import UiMqttConfig, combine_configs
 from ..utils import link_spinbox_to_is_inf_checkbox, kilo, kilo2
 
 
@@ -177,35 +177,38 @@ class _IIRWidget(QtWidgets.QWidget):
         self.deviceMismatchLabel.setVisible(self._mismatch is not None)
         self.writeToDeviceButton.setVisible(can_write)
 
-    def set_mqtt_configs(self, settings_map, iir_topic):
-        for child in iir_topic.children(["y_offset", "y_min", "y_max", "x_offset"]):
-            settings_map[child.path()] = UiMqttConfig([getattr(self, child.name + "Box")])
+    def set_mqtt_configs(self, settings_map, iir_topic, handlers=None):
+        """Bind all the settings of the filter to `iir_topic`, as one value with the
+        filter type (`filter`), the offsets and limits, and the parameters of each filter
+        type (by its name, e.g. `pid/Kp`).
 
-        settings_map[iir_topic.child("filter").path()] = UiMqttConfig(
-            [self.filterComboBox])
+        `handlers` replaces the read and write handlers of parameters, by their path.
+        """
+        parts = {
+            name: UiMqttConfig([getattr(self, name + "Box")])
+            for name in ["y_offset", "y_min", "y_max", "x_offset"]
+        }
+        parts["filter"] = UiMqttConfig([self.filterComboBox])
 
         for filter in FILTERS:
-            filter_topic = iir_topic.child(filter.filter_type)
-            for param in filter_topic.children():
-                widget_attribute = lambda suffix: getattr(
-                    self.widgets[filter.filter_type], f"{param.name}{suffix}")
-
-                if param.name.split("_")[-1] == "limit":
-                    settings_map[param.path()] = UiMqttConfig(
-                        [
-                            widget_attribute("Box"),
-                            widget_attribute("IsInf"),
-                        ],
-                        *link_spinbox_to_is_inf_checkbox(),
-                    )
-                elif param.name in {"f0", "Ki"}:
-                    settings_map[param.path()] = UiMqttConfig([widget_attribute("Box")],
-                                                              *kilo)
-                elif param.name == "Kii":
-                    settings_map[param.path()] = UiMqttConfig([widget_attribute("Box")],
-                                                              *kilo2)
+            widget = self.widgets[filter.filter_type]
+            for param in filter.parameters:
+                box = getattr(widget, f"{param}Box")
+                if param.split("_")[-1] == "limit":
+                    cfg = UiMqttConfig([box, getattr(widget, f"{param}IsInf")],
+                                       *link_spinbox_to_is_inf_checkbox())
+                elif param in {"f0", "Ki"}:
+                    cfg = UiMqttConfig([box], *kilo)
+                elif param == "Kii":
+                    cfg = UiMqttConfig([box], *kilo2)
                 else:
-                    settings_map[param.path()] = UiMqttConfig([widget_attribute("Box")])
+                    cfg = UiMqttConfig([box])
+                parts[f"{filter.filter_type}/{param}"] = cfg
+
+        for path, handler in (handlers or {}).items():
+            parts[path] = UiMqttConfig(parts[path].widgets, *handler)
+
+        settings_map[iir_topic.path()] = combine_configs(parts)
 
 
 class _PIDWidget(QtWidgets.QWidget):

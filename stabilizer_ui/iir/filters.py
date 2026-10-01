@@ -95,3 +95,11 @@ def filters():
 
 def get_filter(filter_type):
     return next(filter for filter in FILTERS if filter.filter_type == filter_type)
+
+
+def settings_coefficients(sample_period, settings: dict):
+    """The biquad coefficients for the settings of a filter (the value of
+    `ui/chN/iirM`: the filter type as `filter`, and the parameters of each type)."""
+    filter_type = settings["filter"]
+    return get_filter(filter_type).get_coefficients(sample_period,
+                                                    **settings.get(filter_type, {}))

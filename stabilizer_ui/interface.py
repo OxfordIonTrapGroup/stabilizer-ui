@@ -9,7 +9,7 @@ from gmqtt import Message as MqttMessage
 from .ui import AbstractUiWindow
 from .mqtt import (MiniconfError, MqttInterface, NetworkAddress, UiMqttBridge,
                    values_match)
-from .iir.filters import get_filter
+from .iir.filters import settings_coefficients
 from .topic_tree import TopicTree
 
 logger = logging.getLogger(__name__)
@@ -81,8 +81,7 @@ class AbstractStabilizerInterface:
         if setting.app_root().name == "settings":
             await self.request_settings_change(setting.path(), setting.value)
         else:
-            for leaf in setting.get_leaves([]):
-                self._interface.publish(leaf.path(), leaf.value, retain=True)
+            self._interface.publish(setting.path(), setting.value, retain=True)
             if iir := setting.get_parent_until(lambda node: node.name.startswith("iir")):
                 await self._change_filter_setting(iir)
 
@@ -354,7 +353,7 @@ class AbstractStabilizerInterface:
 
     def _ui_value_received(self, key: str):
         for raw_key, iir in self._iirs.items():
-            if iir.path() == key or key.startswith(iir.path() + "/"):
+            if iir.path() == key:
                 self._update_all_topics()
                 self._update_transfer_function(iir)
                 self._check_biquad(raw_key)
@@ -421,25 +420,21 @@ class AbstractStabilizerInterface:
 
     def _biquad_value(self, iir_setting: TopicTree) -> dict:
         """The biquad (as the `Raw` representation of the device) for the UI state."""
-        filter_type = iir_setting.child("filter").value
-        filter_params = {
-            filter_param.name: filter_param.value
-            for filter_param in iir_setting.child(filter_type).children()
-        }
-        ba = get_filter(filter_type).get_coefficients(self.sample_period, **filter_params)
+        settings = iir_setting.value
+        ba = settings_coefficients(self.sample_period, settings)
 
-        x_offset = iir_setting.child("x_offset").value
+        x_offset = settings["x_offset"]
         forward_gain = sum(ba[:3])
         if forward_gain == 0 and x_offset != 0:
             logger.warning("Filter has no DC gain but x_offset is non-zero")
-        y_offset = iir_setting.child("y_offset").value
+        y_offset = settings["y_offset"]
         return {
             "coeff": {
                 "ba": list(ba)
             },
             "u": stabilizer.voltage_to_machine_units(y_offset + forward_gain * x_offset),
-            "min": stabilizer.voltage_to_machine_units(iir_setting.child("y_min").value),
-            "max": stabilizer.voltage_to_machine_units(iir_setting.child("y_max").value),
+            "min": stabilizer.voltage_to_machine_units(settings["y_min"]),
+            "max": stabilizer.voltage_to_machine_units(settings["y_max"]),
         }
 
     async def set_setting(self, key: str, value: Any, retain: bool = False):

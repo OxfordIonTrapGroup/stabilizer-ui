@@ -271,6 +271,46 @@ class UiMqttConfig(NamedTuple):
     write_handler: Callable = write
 
 
+def get_path(value: dict, path: str) -> Any:
+    """The entry of nested dictionaries at `path` (keys separated by `/`)."""
+    for name in path.split("/"):
+        value = value[name]
+    return value
+
+
+def set_path(value: dict, path: str, entry: Any):
+    """Set the entry of nested dictionaries at `path`, creating the missing ones."""
+    *parents, name = path.split("/")
+    for parent in parents:
+        value = value.setdefault(parent, {})
+    value[name] = entry
+
+
+def combine_configs(parts: Dict[str, UiMqttConfig]) -> UiMqttConfig:
+    """Bind the widgets of several configs to a single value: nested dictionaries, with
+    the value of each part at its key (the path, for nested ones).
+
+    Parts missing from a value which is written are left as they are.
+    """
+
+    def read_all(_widgets):
+        value = {}
+        for path, cfg in parts.items():
+            set_path(value, path, cfg.read_handler(cfg.widgets))
+        return value
+
+    def write_all(_widgets, value):
+        for path, cfg in parts.items():
+            try:
+                entry = get_path(value, path)
+            except (KeyError, TypeError):
+                continue
+            cfg.write_handler(cfg.widgets, entry)
+
+    widgets = [widget for cfg in parts.values() for widget in cfg.widgets]
+    return UiMqttConfig(widgets, read_all, write_all)
+
+
 def values_match(a, b) -> bool:
     """Whether two setting values are the same, to the precision the device stores
     numbers with (single-precision floating point)."""
@@ -294,7 +334,9 @@ class UiMqttBridge:
     messages on the topics below the root topic are handled as follows:
 
     * `ui/...` (UI state, retained on the broker): values published by other clients are
-      shown in the widgets.
+      shown in the widgets. Values retained below one of the keys (e.g.
+      `ui/ch0/iir0/pid/Kp` for `ui/ch0/iir0`) are parts of it in an earlier layout, and
+      are shown if the key itself has nothing retained.
     * `settings/...` (device settings): only the device knows their values, as it can
       refuse or modify what a client requests. The values the device publishes (which it
       does for all settings after connecting) are passed to `on_device_value`, and the
@@ -339,6 +381,12 @@ class UiMqttBridge:
 
         #: Set while a value from the broker is written to the widgets.
         self._showing = False
+        #: While loading the retained UI state, the keys it has a value for, and the
+        #: parts of values in an earlier layout (by key, then path below it).
+        self._loading = False
+        self._ui_retained = set()
+        self._ui_legacy = dict[str, dict[str, Any]]()
+
     @classmethod
     async def new(cls, broker_address: NetworkAddress, configs, **kwargs):
         client = MqttClient(client_id="", **kwargs)
@@ -380,7 +428,7 @@ class UiMqttBridge:
         elif key.startswith("settings/"):
             self._handle_settings_message(key, payload, properties, retained)
         elif key.startswith("ui/"):
-            self._handle_ui_message(key, payload, properties)
+            self._handle_ui_message(key, payload, properties, retained)
 
     def _handle_alive(self, payload: bytes, retained: bool):
         # The device publishes a retained `1` while connected, and its will clears the
@@ -430,10 +478,16 @@ class UiMqttBridge:
                 return
             self.on_device_value(key, value)
 
-    def _handle_ui_message(self, key: str, payload: bytes, properties: dict):
+    def _handle_ui_message(self, key: str, payload: bytes, properties: dict,
+                           retained: bool):
         if key not in self.configs:
-            logger.debug("Ignoring message topic '%s'", key)
+            if self._loading and retained:
+                self._legacy_part_received(key, payload)
+            else:
+                logger.debug("Ignoring message topic '%s'", key)
             return
+        if self._loading:
+            self._ui_retained.add(key)
         if key in self.keys_to_write:
             # The local edit has not been sent yet. Preserve its latest widget value.
             return
@@ -444,6 +498,38 @@ class UiMqttBridge:
             return
         if self.show(key, value):
             self.on_ui_value(key)
+
+    def _legacy_part_received(self, topic: str, payload: bytes):
+        """Keep a retained part of the value of a key in an earlier layout."""
+        parts = topic.split("/")
+        for i in range(len(parts) - 1, 1, -1):
+            key = "/".join(parts[:i])
+            if key in self.configs:
+                break
+        else:
+            logger.debug("Ignoring message topic '%s'", topic)
+            return
+        try:
+            value = json.loads(payload)
+        except ValueError:
+            logger.warning("Failed to parse the value of '%s': %s", topic, payload)
+            return
+        self._ui_legacy.setdefault(key, {})["/".join(parts[i:])] = value
+
+    def _show_legacy_values(self):
+        """Show the retained parts of the keys which have no value of their own."""
+        for key, parts in self._ui_legacy.items():
+            if key in self._ui_retained:
+                continue
+            logger.info("Using the UI state of '%s' in the earlier layout", key)
+            cfg = self.configs[key]
+            value = cfg.read_handler(cfg.widgets)
+            for path, part in parts.items():
+                set_path(value, path, part)
+            if self.show(key, value):
+                self.on_ui_value(key)
+        self._ui_legacy.clear()
+        self._ui_retained.clear()
 
     def show(self, key: str, value: Any) -> bool:
         """Show a value from the broker or the device in the widgets bound to `key`,
@@ -481,9 +567,12 @@ class UiMqttBridge:
         self._ui = ui
         self._interface = interface
         self._alive_seen = False
+        self._ui_retained.clear()
+        self._ui_legacy.clear()
         interface.subscribe()
 
         logger.info(f"Subscribing to the settings at {root_topic}")
+        self._loading = True
         self.client.subscribe([
             # There is no point in receiving our own requests.
             Subscription(f"{root_topic}/settings/#", no_local=True),
@@ -496,6 +585,8 @@ class UiMqttBridge:
         # subscribing, but add some delay in case this is actually a race condition.
         await asyncio.sleep(1)
         interface.check_connection()
+        self._loading = False
+        self._show_legacy_values()
 
         if not self._alive_seen:
             # `alive` is only retained while the device is connected.

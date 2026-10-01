@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QMainWindow, QDialog, QMessageBox, QLabel, QPushButt
 from PyQt6.QtGui import QPalette
 from typing import Optional
 
-from .iir.filters import get_filter
+from .iir.filters import settings_coefficients
 
 logger = logging.getLogger(__name__)
 
@@ -151,18 +151,7 @@ class AbstractUiWindow(QMainWindow):
         ch = int(ui_iir.get_parent().name[2:])
         iir = int(ui_iir.name[3:])
 
-        filter_type = ui_iir.child("filter").value
-        filter_topic = ui_iir.child(filter_type)
-
-        if filter_type in ["though", "block"]:
-            ba = get_filter(filter_type).get_coefficients()
-        else:
-            filter_params = {
-                setting.name: setting.value
-                for setting in filter_topic.children()
-            }
-            ba = get_filter(filter_type).get_coefficients(
-                self.fftScopeWidget.sample_period, **filter_params)
+        ba = settings_coefficients(self.fftScopeWidget.sample_period, ui_iir.value)
 
         try:
             self.channels[ch].iir_widgets[iir].update_transfer_function(ba)

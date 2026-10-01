@@ -205,22 +205,14 @@ class UiWindow(AbstractUiWindow):
                 iirWidget = self.channels[ch].iir_widgets[iir]
                 iirTopic = UiSettings.iirs[ch][iir]
 
-                iirWidget.set_mqtt_configs(settings_map, iirTopic)
-
                 # Override units for PID gains
-                pidTopic = iirTopic.child("pid")
-                pidWidget = iirWidget.widgets["pid"]
-                settings_map[pidTopic.child("Kp").path()] = UiMqttConfig(
-                    [pidWidget.KpBox], *pid_gain_readwrite)
-                settings_map[pidTopic.child("Ki").path()] = UiMqttConfig(
-                    [pidWidget.KiBox], *pid_gain_readwrite)
-                settings_map[pidTopic.child("Kd").path()] = UiMqttConfig(
-                    [pidWidget.KdBox], *pid_gain_readwrite)
-                settings_map[pidTopic.child("Kii").path()] = UiMqttConfig(
-                    [pidWidget.KiiBox], *pid_gain_readwrite)
-                settings_map[pidTopic.child("Kdd").path()] = UiMqttConfig(
-                    [pidWidget.KddBox], *pid_gain_readwrite)
+                iirWidget.set_mqtt_configs(
+                    settings_map, iirTopic, {
+                        f"pid/{gain}": pid_gain_readwrite
+                        for gain in ["Kp", "Ki", "Kd", "Kii", "Kdd"]
+                    })
 
+                pidWidget = iirWidget.widgets["pid"]
                 pidWidget.KpBox.setSuffix(" mrad/V")
                 pidWidget.KiBox.setSuffix(" mrad/Vs")
                 pidWidget.KiiBox.setSuffix(" mrad/Vs²")

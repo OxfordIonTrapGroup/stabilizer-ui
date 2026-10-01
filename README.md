@@ -44,8 +44,10 @@ The UI always shows the settings the device has:
   Both use the MQTT reconnect path: subscriptions are restored, retained UI state is
   reloaded, and device settings are reread before editing is enabled. Pending edits are
   discarded; commands and measurements are not automatically retried.
-* The filter settings (type, gains, …) are stored on the broker, and the UI in which they
-  are changed computes the filter coefficients for the device from them. If the
+* The filter settings (type, gains, …) are stored on the broker, as one topic for each
+  filter (`ui/chN/iirM`), and the UI in which they are changed computes the filter
+  coefficients for the device from them. (Filter settings stored by earlier versions, as
+  a topic for each parameter, are still used for a filter until it is changed.) If the
   coefficients on the device are not those which the settings shown give (for instance
   because a script has written them), a warning appears below the filter settings, with a
   button to write the filter to the device.

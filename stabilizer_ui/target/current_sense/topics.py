@@ -1,6 +1,5 @@
 import logging
 from ...topic_tree import TopicTree
-from ...iir.filters import FILTERS
 
 from . import *
 
@@ -61,15 +60,6 @@ class UiSettings:
                 [f"iir{iir}" for iir in range(NUM_IIR_FILTERS_PER_CHANNEL)])
             for ch in range(NUM_CHANNELS)
         ]
-
-        for ch in range(NUM_CHANNELS):
-            for iir in range(NUM_IIR_FILTERS_PER_CHANNEL):
-                cls.iirs[ch][iir].create_children(
-                    ["filter", "y_offset", "y_min", "y_max", "x_offset"])
-
-                for filter in FILTERS:
-                    filter_topic = cls.iirs[ch][iir].create_child(filter.filter_type)
-                    filter_topic.create_children(filter.parameters)
 
 
 UiSettings.set()
