@@ -110,10 +110,11 @@ class _IIRWidget(QtWidgets.QWidget):
         np.seterr(divide='ignore')
 
     def update_transfer_function(self, coefficients):
+        # The coefficients are in the `idsp` convention,
+        # `y0 = b0*x0 + b1*x1 + b2*x2 + a1*y1 + a2*y2`.
         f, h = signal.freqz(
             coefficients[:3],
-            np.r_[1, [c for c in coefficients[3:]]],
-            # TODO: Simplfy once the stabilizer python script is updated
+            np.r_[1, [-c for c in coefficients[3:]]],
             worN=self.frequencies,
             fs=1 / self.sample_period,
         )

@@ -2,7 +2,7 @@ import logging
 import os
 from PyQt6 import QtWidgets, uic
 from stabilizer import DEFAULT_FNC_SAMPLE_PERIOD, ADC_VOLTS_PER_LSB
-from stabilizer.stream import Parser, AdcDecoder, PhaseOffsetDecoder
+from stabilizer.stream_parser import Parser, AdcDecoder, PhaseOffsetDecoder
 from numpy import pi
 
 from .topics import StabilizerSettings, UiSettings

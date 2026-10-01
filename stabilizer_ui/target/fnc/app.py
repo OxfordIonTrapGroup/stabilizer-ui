@@ -51,7 +51,7 @@ def main():
     # Find out which local IP address we are going to direct the stream to.
     # Assume the local IP address is the same for the broker and the stabilizer.
     local_ip = get_local_ip(broker_address.get_ip())
-    requested_stream_target = NetworkAddress(local_ip, args.stream_port)
+    requested_stream_target = NetworkAddress.from_str_ip(local_ip, args.stream_port)
 
     app = QtWidgets.QApplication(sys.argv)
     app.setOrganizationName("Oxford Ion Trap Quantum Computing group")

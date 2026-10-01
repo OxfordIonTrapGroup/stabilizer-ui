@@ -10,7 +10,8 @@ from . import MAX_BUFFER_PERIOD
 from ..mqtt import NetworkAddress
 from ..utils import AsyncQueueThreadsafe
 
-from stabilizer.stream import StabilizerStream, Parser, wrap
+from stabilizer.stream import wrap
+from stabilizer.stream_parser import StabilizerStream, Parser
 import numpy as np
 
 logger = logging.getLogger(__name__)

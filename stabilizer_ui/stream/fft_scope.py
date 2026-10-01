@@ -1,6 +1,6 @@
 import os
 from PyQt6 import QtWidgets, uic
-from stabilizer.stream import Parser
+from stabilizer.stream_parser import Parser
 import numpy as np
 import numpy.fft
 from math import floor

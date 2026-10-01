@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets
 from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD
-from stabilizer.stream import Parser, AdcDecoder, DacDecoder
+from stabilizer.stream_parser import Parser, AdcDecoder, DacDecoder
 
 from . import *
 from .topics import StabilizerSettings, UiSettings
