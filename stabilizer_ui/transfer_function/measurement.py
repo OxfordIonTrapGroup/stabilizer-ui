@@ -115,6 +115,20 @@ class Measurement:
         """One of `ess.QUANTITIES` and its noise estimate."""
         return ess.derived_quantity(quantity, *self.responses(), self.channel)
 
+    def harmonic(self, quantity: str,
+                 k: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The fundamental frequencies, the k-th harmonic response, and its noise
+        estimate corresponding to one of `ess.QUANTITIES` (see `ess.derived_harmonic()`).
+        """
+        analysis, names = self.analysis, self.response_names
+        value, noise = ess.derived_harmonic(quantity,
+                                            dict(zip(names, analysis.harmonics[k])),
+                                            dict(zip(names, analysis.harmonic_noise[k])),
+                                            self.responses()[0], analysis.frequencies,
+                                            analysis.harmonic_frequencies[k],
+                                            self.channel)
+        return analysis.harmonic_frequencies[k], value, noise
+
     def save(self, path: str):
         with h5py.File(path, "w") as f:
             f.attrs["format"] = FILE_FORMAT
@@ -178,6 +192,7 @@ class Measurement:
             harmonic = harmonics.create_group(str(k))
             harmonic.create_dataset("frequencies", data=analysis.harmonic_frequencies[k])
             harmonic.create_dataset("responses", data=values)
+            harmonic.create_dataset("noise", data=analysis.harmonic_noise[k])
             harmonic.attrs["window_span"] = analysis.harmonic_windows[k]
         derived = group.create_group("derived")
         for quantity in ess.QUANTITIES:
@@ -185,6 +200,14 @@ class Measurement:
             dataset = derived.create_dataset(quantity, data=value)
             dataset.attrs["label"] = ess.quantity_label(quantity, self.channel)
             derived.create_dataset(f"{quantity}_noise", data=noise)
+            for k in analysis.harmonics:
+                _, value, noise = self.harmonic(quantity, k)
+                dataset = derived.create_dataset(f"{quantity}_h{k}", data=value)
+                dataset.attrs["description"] = (
+                    f"Harmonic {k} at {k} times the frequencies "
+                    f"`harmonics/{k}/frequencies`, normalised like the fundamental (only "
+                    "the magnitude is meaningful)")
+                derived.create_dataset(f"{quantity}_h{k}_noise", data=noise)
 
     @classmethod
     def load(cls, path: str) -> Measurement:
@@ -232,6 +255,13 @@ class Measurement:
             },
             harmonics={int(k): harmonics[k]["responses"][()]
                        for k in harmonics},
+            # Not stored by earlier versions.
+            harmonic_noise={
+                int(k):
+                harmonics[k]["noise"][()] if "noise" in harmonics[k] else np.full(
+                    harmonics[k]["responses"].shape, np.nan)
+                for k in harmonics
+            },
             ir_time=group["ir_time"][()],
             impulse_responses=group["impulse_responses"][()].astype(float),
             ir_window=tuple(group.attrs["ir_window_span"]),
@@ -245,19 +275,36 @@ class Measurement:
         )
 
     def export_csv(self, path: str, quantity: str):
-        """Write a derived quantity (see `ess.QUANTITIES`) as CSV."""
+        """Write a derived quantity (see `ess.QUANTITIES`) and its harmonics as CSV."""
+        f = self.analysis.frequencies
         value, noise = self.quantity(quantity)
-        with open(path, "w", newline="") as f:
-            f.write(f"# {self.label}: {ess.quantity_label(quantity, self.channel)}\n")
-            writer = csv.writer(f)
-            writer.writerow([
-                "frequency_Hz", "magnitude_dB", "phase_deg", "real", "imag", "noise_abs"
-            ])
-            with np.errstate(divide="ignore"):
-                magnitude = 20 * np.log10(np.abs(value))
-            phase = np.degrees(np.unwrap(np.angle(value)))
-            for row in zip(self.analysis.frequencies, magnitude, phase, value.real,
-                           value.imag, noise):
+        with np.errstate(divide="ignore"):
+            magnitude = 20 * np.log10(np.abs(value))
+        columns = {
+            "frequency_Hz": f,
+            "magnitude_dB": magnitude,
+            "phase_deg": np.degrees(np.unwrap(np.angle(value))),
+            "real": value.real,
+            "imag": value.imag,
+            "noise_abs": noise,
+        }
+        # The harmonics (as functions of the fundamental frequency) are available on a
+        # subset of the frequencies.
+        for k in self.analysis.harmonics:
+            harmonic_f, harmonic, harmonic_noise = self.harmonic(quantity, k)
+            index = np.searchsorted(f, harmonic_f)
+            for name, data in [(f"h{k}_abs", np.abs(harmonic)),
+                               (f"h{k}_noise_abs", harmonic_noise)]:
+                columns[name] = np.full(len(f), np.nan)
+                columns[name][index] = data
+        with open(path, "w", newline="") as file:
+            file.write(f"# {self.label}: {ess.quantity_label(quantity, self.channel)}\n")
+            if self.analysis.harmonics:
+                file.write("# hK: harmonic K (at K times the frequency), normalised like "
+                           "the fundamental\n")
+            writer = csv.writer(file)
+            writer.writerow(columns)
+            for row in zip(*columns.values()):
                 writer.writerow([f"{x:.9g}" for x in row])
 
 

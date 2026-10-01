@@ -203,8 +203,8 @@ class AnalysisSettings:
     #: averaged over the frequency interval each point represents, so this also sets the
     #: amount of smoothing.
     points_per_decade: int = 100
-    #: Highest harmonic order for which the distortion is computed.
-    max_harmonic: int = 3
+    #: Highest harmonic order for which the response is computed.
+    max_harmonic: int = 4
 
 
 def default_ir_window(sweep: Sweep) -> float:
@@ -240,6 +240,8 @@ class Analysis:
     #: For each harmonic order k, the complex response of each channel at k times the
     #: fundamental frequency, (n_channels, n_freq_k).
     harmonics: dict[int, np.ndarray]
+    #: Estimated noise (1σ) of `harmonics`, or NaN if not available.
+    harmonic_noise: dict[int, np.ndarray]
     #: Time axis of `impulse_responses`, relative to the start of the sweep.
     ir_time: np.ndarray
     #: Impulse responses (unwindowed) of each channel, (n_channels, n_time).
@@ -450,7 +452,6 @@ def analyse(runs: list[np.ndarray],
     n_window = max(16, int(round(settings.ir_window / sample_period)))
     pre = int(np.clip(0.4 * sweep.harmonic_delay(2), 32, n_window // 2))
     window = _Window(pre, n_window)
-    noise_start = n_window + pre
 
     harmonic_windows = {}
     end = -pre  # End of the following window.
@@ -482,16 +483,21 @@ def analyse(runs: list[np.ndarray],
         for k in harmonic_orders
     }
 
+    # The noise is estimated from the impulse response following the response window
+    # (with the window shape of the respective response), starting here.
+    noise_start = n_window - pre
+
     # Section of the impulse responses to keep for display.
     ir_start = min(-pre, end)
-    ir_stop = noise_start + n_window + pre
+    ir_stop = noise_start + max(
+        len(w.taper) for w in [window, *harmonic_windows.values()])
 
     def spectrum(segment, shift):
         """Spectrum of an impulse response segment, with time zero `shift` samples into
         the segment."""
         return sfft.rfft(segment, n_spectrum) * np.exp(2j * np.pi * f_spectrum * shift)
 
-    def response(h, deconvolve, start, window, frequencies, fraction=0.0, noise=False):
+    def response(h, deconvolve, start, window, frequencies, fraction=0.0, noise=()):
         """Response at `frequencies` (cycles/sample) from the impulse response `h`
         with time zero at `start + fraction`.
 
@@ -502,8 +508,10 @@ def analyse(runs: list[np.ndarray],
         ("normalised convolution"). This is accurate as long as the response is smooth
         on the scale of the frequency resolution.
 
-        With `noise`, also estimate the noise of the response from the following window
-        (of the same length), returned as the second element.
+        `noise` is a list of (window, frequencies), for which to estimate the noise from
+        the impulse response following `window`, as for the response itself (e.g. the
+        same `window` and `frequencies`, or those of the harmonics). If given, the noise
+        estimates are returned as the second element.
         """
         taper = window.taper
         segment = _segment(h, start - window.pre, len(taper)) * taper
@@ -523,22 +531,34 @@ def analyse(runs: list[np.ndarray],
         if not noise:
             return result
 
-        # The following window contains the noise, as well as the continuation of the
-        # band limiting filter response, which is subtracted using the response estimate.
-        following = len(taper) - window.pre
-        noise_values = spectrum(
-            _segment(h, start - window.pre + following, len(taper)) * taper, shift)
-        following_unity = spectrum(
-            _segment(deconvolve.unity, -window.pre - delay + following, len(taper)) *
-            taper, shift)
+        # The following part of the impulse response contains the noise, as well as the
+        # continuation of the band limiting filter response, which is subtracted using
+        # the response estimate.
         with np.errstate(invalid="ignore", divide="ignore"):
             estimate = values / unity_values
-        noise_values -= np.where(np.isfinite(estimate), estimate, 0) * following_unity
-        # Averaging over a frequency interval Δf selects a time span of about 1 / Δf of
-        # the window; the zero-padded spectrum samples are correlated accordingly.
-        correlation = n_spectrum / np.sum(taper**2)
-        noise = average(f_spectrum, noise_values, rms=True, correlation=correlation)
-        return result, noise / np.abs(unity_average)
+        estimate = np.where(np.isfinite(estimate), estimate, 0)
+        estimates = []
+        for noise_window, noise_frequencies in noise:
+            noise_taper = noise_window.taper
+            noise_values = spectrum(
+                _segment(h, start + noise_start, len(noise_taper)) * noise_taper, shift)
+            noise_values -= estimate * spectrum(
+                _segment(deconvolve.unity, noise_start - delay, len(noise_taper)) *
+                noise_taper, shift)
+            # Averaging over a frequency interval Δf selects a time span of about 1 / Δf
+            # of the window; the zero-padded spectrum samples are correlated accordingly.
+            correlation = n_spectrum / np.sum(noise_taper**2)
+            noise_average = _grid_average(f_spectrum, noise_values, noise_frequencies,
+                                          settings.points_per_decade, True, correlation)
+            # Relative to the gain of the window, as for the response.
+            gain = _grid_average(
+                f_spectrum,
+                spectrum(
+                    _segment(deconvolve.unity, -noise_window.pre - delay,
+                             len(noise_taper)) * noise_taper, noise_window.pre + delay),
+                noise_frequencies, settings.points_per_decade)
+            estimates.append(noise_average / np.abs(gain))
+        return result, estimates
 
     # Additionally analyse the reference channel with the excitation subtracted.
     n_channels = runs[0].shape[0] + 1
@@ -548,6 +568,7 @@ def analyse(runs: list[np.ndarray],
         k: np.zeros((len(runs), n_channels, len(g)), complex)
         for k, g in harmonic_grids.items()
     }
+    harmonic_noise = {k: np.full(v.shape, np.nan) for k, v in harmonics.items()}
     impulse_responses = np.zeros((n_channels, ir_stop - ir_start))
     found_offsets = []
     noise_available = True
@@ -574,19 +595,33 @@ def analyse(runs: list[np.ndarray],
         if after_sweep < n_window:
             warnings.append("Capture ended before the end of the impulse response "
                             "window")
-        # The noise window collects the noise from the following sweep length.
-        run_has_noise = offset + noise_start + n_window + sweep.length <= record_length
-        noise_available &= run_has_noise
+        # The noise windows collect the noise from the following sweep length of the
+        # record.
+        noise_windows = [(window, grid)] + [(harmonic_windows[k], k * harmonic_grids[k])
+                                            for k in harmonic_orders]
+        has_noise = [
+            offset + noise_start + len(w.taper) + sweep.length <= record_length
+            for w, _ in noise_windows
+        ]
+        noise_available &= has_noise[0]
 
         reference_output = records[reference].copy()
         reference_output[offset:offset + sweep.length] -= excitation
         for channel, record in enumerate([*records, reference_output]):
             h = deconvolve(record, offset)
-            if run_has_noise:
-                result = response(h, deconvolve, offset, window, grid, noise=True)
-                responses[run, channel], noise[run, channel] = result
-            else:
-                responses[run, channel] = response(h, deconvolve, offset, window, grid)
+            result, noise_estimates = response(h,
+                                               deconvolve,
+                                               offset,
+                                               window,
+                                               grid,
+                                               noise=noise_windows)
+            responses[run, channel] = result
+            for i, estimate in enumerate(noise_estimates):
+                if has_noise[i]:
+                    if i == 0:
+                        noise[run, channel] = estimate
+                    else:
+                        harmonic_noise[harmonic_orders[i - 1]][run, channel] = estimate
             for k in harmonic_orders:
                 delay = sweep.harmonic_delay(k)
                 result = response(h, deconvolve, offset - round(delay),
@@ -614,10 +649,14 @@ def analyse(runs: list[np.ndarray],
             k: np.mean(v, axis=0)
             for k, v in harmonics.items()
         },
+        harmonic_noise={
+            k: np.sqrt(np.mean(v**2, axis=0) / n_runs)
+            for k, v in harmonic_noise.items()
+        },
         ir_time=np.arange(ir_start, ir_stop) * sample_period,
         impulse_responses=impulse_responses / n_runs,
         ir_window=(-pre * sample_period, n_window * sample_period),
-        noise_window=((noise_start - pre) * sample_period, (noise_start + n_window) *
+        noise_window=(noise_start * sample_period, (noise_start + len(window.taper)) *
                       sample_period) if noise_available else None,
         harmonic_windows={
             k: ((-sweep.harmonic_delay(k) - w.pre) * sample_period,
@@ -692,3 +731,46 @@ def derived_quantity(quantity: str, responses: dict, noise: dict,
 
 def quantity_label(quantity: str, n: int) -> str:
     return QUANTITIES[quantity].format(n=n, m=1 - n)
+
+
+#: For each of the `QUANTITIES`, the channel whose harmonics are shown, and the channel
+#: whose (fundamental) response they are normalised to (None for the stimulus).
+HARMONIC_CHANNELS = {
+    "plant": ("ADC{n}", "DAC{n}"),
+    "loop": ("Y{n}", "DAC{n}"),
+    "controller": ("Y{n}", "ADC{n}"),
+    "sensitivity": ("DAC{n}", None),
+    "complementary": ("Y{n}", None),
+    "adc": ("ADC{n}", None),
+    "adc_other": ("ADC{m}", None),
+    "dac_other": ("DAC{m}", None),
+}
+
+
+def derived_harmonic(quantity: str, harmonics: dict, harmonic_noise: dict,
+                     responses: dict, frequencies: np.ndarray,
+                     harmonic_frequencies: np.ndarray,
+                     n: int) -> tuple[np.ndarray, np.ndarray]:
+    """The harmonic response corresponding to one of `QUANTITIES`, and its noise.
+
+    This is the harmonic response of the output channel of the quantity (at k times the
+    fundamental frequency), normalised like the quantity, e.g. for the plant, the ADC
+    harmonic relative to the DAC fundamental. Its ratio to the quantity is thus the
+    harmonic distortion of that channel. (Only the magnitude is meaningful.)
+
+    :param harmonics: The k-th harmonic response of each channel, by channel name.
+    :param harmonic_noise: The noise estimates of `harmonics`.
+    :param responses: The (fundamental) responses of each channel, at `frequencies`.
+    :param harmonic_frequencies: The fundamental frequencies of `harmonics`.
+    """
+    output, reference = (None if name is None else name.format(n=n, m=1 - n)
+                         for name in HARMONIC_CHANNELS[quantity])
+    value, noise = harmonics[output], harmonic_noise[output]
+    if reference is not None:
+        log_f = np.log(harmonic_frequencies)
+        response = responses[reference]
+        reference = (np.interp(log_f, np.log(frequencies), response.real) +
+                     1j * np.interp(log_f, np.log(frequencies), response.imag))
+        with np.errstate(divide="ignore", invalid="ignore"):
+            value, noise = value / reference, noise / np.abs(reference)
+    return value, noise

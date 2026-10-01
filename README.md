@@ -44,8 +44,15 @@ dashed lines show the estimated noise of each measurement.
   it out.
 * Measurements can be overlaid, renamed, saved as HDF5 (raw data, parameters, settings
   snapshot, and results), loaded and re-analysed, and exported as CSV or PNG/SVG plots.
+* To estimate the linearity, the Bode plot can also show the 2nd to 4th harmonics (set the
+  number under *Harmonics*). They are plotted against the fundamental frequency (the
+  harmonic itself is at k times that), and normalised like the fundamental (e.g. for the
+  plant, the ADC harmonic relative to the DAC fundamental), so that their distance to it
+  is the harmonic distortion; they are only shown where they exceed three times their
+  estimated noise. The distortion tab shows the harmonics of each channel in dBc, with
+  their noise.
 * The impulse response tab shows the windows used for the linear response, the noise
-  estimate, and the harmonic distortion (shown in the distortion tab).
+  estimate, and the harmonics.
 
 The stream has to reach the UI without significant loss (lost batches are interpolated, and
 reported in the status). The signal source settings are not retained on the broker, and the

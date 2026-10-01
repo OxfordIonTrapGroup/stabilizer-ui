@@ -36,6 +36,17 @@ DEFAULTS = {
     "auto_window": True,
     "ir_window": 100.0,
     "points_per_decade": 100,
+    "harmonics": 2,
+}
+
+#: Harmonics are shown in the Bode plot where they exceed this multiple of their noise.
+HARMONIC_THRESHOLD = 3
+
+#: Line styles of the harmonics in the Bode plot.
+HARMONIC_STYLES = {
+    2: QtCore.Qt.PenStyle.DashDotLine,
+    3: QtCore.Qt.PenStyle.DashDotDotLine,
+    4: [1, 4],
 }
 
 #: Maximum number of samples per trace shown in the raw data plot.
@@ -121,7 +132,14 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         layout = QtWidgets.QHBoxLayout(self)
         splitter = QtWidgets.QSplitter()
         layout.addWidget(splitter)
-        splitter.addWidget(self._make_controls())
+        # Scroll the controls if the window is too small for them.
+        controls = QtWidgets.QScrollArea()
+        controls.setWidget(self._make_controls())
+        controls.setWidgetResizable(True)
+        controls.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        controls.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        splitter.addWidget(controls)
         splitter.addWidget(self._make_plots())
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([330, 970])
@@ -207,6 +225,15 @@ class TransferFunctionWindow(QtWidgets.QDialog):
             "Points per decade; the responses are averaged over the interval each point "
             "represents, so fewer points mean more smoothing")
         form.addRow("Points/decade:", self.points_box)
+        self.harmonics_box = QtWidgets.QSpinBox()
+        self.harmonics_box.setRange(0, 3)
+        self.harmonics_box.setToolTip(
+            "Number of harmonics (2nd, 3rd, …) to show, to estimate the linearity. They "
+            "are plotted against the fundamental frequency (the harmonic itself is at k "
+            "times that), normalised like the fundamental response (so that their "
+            "distance to it is the harmonic distortion). In the Bode plot, they are only "
+            f"shown where they exceed {HARMONIC_THRESHOLD} times their estimated noise.")
+        form.addRow("Harmonics:", self.harmonics_box)
         self.reanalyse_button = QtWidgets.QPushButton("Re-analyse selected")
         form.addRow(self.reanalyse_button)
         layout.addWidget(analysis_group)
@@ -349,9 +376,16 @@ class TransferFunctionWindow(QtWidgets.QDialog):
             axisItems={"bottom": FrequencyAxis("bottom")})
         self.distortion_plot.setLabels(left="Harmonic distortion (dBc)",
                                        bottom="Fundamental frequency (Hz)")
+        distortion_note = QtWidgets.QLabel(
+            "Amplitude of the harmonics (at k times the fundamental frequency) relative "
+            "to the fundamental, with their estimated noise (dashed). Set the number of "
+            "harmonics in the analysis settings.")
+        distortion_note.setWordWrap(True)
+        distortion_note.setStyleSheet("color: gray")
         self.distortion_plot.addLegend(offset=(-10, 10))
         self._setup_log_plot(self.distortion_plot)
         distortion_layout.addWidget(self.distortion_view, 1)
+        distortion_layout.addWidget(distortion_note)
         self.tabs.addTab(distortion, "Distortion")
 
         # Raw data.
@@ -367,6 +401,9 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.quantity_box.currentIndexChanged.connect(self._plot_bode)
         self.noise_check.toggled.connect(self._plot_bode)
         self.delay_box.valueChanged.connect(self._plot_bode)
+        self.harmonics_box.valueChanged.connect(self._plot_bode)
+        self.harmonics_box.valueChanged.connect(self._plot_distortion)
+        self.harmonics_box.valueChanged.connect(self._save_parameters)
         self.ir_channel_box.currentIndexChanged.connect(self._plot_impulse_response)
         self.distortion_channel_box.currentIndexChanged.connect(self._plot_distortion)
         self.tabs.currentChanged.connect(self._plot_details)
@@ -394,6 +431,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
             "auto_window": self.auto_window_box.isChecked(),
             "ir_window": self.window_box.value(),
             "points_per_decade": self.points_box.value(),
+            "harmonics": self.harmonics_box.value(),
         }
 
     def _load_parameters(self):
@@ -414,6 +452,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.auto_window_box.setChecked(values["auto_window"])
         self.window_box.setValue(values["ir_window"])
         self.points_box.setValue(values["points_per_decade"])
+        self.harmonics_box.setValue(values["harmonics"])
 
     def _save_parameters(self):
         settings = QtCore.QSettings()
@@ -739,6 +778,20 @@ class TransferFunctionWindow(QtWidgets.QDialog):
                                          connect="finite")
             self.phase_plot.plot(f, _phase(value), pen=pen, connect="finite")
 
+            for k in self._shown_harmonics(measurement):
+                harmonic_f, harmonic, harmonic_noise = measurement.harmonic(quantity, k)
+                magnitude = np.abs(harmonic)
+                with np.errstate(invalid="ignore"):
+                    magnitude[magnitude < HARMONIC_THRESHOLD * harmonic_noise] = np.nan
+                style = HARMONIC_STYLES.get(k, QtCore.Qt.PenStyle.DotLine)
+                harmonic_pen = (pg.mkPen(colour, width=1, dash=style) if isinstance(
+                    style, list) else pg.mkPen(colour, width=1, style=style))
+                self.magnitude_plot.plot(harmonic_f,
+                                         _db(magnitude),
+                                         pen=harmonic_pen,
+                                         connect="finite",
+                                         name=f"{measurement.label}: H{k}")
+
             designed = self._designed_controller(measurement, f)
             if quantity == "controller" and designed is not None:
                 designed_pen = pg.mkPen(colour, width=1, style=QtCore.Qt.PenStyle.DotLine)
@@ -804,6 +857,12 @@ class TransferFunctionWindow(QtWidgets.QDialog):
                           _db(np.abs(h) + floor),
                           pen=pg.mkPen(self._colours[id(measurement)]))
 
+    def _shown_harmonics(self, measurement: Measurement) -> list[int]:
+        return [
+            k for k in sorted(measurement.analysis.harmonics)
+            if k <= 1 + self.harmonics_box.value()
+        ]
+
     def _plot_distortion(self, *_):
         self.distortion_plot.clear()
         self.distortion_plot.legend.clear()
@@ -812,24 +871,26 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         if measurement is None or measurement.analysis is None or channel < 0:
             return
         analysis = measurement.analysis
+        log_f = np.log(analysis.frequencies)
         fundamental = np.abs(analysis.responses[channel])
-        if np.any(np.isfinite(analysis.noise[channel])):
-            # The harmonic windows are shorter, so this is an upper bound for the noise.
-            self.distortion_plot.plot(analysis.frequencies,
-                                      _db(analysis.noise[channel] / fundamental),
-                                      pen=pg.mkPen("gray",
-                                                   width=1,
-                                                   style=QtCore.Qt.PenStyle.DashLine),
-                                      connect="finite",
-                                      name="Noise (linear response)")
-        for i, (k, harmonic) in enumerate(analysis.harmonics.items()):
+        for i, k in enumerate(self._shown_harmonics(measurement)):
             f = analysis.harmonic_frequencies[k]
-            reference = np.interp(np.log(f), np.log(analysis.frequencies), fundamental)
-            self.distortion_plot.plot(f,
-                                      _db(np.abs(harmonic[channel]) / reference),
-                                      pen=pg.mkPen(COLOURS[i % len(COLOURS)], width=1.5),
-                                      connect="finite",
-                                      name=f"Harmonic {k}")
+            reference = np.interp(np.log(f), log_f, fundamental)
+            colour = COLOURS[i % len(COLOURS)]
+            self.distortion_plot.plot(
+                f,
+                _db(np.abs(analysis.harmonics[k][channel]) / reference),
+                pen=pg.mkPen(colour, width=1.5),
+                connect="finite",
+                name=f"Harmonic {k}")
+            noise = analysis.harmonic_noise[k][channel]
+            if np.any(np.isfinite(noise)):
+                self.distortion_plot.plot(f,
+                                          _db(noise / reference),
+                                          pen=pg.mkPen(colour,
+                                                       width=1,
+                                                       style=QtCore.Qt.PenStyle.DashLine),
+                                          connect="finite")
 
     def _plot_data(self):
         self.data_plot.clear()

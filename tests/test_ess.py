@@ -209,20 +209,48 @@ def test_closed_loop():
     check("sensitivity", 1 / (1 - controller * plant))
 
 
+def harmonics_by_name(analysis, k):
+    return by_name(analysis.harmonics[k]), by_name(analysis.harmonic_noise[k])
+
+
 def test_harmonic_distortion():
     sweep = ess.Sweep.design(1e3, 100e3, 0.2, 1.0, TS)
-    a2, a3 = 0.01, 0.02
+    a2, a3, a4 = 0.01, 0.02, 0.008
     runs = make_runs(sweep,
                      delayed([1], [1]), ([1], [1]),
-                     nonlinearity=lambda x: x + a2 * x**2 + a3 * x**3)
+                     nonlinearity=lambda x: x + a2 * x**2 + a3 * x**3 + a4 * x**4)
     analysis = analyse(sweep, runs)
 
+    # For the unit amplitude sweep, x^2 = (1 - cos 2φ) / 2, x^3 = (3 sin φ - sin 3φ) / 4,
+    # and x^4 = (3 - 4 cos 2φ + cos 4φ) / 8.
     linear = 1 + 3 * a3 / 4
+    expected = {2: (a2 + a4) / 2, 3: a3 / 4, 4: a4 / 8}
     assert np.allclose(np.abs(analysis.responses[0]), linear, rtol=1e-3)
-    assert set(analysis.harmonics) == {2, 3}
-    assert np.allclose(np.abs(analysis.harmonics[2][0]), a2 / 2, rtol=2e-2)
-    assert np.allclose(np.abs(analysis.harmonics[3][0]), a3 / 4, rtol=2e-2)
-    assert np.max(analysis.harmonic_frequencies[2]) <= sweep.f_stop / 2
+    assert set(analysis.harmonics) == {2, 3, 4}
+    for k, value in expected.items():
+        assert np.allclose(np.abs(analysis.harmonics[k][0]), value, rtol=2e-2), k
+        assert np.max(analysis.harmonic_frequencies[k]) <= sweep.f_stop / k
+
+        # With the channel held, the DAC is the stimulus, so the plant harmonics are
+        # those of the ADC.
+        harmonics, harmonic_noise = harmonics_by_name(analysis, k)
+        value, _ = ess.derived_harmonic("plant", harmonics, harmonic_noise,
+                                        by_name(analysis.responses), analysis.frequencies,
+                                        analysis.harmonic_frequencies[k], 0)
+        assert np.allclose(value, harmonics["ADC0"], rtol=1e-6)
+        assert np.all(np.isfinite(harmonic_noise["ADC0"]))
+
+
+def test_harmonic_noise_estimate():
+    # For a linear system, the harmonic responses are just noise.
+    sweep = ess.Sweep.design(500, 300e3, 0.3, 0.1, TS)
+    plant = delayed(*_resonant_lowpass(50e3, 2))
+    runs = make_runs(sweep, plant, ([1], [1]), noise=3e-3)
+    analysis = analyse(sweep, runs)
+    for k in analysis.harmonics:
+        harmonic, noise = analysis.harmonics[k][0], analysis.harmonic_noise[k][0]
+        ratio = np.sqrt(np.mean(np.abs(harmonic)**2) / np.mean(noise**2))
+        assert 0.5 < ratio < 2, k
 
 
 def test_noise_estimate():
