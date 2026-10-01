@@ -25,6 +25,7 @@ dev = [
     "toml>=0.10.2,<0.11",
     "yapf==0.43.0",
     "flake8==7.1.1",
+    "pytest>=8",
 ]
 
 [tool.uv]
@@ -43,6 +44,7 @@ module-root = ""
 [tool.poe.tasks]
 fmt = "yapf -ir stabilizer_ui"
 lint = "flake8 stabilizer_ui"
+test = "pytest tests"
 
 [tool.poetry-dynamic-versioning]
 enable = true
