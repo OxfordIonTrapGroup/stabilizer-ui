@@ -16,15 +16,10 @@ from scipy import signal
 
 from . import ess
 from .measurement import (Measurement, SweepRunner, PRE_TRIGGER, post_trigger_duration)
-from ..plot import GraphicsLayoutWidget
+from ..plot import COLOURS, FrequencyAxis, GraphicsLayoutWidget, format_frequency
 from ..scientific_spinbox import ScientificSpinBox
 
 logger = logging.getLogger(__name__)
-
-COLOURS = [
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2",
-    "#7f7f7f", "#bcbd22", "#17becf"
-]
 
 #: Sweep parameters remembered between sessions (QSettings key, default).
 DEFAULTS = {
@@ -49,21 +44,6 @@ HARMONIC_STYLES = {
     3: QtCore.Qt.PenStyle.DashDotDotLine,
     4: [1, 4],
 }
-
-
-class FrequencyAxis(pg.AxisItem):
-    """Logarithmic frequency axis labelling only 1, 2 and 5 times powers of ten (with SI
-    prefixes), as the default labels for the minor ticks overlap."""
-
-    def logTickStrings(self, values, scale, spacing):
-        labels = []
-        for value in values:
-            f = 10**value * scale
-            mantissa = f / 10**math.floor(math.log10(f) + 1e-9)
-            labels.append(
-                _format_frequency(f, unit=False) if round(mantissa, 6) in (1, 2,
-                                                                           5) else "")
-        return labels
 
 
 def _frequency_box(value: float) -> ScientificSpinBox:
@@ -105,14 +85,6 @@ def _crossover(f: np.ndarray, loop_gain: np.ndarray):
     margin = math.degrees(phase[0] + t * (phase[1] - phase[0])) + 180
     margin = (margin + 180) % 360 - 180
     return math.exp(log_f[0] + t * (log_f[1] - log_f[0])), margin
-
-
-def _format_frequency(f: float, unit: bool = True) -> str:
-    suffix = "Hz" if unit else ""
-    for scale, prefix in [(1e6, "M"), (1e3, "k")]:
-        if f >= scale:
-            return f"{f / scale:.4g} {prefix}{suffix}".strip()
-    return f"{f:.4g} {suffix}".strip()
 
 
 class TransferFunctionWindow(QtWidgets.QDialog):
@@ -515,7 +487,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
 
         capture = PRE_TRIGGER + post_trigger_duration(sweep, ir_window)
         lines = [
-            f"{_format_frequency(sweep.f_start)} to {_format_frequency(sweep.f_stop)} "
+            f"{format_frequency(sweep.f_start)} to {format_frequency(sweep.f_stop)} "
             f"in {sweep.duration:.3g} s",
             f"Capture: {capture:.3g} s per sweep; 2nd harmonic "
             f"{sweep.harmonic_delay(2) * sweep.sample_period * 1e3:.3g} ms ahead",
@@ -833,7 +805,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
                 if crossover is not None:
                     margins.append(
                         f"<span style='color: {colour}'>{measurement.label}: unity gain "
-                        f"at {_format_frequency(crossover[0])}, phase margin "
+                        f"at {format_frequency(crossover[0])}, phase margin "
                         f"{crossover[1]:.1f}°</span>")
         self.margin_label.setText("<br>".join(margins))
         self.margin_label.setVisible(bool(margins))
