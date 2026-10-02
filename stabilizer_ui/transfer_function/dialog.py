@@ -50,9 +50,6 @@ HARMONIC_STYLES = {
     4: [1, 4],
 }
 
-#: Maximum number of samples per trace shown in the raw data plot.
-MAX_DATA_POINTS = 200_000
-
 
 class FrequencyAxis(pg.AxisItem):
     """Logarithmic frequency axis labelling only 1, 2 and 5 times powers of ten (with SI
@@ -903,24 +900,19 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         if measurement is None:
             return
         if self._data_cache is None or self._data_cache[0] is not measurement:
-            data = measurement.volts(0)
+            # All samples, as the plot downsamples to the visible range itself. Lost
+            # batches are left out, as interpolating them over the length of a gap
+            # would show a straight line.
+            data = measurement.volts(0, interpolate=False)
             t = np.arange(data.shape[1]) * measurement.sweep.sample_period
-            block = 2 * data.shape[1] // MAX_DATA_POINTS
-            if block > 1:
-                # Keep the envelope (minimum and maximum of each block).
-                n = data.shape[1] // block * block
-                blocks = data[:, :n].reshape(data.shape[0], -1, block)
-                data = np.stack(
-                    [blocks.min(axis=2), blocks.max(axis=2)],
-                    axis=2).reshape(data.shape[0], -1)
-                t = np.repeat(t[:n:block], 2)
             self._data_cache = (measurement, t, data)
         _, t, data = self._data_cache
         for i, (name, trace) in enumerate(zip(measurement.channel_names, data)):
             self.data_plot.plot(t,
                                 trace,
                                 pen=pg.mkPen(COLOURS[i % len(COLOURS)]),
-                                name=name)
+                                name=name,
+                                connect="finite")
 
 
 class TransferFunctionMixin:

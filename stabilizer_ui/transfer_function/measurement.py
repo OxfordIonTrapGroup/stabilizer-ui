@@ -78,8 +78,9 @@ class Measurement:
     def label(self) -> str:
         return self.name or f"{self.timestamp} (channel {self.channel})"
 
-    def volts(self, run: int) -> np.ndarray:
-        """The data of a run in volts, with lost batches interpolated."""
+    def volts(self, run: int, interpolate: bool = True) -> np.ndarray:
+        """The data of a run in volts, with lost batches interpolated (or NaN if not
+        `interpolate`)."""
         data = self.runs[run] * self.scales[:, np.newaxis]
         lost = self.lost_batches[run]
         if len(lost):
@@ -87,6 +88,9 @@ class Measurement:
             mask = np.zeros(n, bool)
             for batch in lost:
                 mask[batch * self.batch_size:(batch + 1) * self.batch_size] = True
+            if not interpolate:
+                data[:, mask] = np.nan
+                return data
             index = np.arange(n)
             for channel in data:
                 channel[mask] = np.interp(index[mask], index[~mask], channel[~mask])
