@@ -22,6 +22,8 @@ class AbstractUiWindow(QMainWindow):
 
         self._connection_is_nominal = True
         self.stylesheet = {}
+        #: Whether the device settings are confirmed, see `set_settings_enabled()`.
+        self._settings_enabled = False
 
         # Shown in the status bar while the stream is not directed to this client
         self.stream_status_label = QLabel()
@@ -41,6 +43,10 @@ class AbstractUiWindow(QMainWindow):
         # Avoid the small lines to the right of every status bar item, since we
         # only have one here.
         self.statusBar().setStyleSheet("QStatusBar::item { border-width: 0px; }")
+
+        # Start disabled, not just once the MQTT task first runs, to avoid a flash of
+        # enabled widgets.
+        self.set_settings_enabled(False)
 
         # Message box indicating stabilizer is offline
         self._offlineMessageBox = QMessageBox()
@@ -109,9 +115,16 @@ class AbstractUiWindow(QMainWindow):
         self.streamTakeOverButton.setVisible(message is not None)
         self.fftScopeWidget.set_stream_active(message is None)
 
+    def setCentralWidget(self, widget):
+        # Subclasses only set the central widget after our constructor.
+        super().setCentralWidget(widget)
+        widget.setEnabled(self._settings_enabled)
+
     def set_settings_enabled(self, enabled: bool):
         """Disable hardware controls and plots while their state is unconfirmed."""
-        self.centralWidget().setEnabled(enabled)
+        self._settings_enabled = enabled
+        if self.centralWidget() is not None:
+            self.centralWidget().setEnabled(enabled)
         self.menuBar().setEnabled(enabled)
         self.streamTakeOverButton.setEnabled(enabled)
         for child in self.findChildren(QDialog):
