@@ -16,6 +16,7 @@ from scipy import signal
 
 from . import ess
 from .measurement import (Measurement, SweepRunner, PRE_TRIGGER, post_trigger_duration)
+from ..plot import GraphicsLayoutWidget
 from ..scientific_spinbox import ScientificSpinBox
 
 logger = logging.getLogger(__name__)
@@ -323,7 +324,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
             "two batches, 20 µs, plus the analog front ends)")
         options.addWidget(self.delay_box)
         bode_layout.addLayout(options)
-        self.bode_view = pg.GraphicsLayoutWidget()
+        self.bode_view = GraphicsLayoutWidget()
         self.magnitude_plot = self.bode_view.addPlot(
             row=0, col=0, axisItems={"bottom": FrequencyAxis("bottom")})
         self.phase_plot = self.bode_view.addPlot(
@@ -348,7 +349,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         ir_options.addWidget(self.ir_channel_box)
         ir_options.addStretch()
         ir_layout.addLayout(ir_options)
-        self.ir_view = pg.GraphicsLayoutWidget()
+        self.ir_view = GraphicsLayoutWidget()
         self.ir_plot = self.ir_view.addPlot()
         self.ir_plot.setLabels(left="|h| (dB)", bottom="Time after sweep start (ms)")
         self.ir_plot.showGrid(True, True, 0.3)
@@ -371,7 +372,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         distortion_options.addWidget(self.distortion_channel_box)
         distortion_options.addStretch()
         distortion_layout.addLayout(distortion_options)
-        self.distortion_view = pg.GraphicsLayoutWidget()
+        self.distortion_view = GraphicsLayoutWidget()
         self.distortion_plot = self.distortion_view.addPlot(
             axisItems={"bottom": FrequencyAxis("bottom")})
         self.distortion_plot.setLabels(left="Harmonic distortion (dBc)",
@@ -389,7 +390,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.tabs.addTab(distortion, "Distortion")
 
         # Raw data.
-        self.data_view = pg.GraphicsLayoutWidget()
+        self.data_view = GraphicsLayoutWidget()
         self.data_plot = self.data_view.addPlot()
         self.data_plot.setLabels(left="Voltage (V)", bottom="Time (s)")
         self.data_plot.addLegend(offset=(-10, 10))

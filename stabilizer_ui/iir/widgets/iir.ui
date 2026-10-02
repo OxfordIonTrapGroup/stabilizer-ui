@@ -249,7 +249,7 @@
   <customwidget>
    <class>GraphicsLayoutWidget</class>
    <extends>QWidget</extends>
-   <header>pyqtgraph</header>
+   <header>stabilizer_ui.plot</header>
   </customwidget>
  </customwidgets>
  <resources/>
