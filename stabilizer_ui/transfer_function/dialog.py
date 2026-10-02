@@ -81,9 +81,12 @@ def _db(x):
         return 20 * np.log10(np.abs(x))
 
 
-def _phase(value: np.ndarray) -> np.ndarray:
-    """Unwrapped phase in degrees, starting within (-180, 180]."""
-    phase = np.degrees(np.unwrap(np.angle(value)))
+def _phase(value: np.ndarray, unwrap: bool = True) -> np.ndarray:
+    """Phase in degrees, within (-180, 180] or, if unwrapped, starting there."""
+    phase = np.angle(value)
+    if not unwrap:
+        return np.degrees(phase)
+    phase = np.degrees(np.unwrap(phase))
     if len(phase):
         phase -= 360 * np.round(phase[0] / 360)
     return phase
@@ -326,6 +329,13 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.noise_check.setChecked(True)
         self.noise_check.setToolTip("Show the estimated noise (1σ) as dashed lines")
         options.addWidget(self.noise_check)
+        self.unwrap_check = QtWidgets.QCheckBox("Unwrap phase")
+        self.unwrap_check.setChecked(True)
+        self.unwrap_check.setToolTip(
+            "Unwrap the phase over frequency instead of showing it within ±180°. Noisy "
+            "data (e.g. below the corner of a high-pass filter) can offset the unwrapped "
+            "phase by multiples of 360°")
+        options.addWidget(self.unwrap_check)
         options.addWidget(QtWidgets.QLabel("Remove delay:"))
         self.delay_box = QtWidgets.QDoubleSpinBox()
         self.delay_box.setRange(-1e5, 1e5)
@@ -413,6 +423,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
 
         self.quantity_box.currentIndexChanged.connect(self._plot_bode)
         self.noise_check.toggled.connect(self._plot_bode)
+        self.unwrap_check.toggled.connect(self._plot_bode)
         self.delay_box.valueChanged.connect(self._plot_bode)
         self.harmonics_box.valueChanged.connect(self._plot_bode)
         self.harmonics_box.valueChanged.connect(self._plot_distortion)
@@ -772,6 +783,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.phase_plot.clear()
         self.legend.clear()
         delay = self.delay_box.value() * 1e-6
+        unwrap = self.unwrap_check.isChecked()
         margins = []
         for measurement in self._checked():
             f = measurement.analysis.frequencies
@@ -792,7 +804,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
                                                       width=1,
                                                       style=QtCore.Qt.PenStyle.DashLine),
                                          connect="finite")
-            self.phase_plot.plot(f, _phase(value), pen=pen, connect="finite")
+            self.phase_plot.plot(f, _phase(value, unwrap), pen=pen, connect="finite")
 
             for k in self._shown_harmonics(measurement):
                 harmonic_f, harmonic, harmonic_noise = measurement.harmonic(quantity, k)
@@ -815,7 +827,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
                                          _db(designed),
                                          pen=designed_pen,
                                          name=f"{measurement.label} (designed)")
-                self.phase_plot.plot(f, _phase(designed), pen=designed_pen)
+                self.phase_plot.plot(f, _phase(designed, unwrap), pen=designed_pen)
             if quantity == "loop":
                 crossover = _crossover(f, value)
                 if crossover is not None:
