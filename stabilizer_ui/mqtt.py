@@ -542,8 +542,14 @@ class UiMqttBridge:
             logger.info("Showing '%s' = %s", key, value)
             self._showing = True
             try:
+                for widget in cfg.widgets:
+                    if widget is not None:
+                        widget.setProperty("mqtt_showing", True)
                 cfg.write_handler(cfg.widgets, value)
             finally:
+                for widget in cfg.widgets:
+                    if widget is not None:
+                        widget.setProperty("mqtt_showing", False)
                 self._showing = False
         except Exception:
             logger.warning("Failed to show '%s' = %s", key, value, exc_info=True)

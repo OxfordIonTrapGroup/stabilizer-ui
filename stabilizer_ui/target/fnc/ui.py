@@ -78,7 +78,7 @@ class ChannelSettings(AbstractChannelSettings):
         """
         if self.ddsIoFreqLinkCheckBox.isChecked():
             # Disable DDS In frequency and set to 2x DDS Out frequency
-            self.ddsInFrequencyBox.setValue(2 * self.ddsOutFrequencyBox.value())
+            self._updateDdsIoFrequencies(None)
             self.ddsInFrequencyBox.setEnabled(False)
 
             # Update DDS In frequency when DDS Out frequency changes
@@ -95,12 +95,15 @@ class ChannelSettings(AbstractChannelSettings):
 
     def _updateDdsIoFrequencies(self, _):
         """Update DDS In frequency to when DDS Out frequency changes"""
-        if self.ddsIoFreqLinkCheckBox.isChecked():
+        if (self.ddsIoFreqLinkCheckBox.isChecked()
+                and not self.ddsIoFreqLinkCheckBox.property("mqtt_showing")
+                and not self.ddsOutFrequencyBox.property("mqtt_showing")):
             self.ddsInFrequencyBox.setValue(2 * self.ddsOutFrequencyBox.value())
 
     def _snapAttenuationValue(self, value):
         """Snap attenuation values to 0.5 dB steps"""
-        self.sender().setValue(0.5 * round(2 * value))
+        if not self.sender().property("mqtt_showing"):
+            self.sender().setValue(0.5 * round(2 * value))
 
 
 class ChannelTabWidget(QtWidgets.QTabWidget):

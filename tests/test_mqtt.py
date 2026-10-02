@@ -132,3 +132,26 @@ def test_rapid_edits_are_coalesced_and_incoming_values_do_not_overwrite_them(app
     bridge._handle_ui_message(key, b'51', {}, False)
     assert widget.value() == 51
     assert not bridge.keys_to_write
+
+
+def test_fnc_readback_does_not_apply_linked_dds_calculation(application):
+    from stabilizer_ui.target.fnc.ui import ChannelSettings
+    from stabilizer_ui.utils import mega
+    channel = ChannelSettings()
+    bridge = UiMqttBridge(
+        Client(), {
+            'input': UiMqttConfig([channel.ddsInFrequencyBox], *mega),
+            'output': UiMqttConfig([channel.ddsOutFrequencyBox], *mega),
+            'link': UiMqttConfig([channel.ddsIoFreqLinkCheckBox]),
+        })
+    bridge.connect_ui()
+    bridge.show('input', 150e6)
+    bridge.show('output', 90e6)
+    bridge.show('link', False)
+    bridge.show('link', True)
+    assert channel.ddsInFrequencyBox.value() == 150
+    assert channel.ddsOutFrequencyBox.value() == 90
+    assert not bridge.keys_to_write
+    channel.ddsOutFrequencyBox.setValue(80)
+    assert channel.ddsInFrequencyBox.value() == 160
+    assert bridge.keys_to_write == {'input', 'output'}
