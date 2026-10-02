@@ -8,5 +8,5 @@ DEFAULT_SCOPE_DURATION = 0.02
 #: FFT and drawing take longer.
 MAX_SCOPE_DURATION = 10.0
 
-#: Time scale of quantities reported by the stream thread, in seconds.
-SCOPE_TIME_SCALE = 1e-3  # Use ms and kHz as units.
+#: Unit of the time axis of the scope, in seconds (frequencies are in Hz).
+SCOPE_TIME_SCALE = 1e-3  # ms

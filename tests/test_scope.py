@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD as TS
 
-from stabilizer_ui.stream.fft_scope import SCOPE_TIME_SCALE, ScopeConfig
+from stabilizer_ui.stream.fft_scope import ScopeConfig
 from stabilizer_ui.stream.thread import _ScopeBuffer
 
 #: Standard deviation of the white noise used.
@@ -40,7 +40,7 @@ def test_scope_spectrum():
     assert np.all(np.diff(frequencies) >= 0)
     assert np.all(envelope[1::2] >= envelope[0::2])
     assert frequencies[0] == config.frequencies[1]
-    assert frequencies[-1] <= 0.5 / TS * SCOPE_TIME_SCALE
+    assert frequencies[-1] <= 0.5 / TS
     # Average the periodograms of all traces, without the envelope.
     window, scale = config._window
     spectra = np.abs(np.fft.rfft(data * window, axis=1)) * scale

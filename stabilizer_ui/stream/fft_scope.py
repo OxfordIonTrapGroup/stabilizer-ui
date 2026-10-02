@@ -54,7 +54,7 @@ class ScopeConfig:
 
     @cached_property
     def frequencies(self) -> np.ndarray:
-        return np.fft.rfftfreq(self.length, self.sample_period) * SCOPE_TIME_SCALE
+        return np.fft.rfftfreq(self.length, self.sample_period)
 
     @cached_property
     def _envelope_starts(self) -> np.ndarray:
@@ -143,7 +143,7 @@ class FftScope(QtWidgets.QWidget):
         self.scope_config = [{
             True: {
                 "ylabel": f"ASD / ({unit}/sqrt(Hz))",
-                "xlabel": "Frequency / kHz",
+                "xlabel": "Frequency / Hz",
                 "log": [True, True],
                 "yrange": self.DEFAULT_FFT_Y_RANGE,
             },
