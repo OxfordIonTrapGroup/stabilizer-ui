@@ -45,6 +45,9 @@ HARMONIC_STYLES = {
     4: [1, 4],
 }
 
+#: Opacity (out of 255) of the area below the estimated noise.
+NOISE_ALPHA = 50
+
 
 def _frequency_box(value: float) -> ScientificSpinBox:
     box = ScientificSpinBox()
@@ -59,6 +62,43 @@ def _frequency_box(value: float) -> ScientificSpinBox:
 def _db(x):
     with np.errstate(divide="ignore", invalid="ignore"):
         return 20 * np.log10(np.abs(x))
+
+
+class _NoiseShading(pg.PlotDataItem):
+    """Shades the area below a curve (an estimated noise) in a translucent colour.
+
+    The area extends to the bottom of the view, following it as the view changes. Only
+    the curve counts towards the auto range, which would otherwise never move up again.
+    Non-finite points are left out (the shading bridges them).
+    """
+
+    def __init__(self, x, y, colour):
+        brush = pg.mkColor(colour)
+        brush.setAlpha(NOISE_ALPHA)
+        super().__init__(x, y, pen=None, brush=brush, fillLevel=0.0)
+        # Below the curves, which would otherwise be tinted by the shading.
+        self.setZValue(-1)
+
+    def viewRangeChanged(self, vb=None, ranges=None, changed=None):
+        super().viewRangeChanged(vb, ranges, changed)
+        # (Outside a `ViewBox`, e.g. while being removed, this is the `GraphicsView`.)
+        view = self.getViewBox()
+        if isinstance(view, pg.ViewBox):
+            self.setFillLevel(view.viewRange()[1][0])
+
+    def dataBounds(self, ax, frac=1.0, orthoRange=None):
+        if ax == 0:
+            return super().dataBounds(ax, frac, orthoRange)
+        x, y = self.getData()
+        if y is None:
+            return (None, None)
+        if orthoRange is not None:
+            y = y[(x >= orthoRange[0]) & (x <= orthoRange[1])]
+        y = y[np.isfinite(y)]
+        if not len(y):
+            return (None, None)
+        lower, upper = np.percentile(y, [50 * (1 - frac), 50 * (1 + frac)])
+        return float(lower), float(upper)
 
 
 def _phase(value: np.ndarray, unwrap: bool = True) -> np.ndarray:
@@ -299,7 +339,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         options.addWidget(self.quantity_box, 1)
         self.noise_check = QtWidgets.QCheckBox("Noise")
         self.noise_check.setChecked(True)
-        self.noise_check.setToolTip("Show the estimated noise (1σ) as dashed lines")
+        self.noise_check.setToolTip("Shade the area below the estimated noise (1σ)")
         options.addWidget(self.noise_check)
         self.unwrap_check = QtWidgets.QCheckBox("Unwrap phase")
         self.unwrap_check.setChecked(True)
@@ -373,7 +413,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
                                        bottom="Fundamental frequency / Hz")
         distortion_note = QtWidgets.QLabel(
             "Amplitude of the harmonics (at k times the fundamental frequency) relative "
-            "to the fundamental, with their estimated noise (dashed). Set the number of "
+            "to the fundamental, with their estimated noise (shaded). Set the number of "
             "harmonics in the analysis settings.")
         distortion_note.setWordWrap(True)
         distortion_note.setStyleSheet("color: gray")
@@ -770,12 +810,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
                                              name=measurement.label)
             curve.setToolTip(measurement.label)
             if self.noise_check.isChecked() and np.any(np.isfinite(noise)):
-                self.magnitude_plot.plot(f,
-                                         _db(noise),
-                                         pen=pg.mkPen(colour,
-                                                      width=1,
-                                                      style=QtCore.Qt.PenStyle.DashLine),
-                                         connect="finite")
+                self.magnitude_plot.addItem(_NoiseShading(f, _db(noise), colour))
             self.phase_plot.plot(f, _phase(value, unwrap), pen=pen, connect="finite")
 
             for k in self._shown_harmonics(measurement):
@@ -885,12 +920,8 @@ class TransferFunctionWindow(QtWidgets.QDialog):
                 name=f"Harmonic {k}")
             noise = analysis.harmonic_noise[k][channel]
             if np.any(np.isfinite(noise)):
-                self.distortion_plot.plot(f,
-                                          _db(noise / reference),
-                                          pen=pg.mkPen(colour,
-                                                       width=1,
-                                                       style=QtCore.Qt.PenStyle.DashLine),
-                                          connect="finite")
+                self.distortion_plot.addItem(
+                    _NoiseShading(f, _db(noise / reference), colour))
 
     def _plot_data(self):
         self.data_plot.clear()
