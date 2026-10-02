@@ -12,7 +12,12 @@ quartiq/stabilizer, which uses the miniconf-mqtt v0.20 settings protocol).
 
 ## Getting started
 1. Clone this repository and `cd` into it in the terminal. Install [uv](https://docs.astral.sh/uv/).
-2. Run `uv sync` to create the Python environment.
+2. Run `uv sync` to create the Python environment. This also builds the extension for the
+   spectral density window (`psd/`, see below), which needs a Rust toolchain (≥ 1.88, e.g.
+   from [rustup](https://rustup.rs/); if there is none, maturin downloads one for the build)
+   and, on Windows, the MSVC build tools. Where it cannot be built, leave it out with
+   `uv sync --no-group psd`, or set `UV_NO_GROUP=psd` in the environment for all uv
+   commands. Everything but the spectral density window works without it.
 3. Add the `stabilizer` device you wish to connect to in `device_db.py` similar to the existing entries, specifying the MQTT topic, broker address, and firmware application that device is running. 
 4. The app can now be launched using `uv run <target>_ui <device_name>`, where `target` is one of the application names listed above and with the `device_name` as entered in the `device_db`. 
    
@@ -28,7 +33,29 @@ quartiq/stabilizer, which uses the miniconf-mqtt v0.20 settings protocol).
 The scope shows the last *Duration* of the stream (up to 10 s; the arrows step through 1,
 2 and 5 times powers of ten), or with *Enable FFT*, its amplitude spectral density (one
 segment of that duration, Hamming window). Long traces are redrawn less often, as the FFT
-and drawing take longer.
+and drawing take longer. For long-term averaged spectra, use the spectral density window.
+
+## Spectral density
+
+*Tools > Spectral density…* (Ctrl+D) opens a window which estimates the power spectral
+density of each signal of the stream while it is open (shown as amplitude spectral
+density). It uses the online estimation of
+[stabilizer-stream](https://github.com/quartiq/stabilizer-stream) (through the Python
+bindings in `psd/`): each stage of a cascade averages the spectra of 512-sample segments,
+and decimates the signal by 8 for the next stage, so that the spectrum extends to lower
+frequencies the longer it runs, with roughly constant relative resolution.
+
+* Each stage averages up to *Max. averages* spectra, and then continues with an
+  exponentially weighted average with that time constant. Lower frequencies are only shown
+  once their stage has *Min. averages*. The status says how far the estimate has got.
+* *Pause* stops averaging (as does closing the window), *Reset* starts again.
+* *Cumulative RMS* shows the RMS above each frequency (the PSD integrated from the
+  highest frequency down).
+* *Store* keeps the current estimates for comparison. Traces can be renamed, saved as CSV
+  and loaded again.
+
+Lost stream data is left out of the estimate (and reported). The window needs the `psd`
+dependency group (see *Getting started*).
 
 ## Several clients
 
@@ -130,3 +157,8 @@ source is disabled again after each measurement.
 ## Development
 * `uv run poe fmt` formats the code, `uv run poe lint` runs flake8, and `uv run poe test`
   runs the tests.
+* `psd/` is a separate package (`stabilizer-psd`, built with maturin) in the `psd`
+  dependency group, which `uv sync` installs by default and rebuilds when its sources
+  change. It depends on the `portable-lib` branch of the
+  OxfordIonTrapGroup fork of stabilizer-stream, which fixes the build of the library on
+  macOS and Windows, and makes the dependencies of its GUI optional.

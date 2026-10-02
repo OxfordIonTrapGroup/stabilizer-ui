@@ -39,16 +39,30 @@ def format_frequency(f: float, unit: bool = True) -> str:
     return f"{f:.4g} {suffix}".strip()
 
 
-class FrequencyAxis(pg.AxisItem):
-    """Logarithmic frequency axis labelling only 1, 2 and 5 times powers of ten (with SI
-    prefixes), as the default labels for the minor ticks overlap."""
+def _is_one_two_five(x: float) -> bool:
+    """Whether `x` is 1, 2 or 5 times a power of ten."""
+    mantissa = x / 10**math.floor(math.log10(x) + 1e-9)
+    return round(mantissa, 6) in (1, 2, 5)
+
+
+class LogAxis(pg.AxisItem):
+    """Logarithmic axis labelling only 1, 2 and 5 times powers of ten (unless there are
+    fewer than two of them), as the default labels for the minor ticks overlap."""
 
     def logTickStrings(self, values, scale, spacing):
-        labels = []
-        for value in values:
-            f = 10**value * scale
-            mantissa = f / 10**math.floor(math.log10(f) + 1e-9)
-            labels.append(
-                format_frequency(f, unit=False) if round(mantissa, 6) in (1, 2,
-                                                                          5) else "")
-        return labels
+        strings = super().logTickStrings(values, scale, spacing)
+        labelled = [_is_one_two_five(10**value * scale) for value in values]
+        if sum(labelled) < 2:
+            return strings
+        return [string if keep else "" for string, keep in zip(strings, labelled)]
+
+
+class FrequencyAxis(LogAxis):
+    """`LogAxis` for frequencies, with SI prefixes."""
+
+    def logTickStrings(self, values, scale, spacing):
+        return [
+            format_frequency(10**value * scale, unit=False) if string else ""
+            for value, string in zip(values,
+                                     super().logTickStrings(values, scale, spacing))
+        ]

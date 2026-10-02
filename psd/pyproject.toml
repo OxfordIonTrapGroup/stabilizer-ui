@@ -1,0 +1,20 @@
+[project]
+name = "stabilizer-psd"
+version = "0.1.0"
+description = "Python bindings for the online PSD estimation of stabilizer-stream"
+requires-python = ">=3.12"
+license = "GPL-3.0-or-later"
+
+[build-system]
+requires = ["maturin>=1.9.4,<2"]
+build-backend = "maturin"
+
+[tool.uv]
+# Rebuild when the Rust sources change, not only the metadata.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "Cargo.lock" },
+    { file = "src/**/*.rs" },
+    { file = "stabilizer_psd.pyi" },
+]

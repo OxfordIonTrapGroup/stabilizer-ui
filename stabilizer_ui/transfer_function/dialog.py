@@ -926,8 +926,7 @@ class TransferFunctionMixin:
         self._settings_map = {}
         self._sweep_runner = None
         self._transfer_function_window = None
-        tools_menu = self.menuBar().addMenu("&Tools")
-        self.transferFunctionAction = tools_menu.addAction("&Transfer function…")
+        self.transferFunctionAction = self.tools_menu().addAction("&Transfer function…")
         self.transferFunctionAction.setShortcut("Ctrl+T")
         self.transferFunctionAction.setEnabled(False)
         self.transferFunctionAction.triggered.connect(self.show_transfer_function)

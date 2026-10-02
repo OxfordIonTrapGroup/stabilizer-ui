@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from PyQt6.QtWidgets import QMainWindow, QDialog, QMessageBox, QLabel, QPushButton
+from PyQt6.QtWidgets import (QMainWindow, QDialog, QMenu, QMessageBox, QLabel,
+                             QPushButton)
 from PyQt6.QtGui import QPalette
 from typing import Optional
 
@@ -22,6 +23,7 @@ class AbstractUiWindow(QMainWindow):
 
         self._connection_is_nominal = True
         self.stylesheet = {}
+        self._tools_menu = None
         #: Whether the device settings are confirmed, see `set_settings_enabled()`.
         self._settings_enabled = False
 
@@ -74,6 +76,12 @@ class AbstractUiWindow(QMainWindow):
             "Stabilizer had panicked, but has since restarted. " +
             "You may need to change some settings if the issue persists.")
         self._panicMessageBox.setStandardButtons(QMessageBox.StandardButton.Ok)
+
+    def tools_menu(self) -> QMenu:
+        """The Tools menu (added on first use)."""
+        if self._tools_menu is None:
+            self._tools_menu = self.menuBar().addMenu("&Tools")
+        return self._tools_menu
 
     def _setStyleSheet(self):
         stylesheet_str = ";".join(

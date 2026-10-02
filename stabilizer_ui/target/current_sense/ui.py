@@ -11,6 +11,7 @@ from ...ui import AbstractUiWindow
 from ...mqtt import NetworkAddress, UiMqttConfig
 from ...iir.channel_settings import AbstractChannelSettings, ChannelSettings
 from ...stream.fft_scope import FftScope
+from ...spectral_density import SpectralDensityMixin
 from ...stream.decoders import DacDecoder
 from ...transfer_function.dialog import TransferFunctionMixin
 from ...utils import milli
@@ -125,7 +126,7 @@ class FeedforwardChannelSettings(AbstractChannelSettings):
         self.IIRTabs.addTab(self.feedforward, "Feedforward")
 
 
-class UiWindow(TransferFunctionMixin, AbstractUiWindow):
+class UiWindow(TransferFunctionMixin, SpectralDensityMixin, AbstractUiWindow):
 
     def __init__(self, title: str = "Current sense"):
         super().__init__()
@@ -166,6 +167,7 @@ class UiWindow(TransferFunctionMixin, AbstractUiWindow):
         self.resize(*DEFAULT_WINDOW_SIZE)
 
         self._add_transfer_function_action()
+        self._add_spectral_density_action()
 
     def update_stream(self, payload):
         self.fftScopeWidget.update(payload)

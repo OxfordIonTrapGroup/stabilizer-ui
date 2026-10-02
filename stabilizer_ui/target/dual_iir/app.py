@@ -84,6 +84,7 @@ def main():
             loop,
         )
         stream_thread.start()
+        ui.set_stream_thread(stream_thread, args.stabilizer_name)
 
         ui.set_sweep_runner(
             SweepRunner(stabilizer_interface, stream_thread, args.stabilizer_name,

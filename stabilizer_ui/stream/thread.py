@@ -211,7 +211,8 @@ class _ScopeBuffer:
 
 
 class StreamThread:
-    """Receives the stream in a separate thread, and passes the data to the scope."""
+    """Receives the stream in a separate thread, and passes the data to the scope and (if
+    set) a consumer."""
 
     def __init__(self, ui_callback: Callable, fftScopeWidget: FftScope,
                  stream_target_queue: AsyncQueueThreadsafe[NetworkAddress],
@@ -240,6 +241,15 @@ class StreamThread:
     def stop_capture(self):
         if self._worker.stream is not None:
             self._worker.stream.capture = None
+
+    def set_consumer(self, consumer: Callable[[np.ndarray, int], None] | None):
+        """Pass all received data to `consumer` (or stop, for `None`).
+
+        It is called from the stream thread with the data of the frames received since
+        the previous call, as (source, sample) array in SI units (float32), and the
+        number of samples lost before (and between) them, which are left out.
+        """
+        self._worker.consumer = consumer
 
 
 _StatPoint = namedtuple("_StatPoint", "time received lost bytes")
@@ -288,7 +298,8 @@ class StreamStats:
 
 class _StreamWorker:
     """Receives and decodes the stream, and computes the scope data. Except for the
-    constructor and `_show()`, this runs in the stream thread.
+    constructor, `_show()` and the attributes set by `StreamThread`, this runs in the
+    stream thread.
 
     The default loop on Windows doesn't support UDP!
     Also, it is not possible to change the Qt event loop. Therefore, we
@@ -307,6 +318,8 @@ class _StreamWorker:
         self.terminate = threading.Event()
         #: The stream protocol, once the socket is open.
         self.stream: _Stream | None = None
+        #: See `StreamThread.set_consumer()`.
+        self.consumer: Callable[[np.ndarray, int], None] | None = None
         self._stats = StreamStats()
         self._buffer = _ScopeBuffer(self.parser.n_sources, scope.config.length)
         #: Clear while the main thread has not shown the latest scope data yet.
@@ -314,13 +327,13 @@ class _StreamWorker:
         self._shown.set()
 
     def _decode(self):
-        """Decode the frames received since the previous call into the scope buffer."""
+        """Decode the frames received since the previous call, and pass on the data."""
         stream = self.stream
         if stream is None or not stream.frames:
             return
         frames, stream.frames = stream.frames, []
-        for header, body in frames:
-            self._stats.update(header, len(body))
+        lost_batches = sum(
+            self._stats.update(header, len(body)) for header, body in frames)
         batches = sum(header.batches for header, _ in frames)
         try:
             # Decode all frames at once, as one with all their batches.
@@ -331,6 +344,15 @@ class _StreamWorker:
             logger.exception("Failed to decode stream frames")
             return
         self._buffer.add(data)
+
+        consumer = self.consumer
+        if consumer is not None:
+            try:
+                consumer(data, lost_batches * data.shape[1] // batches)
+            except Exception:
+                logger.exception("Stream data consumer failed")
+                if self.consumer is consumer:
+                    self.consumer = None
 
     def _show(self, payload: CallbackPayload):
         """Show data in the scope (in the main thread)."""

@@ -1,0 +1,19 @@
+[package]
+name = "stabilizer-psd"
+version = "0.1.0"
+edition = "2021"
+description = "Python bindings for the online PSD estimation of stabilizer-stream"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+name = "stabilizer_psd"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.29", features = ["abi3-py312"] }
+# The upstream library builds on Linux only, and with the dependencies of the egui app.
+stabilizer-stream = { git = "https://github.com/OxfordIonTrapGroup/stabilizer-stream", branch = "portable-lib", default-features = false }
+
+[profile.release]
+opt-level = 3

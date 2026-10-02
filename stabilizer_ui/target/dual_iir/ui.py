@@ -9,6 +9,7 @@ from ...ui import AbstractUiWindow
 from ...mqtt import NetworkAddress, UiMqttConfig
 from ...iir.channel_settings import ChannelSettings
 from ...stream.fft_scope import FftScope
+from ...spectral_density import SpectralDensityMixin
 from ...stream.decoders import DacDecoder
 from ...transfer_function.dialog import TransferFunctionMixin
 
@@ -26,7 +27,7 @@ DEFAULT_ADC_PLOT_YRANGE = (-1, 1)
 SCOPE_UPDATE_PERIOD = 0.05  # 20 fps
 
 
-class UiWindow(TransferFunctionMixin, AbstractUiWindow):
+class UiWindow(TransferFunctionMixin, SpectralDensityMixin, AbstractUiWindow):
 
     def __init__(self, title: str = "Dual IIR"):
         super().__init__()
@@ -65,6 +66,7 @@ class UiWindow(TransferFunctionMixin, AbstractUiWindow):
         self.resize(*DEFAULT_WINDOW_SIZE)
 
         self._add_transfer_function_action()
+        self._add_spectral_density_action()
 
     def update_stream(self, payload):
         self.fftScopeWidget.update(payload)

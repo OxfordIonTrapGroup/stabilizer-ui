@@ -10,6 +10,7 @@ from . import *
 
 from ... import mqtt
 from ...stream.fft_scope import FftScope
+from ...spectral_density import SpectralDensityMixin
 from ...mqtt import UiMqttConfig, NetworkAddress
 from ...iir.channel_settings import AbstractChannelSettings
 from ...ui import AbstractUiWindow
@@ -117,7 +118,7 @@ class ChannelTabWidget(QtWidgets.QTabWidget):
             self.addTab(self.channels[i], f"Channel {i}")
 
 
-class UiWindow(AbstractUiWindow):
+class UiWindow(SpectralDensityMixin, AbstractUiWindow):
     """ Main UI window for FNC"""
 
     def __init__(self, title: str = "FNC"):
@@ -163,6 +164,8 @@ class UiWindow(AbstractUiWindow):
                 1, i).setYRange(*DEFAULT_PHASE_PLOT_YRANGE)
 
         self.resize(*DEFAULT_WINDOW_SIZE)
+
+        self._add_spectral_density_action()
 
     def update_stream(self, payload):
         self.fftScopeWidget.update(payload)

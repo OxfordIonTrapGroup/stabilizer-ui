@@ -84,6 +84,7 @@ def main():
             loop,
         )
         stream_thread.start()
+        ui.set_stream_thread(stream_thread, args.stabilizer_name)
 
         try:
             sys.exit(loop.run_forever())

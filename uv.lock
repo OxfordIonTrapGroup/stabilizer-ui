@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12, <4"
 
 [[package]]
@@ -609,9 +609,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "stabilizer-psd"
+version = "0.1.0"
+source = { directory = "psd" }
+
+[[package]]
 name = "stabilizer-ui"
 version = "0.1"
 source = { editable = "." }
+default-groups = "all"
 dependencies = [
     { name = "gmqtt" },
     { name = "h5py" },
@@ -630,6 +636,9 @@ dev = [
     { name = "pytest" },
     { name = "toml" },
     { name = "yapf" },
+]
+psd = [
+    { name = "stabilizer-psd" },
 ]
 
 [package.metadata]
@@ -652,6 +661,7 @@ dev = [
     { name = "toml", specifier = ">=0.10.2,<0.11" },
     { name = "yapf", specifier = "==0.43.0" },
 ]
+psd = [{ name = "stabilizer-psd", directory = "psd" }]
 
 [[package]]
 name = "toml"
