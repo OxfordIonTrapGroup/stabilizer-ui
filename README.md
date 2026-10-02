@@ -35,6 +35,35 @@ The scope shows the last *Duration* of the stream (up to 10 s; the arrows step t
 segment of that duration, Hamming window). Long traces are redrawn less often, as the FFT
 and drawing take longer. For long-term averaged spectra, use the spectral density window.
 
+## Recording the stream
+
+The bar below the scope records the checked channels of the stream at the full sample rate
+to an HDF5 file (for all four channels of `dual_iir`, 6.25 MB/s or 22.5 GB per hour; the bar
+shows the rate of the current selection). *Record…* asks for the file, and *Stop* ends the
+recording, as does closing the window.
+
+* Each channel is stored as `channels/<name>`, in machine units (`int16`); multiply by its
+  `scale` attribute for its `unit`. For the ADCs, this does not include the AFE gain, which
+  is in the snapshot of the settings at the start (`settings`, as JSON). The file also has
+  the sample period, and the time of the computer when the first data arrived.
+* Stream data lost in transmission is zero, and listed in `lost` as (first sample, number
+  of samples). If the stream stops for more than 10 s (e.g. while another client has it),
+  or the device restarts, the recording stops, so that each file is one continuous time
+  series.
+* The file is written in SWMR mode, so that it stays readable if the UI quits
+  unexpectedly, and can be read while recording:
+
+  ```python
+  import h5py
+  with h5py.File("stream_lab1_729_2026-10-02T16_24_00.h5", "r", swmr=True) as f:
+      adc0 = f["channels/ADC0"]
+      adc0.refresh()  # For data written since opening the file.
+      volts = adc0[-100_000:] * adc0.attrs["scale"]
+  ```
+
+Like the scope, the bar is disabled while the device is disconnected, but a recording
+continues as long as the stream does.
+
 ## Spectral density
 
 *Tools > Spectral density…* (Ctrl+D) opens a window which estimates the power spectral

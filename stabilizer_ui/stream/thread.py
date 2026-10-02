@@ -18,6 +18,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from .fft_scope import FftScope, ScopeConfig
+    from .recorder import StreamRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +213,7 @@ class _ScopeBuffer:
 
 class StreamThread:
     """Receives the stream in a separate thread, and passes the data to the scope and (if
-    set) a consumer."""
+    set) a consumer and a recorder."""
 
     def __init__(self, ui_callback: Callable, fftScopeWidget: FftScope,
                  stream_target_queue: AsyncQueueThreadsafe[NetworkAddress],
@@ -230,6 +231,11 @@ class StreamThread:
     def close(self):
         self._worker.terminate.set()
         self._thread.join()
+        recorder = self._worker.recorder
+        if recorder is not None:
+            # Write the rest of the data, and close the file.
+            self.stop_recording()
+            recorder.wait()
 
     def start_capture(self, capture: StreamCapture):
         """Start passing all received frames to `capture`."""
@@ -250,6 +256,16 @@ class StreamThread:
         number of samples lost before (and between) them, which are left out.
         """
         self._worker.consumer = consumer
+
+    def start_recording(self, recorder: StreamRecorder):
+        """Pass all received frames to `recorder`."""
+        self._worker.recorder = recorder
+
+    def stop_recording(self):
+        """Stop passing frames to the recorder, and end its recording."""
+        recorder, self._worker.recorder = self._worker.recorder, None
+        if recorder is not None:
+            recorder.stop()
 
 
 _StatPoint = namedtuple("_StatPoint", "time received lost bytes")
@@ -320,6 +336,8 @@ class _StreamWorker:
         self.stream: _Stream | None = None
         #: See `StreamThread.set_consumer()`.
         self.consumer: Callable[[np.ndarray, int], None] | None = None
+        #: See `StreamThread.start_recording()`.
+        self.recorder: StreamRecorder | None = None
         self._stats = StreamStats()
         self._buffer = _ScopeBuffer(self.parser.n_sources, scope.config.length)
         #: Clear while the main thread has not shown the latest scope data yet.
@@ -332,6 +350,9 @@ class _StreamWorker:
         if stream is None or not stream.frames:
             return
         frames, stream.frames = stream.frames, []
+        recorder = self.recorder
+        if recorder is not None:
+            recorder.add(frames)
         lost_batches = sum(
             self._stats.update(header, len(body)) for header, body in frames)
         batches = sum(header.batches for header, _ in frames)

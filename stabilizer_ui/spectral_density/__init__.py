@@ -12,8 +12,6 @@ class SpectralDensityMixin:
 
     def _add_spectral_density_action(self):
         """Add the (initially disabled) action to the Tools menu."""
-        self._stream_thread = None
-        self._stream_device = None
         self._stream_message = None
         self._spectral_density_window = None
         self.spectralDensityAction = self.tools_menu().addAction("&Spectral density…")
@@ -22,9 +20,8 @@ class SpectralDensityMixin:
         self.spectralDensityAction.triggered.connect(self.show_spectral_density)
 
     def set_stream_thread(self, stream_thread, device: str):
-        """Enable the spectral density window, fed by the given `StreamThread`."""
-        self._stream_thread = stream_thread
-        self._stream_device = device
+        """Also enable the spectral density window."""
+        super().set_stream_thread(stream_thread, device)
         self.spectralDensityAction.setEnabled(True)
 
     def show_spectral_density(self):

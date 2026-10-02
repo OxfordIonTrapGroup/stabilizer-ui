@@ -6,6 +6,7 @@ from PyQt6 import QtCore, QtWidgets, uic
 from stabilizer.stream_parser import Parser
 import numpy as np
 import numpy.fft
+from .record_bar import RecordBar
 from .thread import CallbackPayload
 
 from . import DEFAULT_SCOPE_DURATION, MAX_SCOPE_DURATION, SCOPE_TIME_SCALE
@@ -169,6 +170,9 @@ class FftScope(QtWidgets.QWidget):
 
         self.en_fft_box.stateChanged.connect(lambda _: self._config_changed(True))
         self.duration_box.valueChanged.connect(lambda _: self._config_changed(False))
+
+        self.record_bar = RecordBar(parser, sample_period)
+        self.layout().addWidget(self.record_bar)
 
     @property
     def config(self) -> ScopeConfig:

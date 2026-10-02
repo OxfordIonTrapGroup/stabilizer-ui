@@ -225,4 +225,5 @@ class UiWindow(SpectralDensityMixin, AbstractUiWindow):
                 pidWidget.KdBox.setSuffix(" mrad/VHz")
                 pidWidget.KddBox.setSuffix(" mrad/VHz²")
 
+        self._settings_map = settings_map
         return settings_map

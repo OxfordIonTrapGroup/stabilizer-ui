@@ -15,6 +15,7 @@ from stabilizer_psd import FFT_SIZE
 from .estimate import DETREND_METHODS, Estimate, Spectrum, load_csv, save_csv
 from ..plot import (COLOURS, FrequencyAxis, GraphicsLayoutWidget, LogAxis,
                     format_frequency)
+from ..utils import format_duration
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +29,6 @@ DEFAULTS = {
 
 #: Interval between plot updates, in milliseconds.
 UPDATE_INTERVAL = 250
-
-
-def _format_duration(seconds: float) -> str:
-    if seconds < 60:
-        return f"{seconds:.1f} s"
-    minutes, seconds = divmod(round(seconds), 60)
-    if minutes < 60:
-        return f"{minutes} min {seconds} s"
-    hours, minutes = divmod(minutes, 60)
-    return f"{hours} h {minutes} min"
 
 
 class _Trace:
@@ -370,7 +361,7 @@ class SpectralDensityWindow(QtWidgets.QDialog):
             state = "Paused"
         else:
             state = "Averaging"
-        lines = [f"{state}; {_format_duration(estimate.duration)} of data"]
+        lines = [f"{state}; {format_duration(estimate.duration)} of data"]
         if estimate.lost:
             fraction = estimate.lost / (estimate.samples + estimate.lost)
             lines.append(f"{100 * fraction:.3g} % of the data lost (left out)")
@@ -391,7 +382,7 @@ class SpectralDensityWindow(QtWidgets.QDialog):
             resolution = format_frequency(stage.bin_width / period)
             if stage.count == 0:
                 remaining = (FFT_SIZE - stage.pending) * stage.decimation * period
-                lines.append(f"Next: {resolution} in {_format_duration(remaining)}")
+                lines.append(f"Next: {resolution} in {format_duration(remaining)}")
             else:
                 lines.append(f"Next: {resolution} after {self.min_averages_box.value()} "
                              f"averages ({stage.count} so far)")

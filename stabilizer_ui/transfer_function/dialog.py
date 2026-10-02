@@ -948,13 +948,11 @@ class TransferFunctionWindow(QtWidgets.QDialog):
 class TransferFunctionMixin:
     """Adds the transfer function window to the main window of a `dual-iir`-like target.
 
-    Expects the `channels` of the window to be `AbstractChannelSettings`, and its
-    `set_mqtt_configs()` to store the settings map as `_settings_map`.
+    Expects the `channels` of the window to be `AbstractChannelSettings`.
     """
 
     def _add_transfer_function_action(self):
         """Add the (initially disabled) action to the Tools menu."""
-        self._settings_map = {}
         self._sweep_runner = None
         self._transfer_function_window = None
         self.transferFunctionAction = self.tools_menu().addAction("&Transfer function…")
@@ -981,10 +979,7 @@ class TransferFunctionMixin:
     def settings_snapshot(self) -> dict:
         """The current settings (by topic), the AFE gains, and the coefficients of the
         (first) biquad of each channel, to store with measurements."""
-        settings = {
-            key: cfg.read_handler(cfg.widgets)
-            for key, cfg in self._settings_map.items()
-        }
+        settings = super().settings_snapshot()
         gains = self.afe_gains()
         settings["afe_gains"] = {str(ch): gain for ch, gain in enumerate(gains)}
         settings["biquads"] = {

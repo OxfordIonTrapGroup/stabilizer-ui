@@ -13,10 +13,10 @@ from typing import Callable
 
 import h5py
 import numpy as np
-from stabilizer.stream_parser import Parser
 
 from . import ess
 from ..interface import AbstractStabilizerInterface
+from ..stream.decoders import source_scales, to_machine_units
 from ..stream.thread import StreamCapture, StreamThread
 
 logger = logging.getLogger(__name__)
@@ -312,21 +312,6 @@ class Measurement:
                 writer.writerow([f"{x:.9g}" for x in row])
 
 
-def _source_scales(parser: Parser) -> np.ndarray:
-    """Volts per machine unit for each stream source."""
-    scales = np.ones((parser.n_sources, 1))
-    for i, decoder in enumerate(parser.decoders):
-        decoder.to_si(scales, parser.decoder_endpoints[i],
-                      parser.decoder_endpoints[i + 1])
-    return scales[:, 0]
-
-
-def _to_machine_units(parser: Parser, data: np.ndarray):
-    """Convert raw stream data to machine units (in place)."""
-    for i, decoder in enumerate(parser.decoders):
-        decoder.to_mu(data, parser.decoder_endpoints[i], parser.decoder_endpoints[i + 1])
-
-
 class SweepRunner:
     """Runs transfer function measurements: configures and triggers the signal source of
     the device, and captures the stream data."""
@@ -378,7 +363,7 @@ class SweepRunner:
         if f"DAC{channel}" not in names:
             raise ValueError("The stream does not contain the DAC output")
 
-        scales = _source_scales(parser)
+        scales = source_scales(parser)
         gains = self.afe_gains()
         for i, name in enumerate(names):
             if name.startswith("ADC"):
@@ -439,7 +424,7 @@ class SweepRunner:
 
                 data, lost = capture.assemble()
                 batch_size = capture.batch_size
-                _to_machine_units(parser, data)
+                to_machine_units(parser, data)
                 runs.append(data)
                 lost_batches.append(lost)
                 if len(lost):

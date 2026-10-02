@@ -4,9 +4,12 @@ import logging
 from PyQt6.QtWidgets import (QMainWindow, QDialog, QMenu, QMessageBox, QLabel,
                              QPushButton)
 from PyQt6.QtGui import QPalette
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from .iir.filters import settings_coefficients
+
+if TYPE_CHECKING:
+    from .stream.thread import StreamThread
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,10 @@ class AbstractUiWindow(QMainWindow):
         self._connection_is_nominal = True
         self.stylesheet = {}
         self._tools_menu = None
+        #: The map from topic to widgets, set by `set_mqtt_configs()`.
+        self._settings_map = {}
+        self._stream_thread = None
+        self._stream_device = None
         #: Whether the device settings are confirmed, see `set_settings_enabled()`.
         self._settings_enabled = False
 
@@ -82,6 +89,20 @@ class AbstractUiWindow(QMainWindow):
         if self._tools_menu is None:
             self._tools_menu = self.menuBar().addMenu("&Tools")
         return self._tools_menu
+
+    def set_stream_thread(self, stream_thread: StreamThread, device: str):
+        """Enable the tools using the stream data, fed by the given `StreamThread`."""
+        self._stream_thread = stream_thread
+        self._stream_device = device
+        self.fftScopeWidget.record_bar.set_stream_thread(stream_thread, device,
+                                                         self.settings_snapshot)
+
+    def settings_snapshot(self) -> dict:
+        """The current settings (by topic), to store with recorded data."""
+        return {
+            key: cfg.read_handler(cfg.widgets)
+            for key, cfg in self._settings_map.items()
+        }
 
     def _setStyleSheet(self):
         stylesheet_str = ";".join(

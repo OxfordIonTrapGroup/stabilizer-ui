@@ -48,6 +48,23 @@ def link_spinbox_to_is_inf_checkbox():
     return read, write
 
 
+def format_duration(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.1f} s"
+    minutes, seconds = divmod(round(seconds), 60)
+    if minutes < 60:
+        return f"{minutes} min {seconds} s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} h {minutes} min"
+
+
+def format_size(size: float) -> str:
+    """A size in bytes, in MB or GB (decimal)."""
+    if size < 1e9:
+        return f"{size / 1e6:.1f} MB"
+    return f"{size / 1e9:.2f} GB"
+
+
 def fmt_mac(mac: str) -> str:
     mac_nosep = "".join(c for c in mac if c.isalnum()).lower()
     if len(mac_nosep) != 12 or any(char not in "0123456789abcdef" for char in mac_nosep):
