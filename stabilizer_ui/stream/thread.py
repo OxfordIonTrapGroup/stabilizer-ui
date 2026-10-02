@@ -1,5 +1,7 @@
 from __future__ import annotations
 import asyncio
+import socket
+import sys
 import time
 import threading
 import logging
@@ -18,6 +20,45 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 CallbackPayload = namedtuple("CallbackPayload", "values download loss")
+
+#: Requested size of the UDP receive buffer, in bytes. The stream is about 6 MB/s for
+#: four channels at 781 kHz, so this bridges a few seconds in which the stream thread
+#: does not get to read the socket (e.g. while the main thread holds the GIL), which
+#: captures (`StreamCapture`) depend on.
+RECEIVE_BUFFER_SIZE = 32 << 20
+
+
+def _enlarge_receive_buffer(sock: socket.socket, size: int):
+    """Enlarge the receive buffer of `sock` to `size` bytes, or as far as the OS
+    allows."""
+
+    def current():
+        value = sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
+        # Linux reports twice the requested size, to account for its bookkeeping.
+        return value // 2 if sys.platform == "linux" else value
+
+    initial = current()
+    request = size
+    while request > initial:
+        try:
+            # Linux silently caps the size at `net.core.rmem_max`, whereas macOS
+            # refuses sizes above (about) `kern.ipc.maxsockbuf`.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, request)
+            break
+        except OSError:
+            request = request * 3 // 4
+    actual = current()
+    # Only warn about much smaller buffers, as the default limit is 8 MiB on macOS.
+    if actual < size // 4:
+        hint = {
+            "linux": f" (raise it with `sysctl net.core.rmem_max={size}`)",
+            "darwin": f" (raise it with `sysctl kern.ipc.maxsockbuf={2 * size}`)",
+        }.get(sys.platform, "")
+        logger.warning(
+            "Stream receive buffer is %d kB instead of %d kB, which makes losing "
+            "stream data more likely%s", actual >> 10, size >> 10, hint)
+    else:
+        logger.info("Stream receive buffer: %d kB", actual >> 10)
 
 
 class StreamCapture:
@@ -247,6 +288,7 @@ def stream_worker(
                                                         stream_target.port,
                                                         broker_address.get_ip(), [parser],
                                                         maxsize=1)
+        _enlarge_receive_buffer(transport.get_extra_info("socket"), RECEIVE_BUFFER_SIZE)
         set_stream(stream)
 
         allocated_stream_port = transport.get_extra_info("sockname")[1]
