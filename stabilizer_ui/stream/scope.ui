@@ -45,6 +45,38 @@
       </widget>
      </item>
      <item>
+      <widget class="QLabel" name="duration_label">
+       <property name="text">
+        <string>Duration:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="DurationBox" name="duration_box">
+       <property name="toolTip">
+        <string>Length of the traces shown (and of the FFT). The arrows step through 1, 2 and 5 times powers of ten.</string>
+       </property>
+       <property name="keyboardTracking">
+        <bool>false</bool>
+       </property>
+       <property name="suffix">
+        <string> ms</string>
+       </property>
+       <property name="decimals">
+        <number>1</number>
+       </property>
+       <property name="minimum">
+        <double>0.100000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>10000.000000000000000</double>
+       </property>
+       <property name="value">
+        <double>20.000000000000000</double>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QCheckBox" name="en_fft_box">
        <property name="text">
         <string>Enable FFT</string>
@@ -63,6 +95,11 @@
    <class>GraphicsLayoutWidget</class>
    <extends>QWidget</extends>
    <header>stabilizer_ui.plot</header>
+  </customwidget>
+  <customwidget>
+   <class>DurationBox</class>
+   <extends>QDoubleSpinBox</extends>
+   <header>stabilizer_ui.stream.fft_scope</header>
   </customwidget>
  </customwidgets>
  <resources/>

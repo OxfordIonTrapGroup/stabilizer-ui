@@ -7,19 +7,26 @@ import threading
 import logging
 from collections import deque, namedtuple
 from contextlib import suppress
-from typing import Callable
+from typing import Callable, TYPE_CHECKING
 
-from . import MAX_BUFFER_PERIOD
 from ..mqtt import NetworkAddress
 from ..utils import AsyncQueueThreadsafe
 
 from stabilizer.stream import wrap
-from stabilizer.stream_parser import StabilizerStream, Parser
+from stabilizer.stream_parser import StabilizerStream
 import numpy as np
+
+if TYPE_CHECKING:
+    from .fft_scope import FftScope, ScopeConfig
 
 logger = logging.getLogger(__name__)
 
-CallbackPayload = namedtuple("CallbackPayload", "values download loss")
+#: Data for the scope: the plot data (`None` if no data has arrived since the previous
+#: payload), the stream statistics, and the `ScopeConfig` the data was computed for.
+CallbackPayload = namedtuple("CallbackPayload", "values download loss config")
+
+#: Interval at which the stream thread decodes the received frames, in seconds.
+DECODE_INTERVAL = 0.02
 
 #: Requested size of the UDP receive buffer, in bytes. The stream is about 6 MB/s for
 #: four channels at 781 kHz, so this bridges a few seconds in which the stream thread
@@ -139,76 +146,100 @@ class StreamCapture:
         return data, np.flatnonzero(~received)
 
 
-class _CapturingStream(StabilizerStream):
-    """`StabilizerStream` which also passes the raw frames to a capture (if set)."""
+class _Stream(StabilizerStream):
+    """`StabilizerStream` which collects the frames for decoding them in batches (instead
+    of parsing and queueing each one), and also passes them to a capture (if set)."""
 
     capture: StreamCapture | None = None
 
-    def datagram_received(self, data, addr):
+    def __init__(self, maxsize, parsers):
+        super().__init__(maxsize, parsers)
+        #: The frames received since they were last taken, as (header, body).
+        self.frames: list[tuple[tuple, bytes]] = []
+
+    def datagram_received(self, data, _addr):
+        header = self.header._make(self.header_fmt.unpack_from(data))
+        if header.magic != self.magic:
+            logger.warning("Bad frame magic: %#04x, ignoring", header.magic)
+            return
+        if header.format_id not in self.parsers:
+            logger.warning("No parser for format %s, ignoring", header.format_id)
+            return
+        body = data[self.header_fmt.size:]
         capture = self.capture
         if capture is not None:
-            header = self.header._make(self.header_fmt.unpack_from(data))
-            if header.magic == self.magic:
-                capture.add(header, data[self.header_fmt.size:])
-        super().datagram_received(data, addr)
+            capture.add(header, body)
+        self.frames.append((header, body))
+
+
+class _ScopeBuffer:
+    """Ring buffer of the latest samples of each source."""
+
+    def __init__(self, n_sources: int, length: int):
+        self._data = np.zeros((n_sources, length), np.float32)
+        #: Index of the oldest sample.
+        self._start = 0
+        #: Number of samples added in total.
+        self.total = 0
+
+    @property
+    def length(self) -> int:
+        return self._data.shape[1]
+
+    def resize(self, length: int):
+        """Change the length, keeping the latest samples."""
+        latest = self.latest()
+        self._data = np.zeros((len(latest), length), np.float32)
+        n = min(length, latest.shape[1])
+        self._data[:, length - n:] = latest[:, latest.shape[1] - n:]
+        self._start = 0
+
+    def add(self, data: np.ndarray):
+        """Add samples, given as (source, sample) array."""
+        self.total += data.shape[1]
+        n = min(data.shape[1], self.length)
+        data = data[:, data.shape[1] - n:]
+        first = min(n, self.length - self._start)
+        self._data[:, self._start:self._start + first] = data[:, :first]
+        self._data[:, :n - first] = data[:, first:]
+        self._start = (self._start + n) % self.length
+
+    def latest(self) -> np.ndarray:
+        """A copy of the data, from the oldest sample to the latest."""
+        return np.concatenate([self._data[:, self._start:], self._data[:, :self._start]],
+                              axis=1)
 
 
 class StreamThread:
+    """Receives the stream in a separate thread, and passes the data to the scope."""
 
-    def __init__(self,
-                 ui_callback: Callable,
-                 fftScopeWidget: FftScope,
-                 stream_target_queue: asyncio.Queue[NetworkAddress],
+    def __init__(self, ui_callback: Callable, fftScopeWidget: FftScope,
+                 stream_target_queue: AsyncQueueThreadsafe[NetworkAddress],
                  broker_address: NetworkAddress,
-                 main_event_loop: asyncio.AbstractEventLoop,
-                 max_buffer_period: float = MAX_BUFFER_PERIOD):
-
-        parser = fftScopeWidget.stream_parser
-        precondition_data = fftScopeWidget.precondition_data()
-        callback_interval = fftScopeWidget.update_period
-        maxlen = int(max_buffer_period / fftScopeWidget.sample_period)
-
-        #: The stream protocol, once the socket is open.
-        self._stream: _CapturingStream | None = None
-        self.parser = parser
+                 main_event_loop: asyncio.AbstractEventLoop):
+        self.parser = fftScopeWidget.stream_parser
         self.sample_period = fftScopeWidget.sample_period
-
-        def set_stream(stream):
-            self._stream = stream
-
-        self._terminate = threading.Event()
-        self._thread = threading.Thread(
-            target=stream_worker,
-            args=(
-                ui_callback,
-                parser,
-                precondition_data,
-                callback_interval,
-                stream_target_queue,
-                broker_address,
-                main_event_loop,
-                self._terminate,
-                maxlen,
-                set_stream,
-            ),
-        )
+        self._worker = _StreamWorker(ui_callback, fftScopeWidget, stream_target_queue,
+                                     broker_address, main_event_loop)
+        self._thread = threading.Thread(target=self._worker.run, name="stream")
 
     def start(self):
         self._thread.start()
 
     def close(self):
-        self._terminate.set()
+        self._worker.terminate.set()
         self._thread.join()
 
     def start_capture(self, capture: StreamCapture):
         """Start passing all received frames to `capture`."""
-        if self._stream is None:
+        stream = self._worker.stream
+        if stream is None:
             raise RuntimeError("Stream not open")
-        self._stream.capture = capture
+        stream.capture = capture
 
     def stop_capture(self):
-        if self._stream is not None:
-            self._stream.capture = None
+        if self._worker.stream is not None:
+            self._worker.stream.capture = None
 
 
 _StatPoint = namedtuple("_StatPoint", "time received lost bytes")
@@ -226,20 +257,25 @@ class StreamStats:
         self._stat = deque(maxlen=maxlen)
         self._stat.append(_StatPoint(time.monotonic_ns(), 0, 0, 0))
 
-    def update(self, frame: Parser):
-        sequence = frame.header.sequence
+    def update(self, header, size: int) -> int:
+        """Add a frame, given its header and the size of its body, and return the number
+        of batches lost before it."""
+        sequence = header.sequence
         lost = 0 if self._expect is None else wrap(sequence - self._expect)
-        batch_count = frame.header.batches
+        if lost >= 1 << 31:
+            # A reordered frame, or the device has restarted.
+            lost = 0
+        batch_count = header.batches
         self._expect = wrap(sequence + batch_count)
-        bytes = frame.size()
 
-        self._stat.append(_StatPoint(time.monotonic_ns(), batch_count, lost, bytes))
+        self._stat.append(_StatPoint(time.monotonic_ns(), batch_count, lost, size))
+        return lost
 
     @property
     def download(self):
         """Bytes per second"""
         duration = (self._stat[-1].time - self._stat[0].time + 1) / 1e9
-        bytes = np.sum(s.bytes for s in self._stat)
+        bytes = sum(s.bytes for s in self._stat)
         return bytes / duration
 
     @property
@@ -250,107 +286,146 @@ class StreamStats:
         return lost / sent if sent else 1
 
 
-def stream_worker(
-    ui_callback: Callable,
-    parser: Parser,
-    precondition_data: Callable,
-    callback_interval: float,
-    stream_target_queue: AsyncQueueThreadsafe[NetworkAddress],
-    broker_address: NetworkAddress,
-    main_loop: asyncio.AbstractEventLoop,
-    terminate: threading.Event,
-    maxlen: int,
-    set_stream: Callable,
-):
-    """This function doesn't run in the main thread!
+class _StreamWorker:
+    """Receives and decodes the stream, and computes the scope data. Except for the
+    constructor and `_show()`, this runs in the stream thread.
 
     The default loop on Windows doesn't support UDP!
     Also, it is not possible to change the Qt event loop. Therefore, we
-    have to handle the stream in a separate thread running this function.
+    have to handle the stream in a separate thread.
     """
 
-    buffer = [deque(np.zeros(maxlen), maxlen=maxlen) for _ in range(parser.n_sources)]
-    stat = StreamStats()
+    def __init__(self, ui_callback: Callable, scope: FftScope,
+                 stream_target_queue: AsyncQueueThreadsafe[NetworkAddress],
+                 broker_address: NetworkAddress, main_loop: asyncio.AbstractEventLoop):
+        self.ui_callback = ui_callback
+        self.scope = scope
+        self.parser = scope.stream_parser
+        self.stream_target_queue = stream_target_queue
+        self.broker_address = broker_address
+        self.main_loop = main_loop
+        self.terminate = threading.Event()
+        #: The stream protocol, once the socket is open.
+        self.stream: _Stream | None = None
+        self._stats = StreamStats()
+        self._buffer = _ScopeBuffer(self.parser.n_sources, scope.config.length)
+        #: Clear while the main thread has not shown the latest scope data yet.
+        self._shown = threading.Event()
+        self._shown.set()
 
-    async def handle_stream():
-        """This coroutine doesn't run in the main thread's loop!
+    def _decode(self):
+        """Decode the frames received since the previous call into the scope buffer."""
+        stream = self.stream
+        if stream is None or not stream.frames:
+            return
+        frames, stream.frames = stream.frames, []
+        for header, body in frames:
+            self._stats.update(header, len(body))
+        batches = sum(header.batches for header, _ in frames)
+        try:
+            # Decode all frames at once, as one with all their batches.
+            header = frames[0][0]._replace(batches=batches)
+            data = self.parser.set_frame(header, b"".join(body for _, body in frames))
+            data = data.to_si().astype(np.float32)
+        except ValueError:
+            logger.exception("Failed to decode stream frames")
+            return
+        self._buffer.add(data)
 
-        We first get the stream target from the queue, and queue back the allocated
-        port for streaming. 
+    def _show(self, payload: CallbackPayload):
+        """Show data in the scope (in the main thread)."""
+        try:
+            self.ui_callback(payload)
+        finally:
+            self._shown.set()
+
+    async def _receive(self):
+        """We first get the stream target from the queue, and queue back the allocated
+        port for streaming.
 
         The stream is then processed until it is requested to terminate.
         """
-        stream_target = await stream_target_queue.get_threadsafe()
-        stream_target_queue.task_done()
+        stream_target = await self.stream_target_queue.get_threadsafe()
+        self.stream_target_queue.task_done()
         logger.debug("Got initial requested stream target.")
 
-        transport, stream = await _CapturingStream.open(stream_target.get_ip(),
-                                                        stream_target.port,
-                                                        broker_address.get_ip(), [parser],
-                                                        maxsize=1)
+        transport, stream = await _Stream.open(stream_target.get_ip(),
+                                               stream_target.port,
+                                               self.broker_address.get_ip(),
+                                               [self.parser],
+                                               maxsize=1)
         _enlarge_receive_buffer(transport.get_extra_info("socket"), RECEIVE_BUFFER_SIZE)
-        set_stream(stream)
+        self.stream = stream
 
         allocated_stream_port = transport.get_extra_info("sockname")[1]
         stream_target = NetworkAddress(stream_target.ip, allocated_stream_port)
 
         logger.info(f"Binding stream to port: {allocated_stream_port}")
-        await stream_target_queue.put_threadsafe(stream_target)
+        await self.stream_target_queue.put_threadsafe(stream_target)
         # Wait for main thread to read the port
         logger.debug("StreamThread awaiting main thread to read stream target...")
-        await stream_target_queue.join_threadsafe()
+        await self.stream_target_queue.join_threadsafe()
         logger.debug("StreamThread resuming...")
 
         try:
-            while not terminate.is_set():
-                frame = await stream.queue.get()
-                stat.update(frame)
-                for buf, values in zip(buffer, frame.to_si()):
-                    buf.extend(values)
+            while not self.terminate.is_set():
+                self._decode()
+                await asyncio.sleep(DECODE_INTERVAL)
         finally:
             transport.close()
 
-    async def handle_callback():
-        """This coroutine doesn't run in the main thread's loop!"""
-        while not terminate.is_set():
-            while not all(map(len, buffer)):
-                await asyncio.sleep(callback_interval)
+    async def _update_scope(self):
+        shown_total = None
+        shown_config: ScopeConfig | None = None
+        while not self.terminate.is_set():
+            started = time.monotonic()
+            # Wait for the main thread to show the previous data, not to overload it.
+            if self._shown.is_set():
+                self._decode()
+                config = self.scope.config
+                if config.length != self._buffer.length:
+                    self._buffer.resize(config.length)
+                values = None
+                if self._buffer.total != shown_total or config is not shown_config:
+                    shown_total, shown_config = self._buffer.total, config
+                    # The FFT does not hold the GIL, nor block receiving the stream.
+                    values = await asyncio.to_thread(config.precondition,
+                                                     self._buffer.latest())
+                payload = CallbackPayload(values, self._stats.download, self._stats.loss,
+                                          config)
+                self._shown.clear()
+                self.main_loop.call_soon_threadsafe(self._show, payload)
+            # Spend at most a third of the time on long traces.
+            await asyncio.sleep(
+                max(self.scope.update_period, 2 * (time.monotonic() - started)))
 
-            payload = CallbackPayload(
-                precondition_data(parser.StreamData(*buffer)),
-                stat.download,
-                stat.loss,
-            )
+    def run(self):
 
-            main_loop.call_soon_threadsafe(ui_callback, payload)
-            # Do not overload the main thread!
-            await asyncio.sleep(callback_interval)
+        async def _wait_for_main_loop():
+            """Wait until main loop is running (can only return if it is running)
+            This coroutine runs in the main thread's loop.
+            """
+            return True
 
-    async def _wait_for_main_loop():
-        """Wait until main loop is running (can only return if it is running)
-        This coroutine runs in the main thread's loop.
-        """
-        return True
+        # Wait for the future to return.
+        asyncio.run_coroutine_threadsafe(_wait_for_main_loop(), self.main_loop).result()
 
-    # Wait for the future to return.
-    asyncio.run_coroutine_threadsafe(_wait_for_main_loop(), main_loop).result()
+        new_loop = asyncio.SelectorEventLoop()
+        # Setting the event loop here only applies locally to this thread.
+        asyncio.set_event_loop(new_loop)
 
-    new_loop = asyncio.SelectorEventLoop()
-    # Setting the event loop here only applies locally to this thread.
-    asyncio.set_event_loop(new_loop)
+        async def run():
+            receive_task = asyncio.ensure_future(self._receive())
 
-    async def run():
-        stream_task = asyncio.ensure_future(handle_stream())
+            async def update_scope():
+                await self._update_scope()
+                # `_receive()` might still be waiting for the main thread to exchange the
+                # stream target.
+                receive_task.cancel()
 
-        async def callback():
-            await handle_callback()
-            # `handle_stream()` only notices the request to terminate when a frame
-            # arrives, which might never happen (e.g. if the device streams to another
-            # client).
-            stream_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await asyncio.gather(update_scope(), receive_task)
 
-        with suppress(asyncio.CancelledError):
-            await asyncio.gather(callback(), stream_task)
-
-    new_loop.run_until_complete(run())
-    new_loop.close()
+        new_loop.run_until_complete(run())
+        new_loop.run_until_complete(new_loop.shutdown_default_executor())
+        new_loop.close()

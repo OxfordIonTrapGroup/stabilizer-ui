@@ -23,6 +23,13 @@ quartiq/stabilizer, which uses the miniconf-mqtt v0.20 settings protocol).
 
     This should launch the application. On the right hand side should be a live stream of the IO data of the stabilizer -- you may need to disable some firewall restrictions to get this to work properly.
 
+## Scope
+
+The scope shows the last *Duration* of the stream (up to 10 s; the arrows step through 1,
+2 and 5 times powers of ten), or with *Enable FFT*, its amplitude spectral density (one
+segment of that duration, Hamming window). Long traces are redrawn less often, as the FFT
+and drawing take longer.
+
 ## Several clients
 
 Several UIs, and other MQTT clients such as scripts, can control the same device at the
