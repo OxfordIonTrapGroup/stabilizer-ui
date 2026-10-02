@@ -82,6 +82,9 @@ class FftScope(QtWidgets.QWidget):
         self.sample_times = np.linspace(-self.buf_len * self.sample_period, 0,
                                         self.buf_len) / SCOPE_TIME_SCALE
         self.hamming = np.hamming(self.buf_len)
+        #: Scales the spectrum of a windowed trace to the (one-sided) amplitude spectral
+        #: density.
+        self.asd_scale = np.sqrt(2 * self.sample_period / np.sum(self.hamming**2))
         self.spectrum_frequencies = np.fft.rfftfreq(self.buf_len,
                                                     self.sample_period) * SCOPE_TIME_SCALE
 
@@ -114,10 +117,9 @@ class FftScope(QtWidgets.QWidget):
 
         def _preconditioner(data: Iterable):
             if self.en_fft_box.isChecked():
-                return [
-                    (self.spectrum_frequencies, np.abs(np.fft.rfft(buf * self.hamming)) *
-                     np.sqrt(2 * self.sample_period / self.buf_len)) for buf in data
-                ]
+                return [(self.spectrum_frequencies,
+                         np.abs(np.fft.rfft(buf * self.hamming)) * self.asd_scale)
+                        for buf in data]
             else:
                 return [(self.sample_times, buf) for buf in data]
 
