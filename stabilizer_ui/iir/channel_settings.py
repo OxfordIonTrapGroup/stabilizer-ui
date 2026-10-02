@@ -136,7 +136,7 @@ class _IIRWidget(QtWidgets.QWidget):
             xRange=[np.log10(min(self.frequencies)),
                     np.log10(max(self.frequencies))],
             update=False)
-        plot.setLabels(left="Magnitude (dB)", bottom="Frequency (Hz)")
+        plot.setLabels(left="Magnitude / dB", bottom="Frequency / Hz")
 
         # Disable divide by zero warnings
         np.seterr(divide='ignore')

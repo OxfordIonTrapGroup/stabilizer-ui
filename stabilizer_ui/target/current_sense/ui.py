@@ -10,6 +10,7 @@ from .topics import StabilizerSettings, UiSettings
 from ...ui import AbstractUiWindow
 from ...mqtt import NetworkAddress, UiMqttConfig
 from ...iir.channel_settings import AbstractChannelSettings, ChannelSettings
+from ...plot import UnitAxis
 from ...stream.fft_scope import FftScope
 from ...spectral_density import SpectralDensityMixin
 from ...stream.decoders import DacDecoder
@@ -88,9 +89,11 @@ class FeedforwardSettings(QtWidgets.QWidget):
             update_settling_time(box.value())
 
         # Preview of one mains period of the waveform
-        plot = self.waveformView.addPlot(row=0, col=0)
+        plot = self.waveformView.addPlot(row=0,
+                                         col=0,
+                                         axisItems={"left": UnitAxis("left")})
         plot.setLabel("left", "Feedforward", units="V")
-        plot.setLabel("bottom", "Mains phase", units="turns")
+        plot.setLabel("bottom", "Mains phase / turns")
         plot.getAxis("bottom").enableAutoSIPrefix(False)
         self._mains_phase = np.linspace(0, 1, 501)
         self._waveform = plot.plot()

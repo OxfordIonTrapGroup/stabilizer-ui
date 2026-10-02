@@ -112,7 +112,7 @@ def save_csv(path: str, spectra: list[Spectrum]):
         writer = csv.writer(f)
         writer.writerow([
             label for s in spectra for label in
-            [f"{s.name} frequency (Hz)", f"{s.name} ASD ({s.unit}/sqrt(Hz))"]
+            [f"{s.name} frequency / Hz", f"{s.name} ASD / ({s.unit}/sqrt(Hz))"]
         ])
         for i in range(length):
             writer.writerow([

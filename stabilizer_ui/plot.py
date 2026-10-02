@@ -39,6 +39,18 @@ def format_frequency(f: float, unit: bool = True) -> str:
     return f"{f:.4g} {suffix}".strip()
 
 
+class UnitAxis(pg.AxisItem):
+    """`pg.AxisItem` giving the units (with the automatic SI prefix) as divisor of the
+    label, e.g. "Voltage / mV", like the other plots, instead of in parentheses."""
+
+    def labelString(self):
+        if not self.labelUnits:
+            return super().labelString()
+        style = ";".join(f"{k}: {v}" for k, v in self.labelStyle.items())
+        return (f"<span style='{style}'>{self.labelText} / "
+                f"{self.labelUnitPrefix}{self.labelUnits}</span>")
+
+
 def _is_one_two_five(x: float) -> bool:
     """Whether `x` is 1, 2 or 5 times a power of ten."""
     mantissa = x / 10**math.floor(math.log10(x) + 1e-9)

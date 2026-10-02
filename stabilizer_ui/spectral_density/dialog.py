@@ -536,17 +536,20 @@ class SpectralDensityWindow(QtWidgets.QDialog):
 
         units = sorted({trace.unit for trace in checked})
         asd_units = ", ".join(f"{unit}/√Hz" for unit in units)
-        self.plot.setLabels(left=f"ASD ({asd_units})" if units else "ASD")
+        rms_units = ", ".join(units)
+        if len(units) > 1:
+            rms_units = f"({rms_units})"
+        self.plot.setLabels(left=f"ASD / ({asd_units})" if units else "ASD")
         self.rms_plot.setLabels(
-            left=f"Cumulative RMS ({', '.join(units)})" if units else "Cumulative RMS",
-            bottom="Frequency (Hz)")
+            left=f"Cumulative RMS / {rms_units}" if units else "Cumulative RMS",
+            bottom="Frequency / Hz")
         shown = self.rms_plot in self.view.ci.items
         if cumulative and not shown:
             self.view.addItem(self.rms_plot, row=1, col=0)
             self.view.ci.layout.setRowStretchFactor(0, 2)
         elif not cumulative and shown:
             self.view.removeItem(self.rms_plot)
-        self.plot.setLabel("bottom", None if cumulative else "Frequency (Hz)")
+        self.plot.setLabel("bottom", None if cumulative else "Frequency / Hz")
 
     def _set_curve_data(self, trace: _Trace):
         spectrum = trace.spectrum

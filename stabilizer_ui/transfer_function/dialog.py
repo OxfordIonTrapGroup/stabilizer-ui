@@ -324,8 +324,8 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.phase_plot = self.bode_view.addPlot(
             row=1, col=0, axisItems={"bottom": FrequencyAxis("bottom")})
         self.phase_plot.setXLink(self.magnitude_plot)
-        self.magnitude_plot.setLabels(left="Magnitude (dB)")
-        self.phase_plot.setLabels(left="Phase (°)", bottom="Frequency (Hz)")
+        self.magnitude_plot.setLabels(left="Magnitude / dB")
+        self.phase_plot.setLabels(left="Phase / °", bottom="Frequency / Hz")
         self.legend = self.magnitude_plot.addLegend(offset=(-10, 10))
         for plot in [self.magnitude_plot, self.phase_plot]:
             self._setup_log_plot(plot)
@@ -345,7 +345,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         ir_layout.addLayout(ir_options)
         self.ir_view = GraphicsLayoutWidget()
         self.ir_plot = self.ir_view.addPlot()
-        self.ir_plot.setLabels(left="|h| (dB)", bottom="Time after sweep start (ms)")
+        self.ir_plot.setLabels(left="|h| / dB", bottom="Time after sweep start / ms")
         self.ir_plot.showGrid(True, True, 0.3)
         self.ir_plot.setDownsampling(auto=True, mode="peak")
         self.ir_plot.setClipToView(True)
@@ -369,8 +369,8 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.distortion_view = GraphicsLayoutWidget()
         self.distortion_plot = self.distortion_view.addPlot(
             axisItems={"bottom": FrequencyAxis("bottom")})
-        self.distortion_plot.setLabels(left="Harmonic distortion (dBc)",
-                                       bottom="Fundamental frequency (Hz)")
+        self.distortion_plot.setLabels(left="Harmonic distortion / dBc",
+                                       bottom="Fundamental frequency / Hz")
         distortion_note = QtWidgets.QLabel(
             "Amplitude of the harmonics (at k times the fundamental frequency) relative "
             "to the fundamental, with their estimated noise (dashed). Set the number of "
@@ -386,7 +386,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         # Raw data.
         self.data_view = GraphicsLayoutWidget()
         self.data_plot = self.data_view.addPlot()
-        self.data_plot.setLabels(left="Voltage (V)", bottom="Time (s)")
+        self.data_plot.setLabels(left="Voltage / V", bottom="Time / s")
         self.data_plot.addLegend(offset=(-10, 10))
         self.data_plot.showGrid(True, True, 0.3)
         self.data_plot.setDownsampling(auto=True, mode="peak")
