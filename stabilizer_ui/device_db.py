@@ -39,3 +39,11 @@ stabilizer_devices["dungeon_109_current_sense"] = {
     "application": "current_sense",
     "broker": broker_255_6_4,
 }
+
+# Stabilizer v1.2 originally for use with Squareatron, currently used for firmware
+# testing.
+stabilizer_devices["lab1_test"] = {
+    "mac-address": "fc-0f-e7-23-d5-6e",
+    "application": "dual_iir",
+    "broker": broker_255_6_4,
+}
