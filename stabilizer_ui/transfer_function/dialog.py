@@ -142,10 +142,26 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([330, 970])
         self.resize(1300, 800)
+        # Enter is handled by `keyPressEvent()` instead, depending on the field.
+        for button in self.findChildren(QtWidgets.QPushButton):
+            button.setAutoDefault(False)
 
         self._load_parameters()
         self._update_sweep_info()
         self._update_buttons()
+
+    def keyPressEvent(self, event):
+        # Enter in a sweep parameter runs a measurement, and in an analysis parameter
+        # re-analyses the selected one.
+        if event.key() in (QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter):
+            focus = self.focusWidget()
+            for group, button in [(self.sweep_group, self.run_button),
+                                  (self.analysis_group, self.reanalyse_button)]:
+                if focus is not None and group.isAncestorOf(focus):
+                    if button.isEnabled():
+                        button.click()
+                    return
+        super().keyPressEvent(event)
 
     #
     # Layout.
@@ -156,8 +172,8 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        sweep_group = QtWidgets.QGroupBox("Sweep")
-        form = QtWidgets.QFormLayout(sweep_group)
+        self.sweep_group = QtWidgets.QGroupBox("Sweep")
+        form = QtWidgets.QFormLayout(self.sweep_group)
         self.channel_box = QtWidgets.QComboBox()
         self.channel_box.addItems(["0", "1"])
         self.channel_box.setToolTip(
@@ -198,10 +214,10 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         hint.setWordWrap(True)
         hint.setStyleSheet("color: gray")
         form.addRow(hint)
-        layout.addWidget(sweep_group)
+        layout.addWidget(self.sweep_group)
 
-        analysis_group = QtWidgets.QGroupBox("Analysis")
-        form = QtWidgets.QFormLayout(analysis_group)
+        self.analysis_group = QtWidgets.QGroupBox("Analysis")
+        form = QtWidgets.QFormLayout(self.analysis_group)
         window_layout = QtWidgets.QHBoxLayout()
         self.window_box = QtWidgets.QDoubleSpinBox()
         self.window_box.setRange(0.1, 1e4)
@@ -234,11 +250,10 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         form.addRow("Harmonics:", self.harmonics_box)
         self.reanalyse_button = QtWidgets.QPushButton("Re-analyse selected")
         form.addRow(self.reanalyse_button)
-        layout.addWidget(analysis_group)
+        layout.addWidget(self.analysis_group)
 
         run_layout = QtWidgets.QHBoxLayout()
         self.run_button = QtWidgets.QPushButton("Run")
-        self.run_button.setDefault(True)
         self.cancel_button = QtWidgets.QPushButton("Cancel")
         run_layout.addWidget(self.run_button)
         run_layout.addWidget(self.cancel_button)
