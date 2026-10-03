@@ -42,8 +42,8 @@ DESCRIPTION = (
     "of samples lost in transmission as (first sample, number of samples); they are "
     "zero. `start_time` is the time of the computer when the first data arrived, and "
     "`settings` the settings of the device and the UI at the start (topic path to "
-    "value). The file is written in SWMR mode: open it with `swmr=True` (and call "
-    "`refresh()` on the datasets) to read it while recording.")
+    "value, and the firmware version). The file is written in SWMR mode: open it with "
+    "`swmr=True` (and call `refresh()` on the datasets) to read it while recording.")
 
 
 def _signed(value: int) -> int:

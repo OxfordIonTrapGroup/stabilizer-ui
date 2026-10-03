@@ -9,6 +9,7 @@ from typing import Optional, TYPE_CHECKING
 from .iir.filters import settings_coefficients
 
 if TYPE_CHECKING:
+    from .firmware import Firmware
     from .stream.thread import StreamThread
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,8 @@ class AbstractUiWindow(QMainWindow):
         self._stream_device = None
         #: Whether the device settings are confirmed, see `set_settings_enabled()`.
         self._settings_enabled = False
+        #: The firmware of the device, once known (see `set_firmware()`).
+        self.firmware: Optional[Firmware] = None
 
         # Shown in the status bar while the stream is not directed to this client
         self.stream_status_label = QLabel()
@@ -98,11 +101,17 @@ class AbstractUiWindow(QMainWindow):
                                                          self.settings_snapshot)
 
     def settings_snapshot(self) -> dict:
-        """The current settings (by topic), to store with recorded data."""
-        return {
+        """The current settings (by topic) the device has, and the version of its
+        firmware (`firmware`), to store with recorded data."""
+        firmware = self.firmware
+        snapshot = {
             key: cfg.read_handler(cfg.widgets)
             for key, cfg in self._settings_map.items()
+            if firmware is None or firmware.has(key)
         }
+        if firmware is not None:
+            snapshot["firmware"] = firmware.name
+        return snapshot
 
     def _setStyleSheet(self):
         stylesheet_str = ";".join(
@@ -181,6 +190,12 @@ class AbstractUiWindow(QMainWindow):
 
     def set_mqtt_configs(self, _stream_target: NetworkAddress):
         raise NotImplementedError
+
+    def set_firmware(self, firmware: Firmware):
+        """Called with the firmware of the device each time it has connected, to disable
+        what it does not support (beyond the widgets bound to settings it does not
+        have, which are disabled already)."""
+        self.firmware = firmware
 
     def update_transfer_function(self, setting):
         """Update transfer function plot based on setting change."""

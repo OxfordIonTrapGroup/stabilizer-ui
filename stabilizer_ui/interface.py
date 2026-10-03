@@ -5,9 +5,11 @@ import json
 
 from typing import Any, Optional
 from gmqtt import Message as MqttMessage
+from PyQt6.QtWidgets import QWidget
 
 from .ui import AbstractUiWindow
-from .mqtt import (MiniconfError, MqttInterface, NetworkAddress, UiMqttBridge,
+from .firmware import CURRENT, Firmware
+from .mqtt import (MiniconfError, MqttInterface, NetworkAddress, UiMqttBridge, set_will,
                    values_match)
 from .iir.filters import settings_coefficients
 from .topic_tree import TopicTree
@@ -26,6 +28,10 @@ SETTINGS_DUMP_QUIET = 1.0
 
 #: Time to wait for the device to stop the stream when closing, in seconds.
 CLOSE_TIMEOUT = 1.0
+
+
+class FirmwareChanged(ConnectionError):
+    """The device runs another firmware than the will message is for."""
 
 
 class AbstractStabilizerInterface:
@@ -47,13 +53,16 @@ class AbstractStabilizerInterface:
       on the device to those their UI state gives, and show a warning if they differ.
     * The stream can only go to one client. The last client to start takes it, and the
       others take it back once nobody receives it.
+
+    The firmware of the device is detected each time it connects (see
+    `MqttInterface.detect_firmware()`). The widgets of the settings it does not have
+    are disabled.
     """
 
     def __init__(self, sample_period: float, app_root: TopicTree):
         self._interface: Optional[MqttInterface] = None
         self.sample_period = sample_period
         self.app_root = app_root
-        self.stream_target_topic = f"{app_root.path()}/settings/stream"
 
         self._bridge: Optional[UiMqttBridge] = None
         self._ui: Optional[AbstractUiWindow] = None
@@ -80,6 +89,14 @@ class AbstractStabilizerInterface:
         #: The value of each biquad on the device (or the error from reading it).
         self._device_biquads = dict[str, Any]()
 
+        #: The firmware of the device, once detected after it has connected.
+        self._firmware: Optional[Firmware] = None
+        #: The firmware the will message is for.
+        self._will_firmware: Firmware = CURRENT
+        #: The widgets disabled because the firmware does not have their setting, with
+        #: their tooltips.
+        self._unavailable = dict[QWidget, str]()
+
     async def change(self, setting):
         """Write a bound setting, compiling filter recipes to raw coefficients."""
         if setting.app_root().name == "settings":
@@ -89,13 +106,19 @@ class AbstractStabilizerInterface:
             if iir := setting.get_parent_until(lambda node: node.name.startswith("iir")):
                 await self._change_filter_setting(iir)
 
-    async def update(
-        self,
-        ui: AbstractUiWindow,
-        broker_address: NetworkAddress,
-        stream_target_queue: asyncio.Queue,
-    ):
+    async def update(self,
+                     ui: AbstractUiWindow,
+                     broker_address: NetworkAddress,
+                     stream_target_queue: asyncio.Queue,
+                     firmware: Firmware = CURRENT):
+        """Run the session with the device.
+
+        `firmware` is what the device is expected to run (e.g. as found by
+        `discovery`). It is only used until the device has been asked, but the session
+        then has to reconnect to the broker if it is wrong.
+        """
         self._ui = ui
+        self._will_firmware = firmware
         ui.set_settings_enabled(False)
         # Wait for the stream thread to read the initial port.
         # A bit hacky, would ideally use a join but that seems to lead to a deadlock.
@@ -110,18 +133,10 @@ class AbstractStabilizerInterface:
         settings_map = ui.set_mqtt_configs(stream_target)
         self._stream_target = str(stream_target)
 
-        # Stop the stream upon bad disconnect, also for devices connecting later
-        # (retained). gmqtt sends `str` payloads as they are, so explicitly JSON-encode
-        # the string.
-        will_message = MqttMessage(self.stream_target_topic,
-                                   json.dumps(str(NetworkAddress.UNSPECIFIED)),
-                                   retain=True,
-                                   will_delay_interval=3)
-
         try:
             bridge = await UiMqttBridge.new(broker_address,
                                             settings_map,
-                                            will_message=will_message)
+                                            will_message=self._will_message(firmware))
             ui.update_comm_status(
                 True, f"Connected to MQTT broker at {broker_address.get_ip()}.")
 
@@ -133,6 +148,7 @@ class AbstractStabilizerInterface:
                                       timeout=10.0,
                                       fallback_handler=bridge.handle_message,
                                       on_error=bridge.interrupt)
+            interface.firmware = firmware
             self._interface = interface
             take_stream = True
             while True:
@@ -155,6 +171,9 @@ class AbstractStabilizerInterface:
                         interface.check_connection()
                         while await self._step():
                             interface.check_connection()
+                except FirmwareChanged:
+                    # For the new will message.
+                    await bridge.client.reconnect()
                 except (ConnectionError, TimeoutError):
                     # gmqtt also calls reconnect on transport loss, and prevents
                     # overlapping reconnects. Request failures use exactly this path.
@@ -173,6 +192,8 @@ class AbstractStabilizerInterface:
         """Forget pending edits and disable controls until a full resynchronisation."""
         self._device_ready = False
         self._syncing = True
+        # The device might have been updated when it connects again.
+        self._firmware = None
         if self._connect_timer is not None:
             self._connect_timer.cancel()
             self._connect_timer = None
@@ -214,6 +235,53 @@ class AbstractStabilizerInterface:
         for iir in self._iirs.values():
             self._ui_value_received(iir.path())
 
+    def _stream_topic(self, firmware: Firmware) -> str:
+        return f"{self.app_root.path()}/{firmware.topic(self._stream_key)}"
+
+    def _will_message(self, firmware: Firmware) -> MqttMessage:
+        """Resets the stream target if we disconnect without doing so (also for devices
+        connecting later, as it is retained)."""
+        value = firmware.to_device(self._stream_key, str(NetworkAddress.UNSPECIFIED))
+        # gmqtt sends `str` payloads as they are, so explicitly JSON-encode the value.
+        return MqttMessage(self._stream_topic(firmware),
+                           json.dumps(value),
+                           retain=True,
+                           will_delay_interval=3)
+
+    async def _detect_firmware(self):
+        firmware = await self._interface.detect_firmware()
+        if firmware is not self._will_firmware:
+            # Clear the stream target retained in the layout of the earlier firmware:
+            # it might be ours, which the will no longer resets.
+            self._bridge.client.publish(self._stream_topic(self._will_firmware),
+                                        b"",
+                                        retain=True)
+            # The will message can only be changed when connecting to the broker.
+            self._will_firmware = firmware
+            set_will(self._bridge.client, self._will_message(firmware))
+            error = FirmwareChanged(f"Stabilizer runs firmware {firmware}")
+            self._bridge.interrupt(error)
+            raise error
+        self._firmware = firmware
+        self._keys_to_read = {key for key in self._keys_to_read if firmware.has(key)}
+        self._show_available_settings(firmware)
+        self._ui.set_firmware(firmware)
+
+    def _show_available_settings(self, firmware: Firmware):
+        """Disable the widgets of the settings `firmware` does not have."""
+        for widget, tooltip in self._unavailable.items():
+            widget.setEnabled(True)
+            widget.setToolTip(tooltip)
+        self._unavailable.clear()
+        for key, cfg in self._bridge.configs.items():
+            if firmware.has(key):
+                continue
+            for widget in cfg.widgets:
+                if widget is not None and widget not in self._unavailable:
+                    self._unavailable[widget] = widget.toolTip()
+                    widget.setEnabled(False)
+                    widget.setToolTip(f"Not available in firmware {firmware}")
+
     def _update_all_topics(self):
         for key, cfg in self._bridge.configs.items():
             self.app_root.child(key).value = cfg.read_handler(cfg.widgets)
@@ -223,11 +291,15 @@ class AbstractStabilizerInterface:
         bridge = self._bridge
         if not self._device_ready:
             return False
+        elif self._firmware is None:
+            await self._detect_firmware()
         elif self._syncing and self._keys_to_read:
             await self._read(self._keys_to_read.pop())
         elif bridge.keys_to_write:
             # Changes in the UI come first: they supersede what was requested before.
             key = bridge.keys_to_write.pop()
+            if not self._firmware.has(key):
+                return True
             setting = self.app_root.child(key)
             self._update_all_topics()
             self._stream_requested |= key == self._stream_key
@@ -239,7 +311,8 @@ class AbstractStabilizerInterface:
             # Everything shown is now what the device has.
             self._syncing = False
             self._ui.set_settings_enabled(True)
-            self._ui.update_comm_status(True, "Connected to Stabilizer")
+            self._ui.update_comm_status(
+                True, f"Connected to Stabilizer (firmware {self._firmware})")
         else:
             return False
         return True

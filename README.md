@@ -7,8 +7,13 @@ A UI for communicating with and visualising live data streamed from the ARTIQ St
 * `current_sense`: For the `current_sense` binary (`dual-iir` with a mains-synchronised harmonic
   feedforward on channel 0, for the current sense board)
 
-All require the v0.11 firmware (OxfordIonTrapGroup/stabilizer after the merge of upstream
-quartiq/stabilizer, which uses the miniconf-mqtt v0.20 settings protocol).
+They are made for the v0.11 firmware (OxfordIonTrapGroup/stabilizer after the merge of
+upstream quartiq/stabilizer, which uses the miniconf-mqtt v0.20 settings protocol).
+`dual_iir` and `fnc` also work with the earlier firmware (OxfordIonTrapGroup/stabilizer
+`master` before the merge, v0.9 with miniconf 0.9), except for what it does not have: the
+run mode (which it only has for both channels together) and the signal source needed for
+transfer function measurements. These are greyed out. The UI finds out which version a
+device runs when it connects.
 
 ## Getting started
 1. Clone this repository and `cd` into it in the terminal. Install [uv](https://docs.astral.sh/uv/).
@@ -90,8 +95,9 @@ dependency group (see *Getting started*).
 
 Several UIs, and other MQTT clients such as scripts, can control the same device at the
 same time. This needs firmware built with the minimq fix of the OxfordIonTrapGroup fork
-(minimq branch `v0.10-in-flight-limit`). Earlier firmware can leave requests unanswered
-when several clients make them at once, which the UI reports as a connection error.
+(minimq branch `v0.10-in-flight-limit`). Earlier firmware (including v0.9) can leave
+requests unanswered when several clients make them at once, which the UI reports as a
+connection error.
 
 The UI always shows the settings the device has:
 

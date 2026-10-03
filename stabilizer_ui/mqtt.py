@@ -11,6 +11,8 @@ from typing import NamedTuple, List, Callable, Any, Dict, Optional
 from PyQt6 import QtWidgets
 from gmqtt import Client as MqttClient, Subscription
 
+from .firmware import CURRENT, FIRMWARES, Firmware
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,6 +29,10 @@ class MiniconfError(Exception):
         self.message = message
 
 
+class UnsupportedFirmware(Exception):
+    """The device runs a firmware version the UI does not know."""
+
+
 class MqttInterface:
     """
     Wraps a gmqtt Client to provide a request/response-type interface using the MQTT 5
@@ -34,6 +40,9 @@ class MqttInterface:
 
     A timeout is also applied to every request (which is necessary for robustness, as
     Stabilizer only supports QoS 0 for now).
+
+    Settings are given by their key in the current firmware, and `firmware` translates
+    them for the device.
     """
 
     def __init__(self,
@@ -62,6 +71,9 @@ class MqttInterface:
         self._timeout = timeout
         self._maxsize = maxsize
 
+        #: The firmware of the device, see `detect_firmware()`.
+        self.firmware: Firmware = CURRENT
+
         #: Random ID of this client (no real reason to use UUID here over another source
         #: of randomness).
         self.client_id = str(uuid.uuid4()).split("-")[0]
@@ -84,31 +96,56 @@ class MqttInterface:
         if self._error is not None:
             raise self._error
 
+    def topic(self, key: str) -> str:
+        """The topic (relative to the topic base) of the setting `key` on the device,
+        raising `MiniconfError` if its firmware does not have it."""
+        topic = self.firmware.topic(key)
+        if topic is None:
+            raise MiniconfError(key, f"Not available in firmware {self.firmware}")
+        return topic
+
     async def request(self,
-                      topic: str,
+                      key: str,
                       argument: Any,
                       retain: bool = False,
                       timeout: Optional[float] = None) -> str:
-        """Set the miniconf leaf at `topic` (relative to the topic base) to `argument`.
+        """Set the miniconf leaf `key` (relative to the topic base) to `argument`.
 
         Returns the response message on success, and raises `MiniconfError` if the
         device reported an error, or `TimeoutError` if it has not responded after
         `timeout` (by default, the timeout of the interface).
         """
-        return await self._request(topic,
-                                   json.dumps(argument).encode("utf-8"), retain, timeout)
+        payload = json.dumps(self.firmware.to_device(key, argument)).encode("utf-8")
+        return await self._request(self.topic(key), payload, retain, timeout)
 
-    async def get(self, topic: str) -> Any:
-        """Get the value of the miniconf leaf at `topic` (relative to the topic base)."""
+    async def get(self, key: str) -> Any:
+        """Get the value of the miniconf leaf `key` (relative to the topic base)."""
         # An empty payload requests the value. (It must not be retained, as that would
         # clear the retained value instead.)
-        return json.loads(await self._request(topic, b"", False))
+        value = json.loads(await self._request(self.topic(key), b"", False))
+        return self.firmware.from_device(key, value)
 
-    def publish(self, topic: str, argument: Any, retain: bool = False):
+    async def detect_firmware(self) -> Firmware:
+        """Find out which firmware the device runs (by getting a setting which only one
+        version has at its place), and use it for further requests."""
+        for firmware in FIRMWARES:
+            self.firmware = firmware
+            try:
+                await self.get(firmware.probe_key)
+            except MiniconfError:
+                continue
+            logger.info("Stabilizer firmware %s", firmware)
+            return firmware
+        self.firmware = CURRENT
+        raise UnsupportedFirmware("Unknown firmware version: the device has the stream "
+                                  "target at none of the places expected")
+
+    def publish(self, key: str, argument: Any, retain: bool = False):
         """Publish `argument` without expecting a response."""
         self.check_connection()
-        self._client.publish(f"{self._topic_base}/{topic}",
-                             json.dumps(argument).encode("utf-8"),
+        payload = json.dumps(self.firmware.to_device(key, argument)).encode("utf-8")
+        self._client.publish(f"{self._topic_base}/{self.topic(key)}",
+                             payload,
                              qos=0,
                              retain=retain)
 
@@ -192,8 +229,16 @@ class MqttInterface:
                 result.set_result(message)
             else:
                 request_topic = topic[len(self._response_base) + 1:]
-                result.set_exception(MiniconfError(request_topic, message))
+                key = self.firmware.key(request_topic) or request_topic
+                result.set_exception(MiniconfError(key, message))
         return 0
+
+
+def set_will(client: MqttClient, message):
+    """Change the will message of `client`, which takes effect when it next connects to
+    the broker. (gmqtt only takes it in the constructor, but sends it again with
+    `reconnect()`.)"""
+    client._will_message = message
 
 
 class NetworkAddress(NamedTuple):
@@ -341,7 +386,8 @@ class UiMqttBridge:
       refuse or modify what a client requests. The values the device publishes (which it
       does for all settings after connecting) are passed to `on_device_value`, and the
       requests of other clients to `on_settings_request`, for the owner to read the
-      setting back.
+      setting back. Both get the key of the setting in the current firmware (see the
+      `firmware` of the `MqttInterface`).
     * `alive`, `meta`: the device status.
 
     Showing a value from the broker in the widgets does not queue it for writing.
@@ -458,23 +504,29 @@ class UiMqttBridge:
             logger.error("Stabilizer had panicked, but has restarted: %s", panic_info)
         self._ui.update_panic_status(has_panicked, panic_info)
 
-    def _handle_settings_message(self, key: str, payload: bytes, properties: dict,
+    def _handle_settings_message(self, topic: str, payload: bytes, properties: dict,
                                  retained: bool):
         if retained:
             # A request from before we subscribed. The device might not have accepted
             # it, or have been set to something else since (not retained).
             return
+        firmware = self._interface.firmware
+        key = firmware.key(topic)
+        if key is None:
+            logger.debug("Ignoring message topic '%s'", topic)
+            return
         code = dict(properties.get("user_property", [])).get("code")
         if code is None:
+            # (Firmware v0.9 publishes its settings after connecting like this as well.)
             self.on_settings_request(key)
         elif code == "Ok":
             # The device publishes the values of its settings on their topics (with the
             # response code): all of them after it has connected, and those a client
             # asks for without giving a response topic.
             try:
-                value = json.loads(payload)
-            except ValueError:
-                logger.warning("Failed to parse the value of '%s': %s", key, payload)
+                value = firmware.from_device(key, json.loads(payload))
+            except (ValueError, KeyError, TypeError):
+                logger.warning("Failed to parse the value of '%s': %s", topic, payload)
                 return
             self.on_device_value(key, value)
 

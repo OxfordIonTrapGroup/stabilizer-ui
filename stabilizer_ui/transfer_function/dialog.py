@@ -971,6 +971,15 @@ class TransferFunctionMixin:
         self._sweep_runner = runner
         self.transferFunctionAction.setEnabled(True)
 
+    def set_firmware(self, firmware):
+        super().set_firmware(firmware)
+        # The measurements need the swept-sine source.
+        available = firmware.has("settings/trigger")
+        action = self.transferFunctionAction
+        action.setEnabled(available and self._sweep_runner is not None)
+        unavailable = f"Transfer function (not available in firmware {firmware})"
+        action.setText("&Transfer function…" if available else unavailable)
+
     def show_transfer_function(self):
         if self._transfer_function_window is None:
             self._transfer_function_window = TransferFunctionWindow(
