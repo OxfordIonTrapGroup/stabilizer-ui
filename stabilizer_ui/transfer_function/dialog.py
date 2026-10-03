@@ -11,7 +11,7 @@ import re
 import numpy as np
 import pyqtgraph as pg
 import pyqtgraph.exporters
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 from scipy import signal
 
 from . import ess
@@ -316,6 +316,12 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.remove_button.clicked.connect(self._remove)
         self.list_widget.itemChanged.connect(self._item_changed)
         self.list_widget.currentRowChanged.connect(self._selection_changed)
+        # Delete (or Backspace, labelled delete on Mac keyboards) in the list removes the
+        # selected measurement, unless it is being renamed.
+        for key in [QtCore.Qt.Key.Key_Delete, QtCore.Qt.Key.Key_Backspace]:
+            shortcut = QtGui.QShortcut(QtGui.QKeySequence(key), self.list_widget)
+            shortcut.setContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
+            shortcut.activated.connect(self.remove_button.click)
         return panel
 
     def _make_plots(self) -> QtWidgets.QWidget:
