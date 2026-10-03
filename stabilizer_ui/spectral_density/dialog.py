@@ -475,8 +475,10 @@ class SpectralDensityWindow(QtWidgets.QDialog):
             return
         self._set_directory(paths[0])
         for path in paths:
+            file_name = os.path.splitext(os.path.basename(path))[0]
             try:
                 for spectrum in load_csv(path):
+                    spectrum.name = f"{spectrum.name} ({file_name})"
                     self._add_stored(spectrum)
             except Exception as e:
                 logger.exception("Failed to load %s", path)
