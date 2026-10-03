@@ -287,6 +287,9 @@ def read(widgets):
     if isinstance(widget, QtWidgets.QComboBox):
         return widget.currentText()
 
+    if isinstance(widget, QtWidgets.QLineEdit):
+        return widget.text()
+
     assert f"Widget type not handled: {widget}"
 
 
@@ -308,6 +311,8 @@ def write(widgets, value):
     elif isinstance(widget, QtWidgets.QComboBox):
         options = [widget.itemText(i) for i in range(widget.count())]
         widget.setCurrentIndex(options.index(value))
+    elif isinstance(widget, QtWidgets.QLineEdit):
+        widget.setText(str(value))
     else:
         assert f"Widget type not handled: {widget}"
 
@@ -388,7 +393,8 @@ class UiMqttBridge:
     * `ui/...` (UI state, retained on the broker): values published by other clients are
       shown in the widgets. Values retained below one of the keys (e.g.
       `ui/ch0/iir0/pid/Kp` for `ui/ch0/iir0`) are parts of it in an earlier layout, and
-      are shown if the key itself has nothing retained.
+      are shown if the key itself has nothing retained. `legacy_map` names further topics
+      of earlier layouts, and the parts of a current key each gives.
     * `settings/...` (device settings): only the device knows their values, as it can
       refuse or modify what a client requests. The values the device publishes (which it
       does for all settings after connecting) are passed to `on_device_value`, and the
@@ -439,6 +445,10 @@ class UiMqttBridge:
         self._loading = False
         self._ui_retained = set()
         self._ui_legacy = dict[str, dict[str, Any]]()
+        #: Topics of UI state in an earlier layout which are not below a current key: for
+        #: each, the current key and a function giving the parts of its value (by path
+        #: below the key) for the retained value. Set by the owner (from the target).
+        self.legacy_map: Dict[str, tuple[str, Callable[[Any], Dict[str, Any]]]] = {}
 
     @classmethod
     async def new(cls, broker_address: NetworkAddress, configs, **kwargs):
@@ -560,6 +570,23 @@ class UiMqttBridge:
 
     def _legacy_part_received(self, topic: str, payload: bytes):
         """Keep a retained part of the value of a key in an earlier layout."""
+        try:
+            value = json.loads(payload)
+        except ValueError:
+            logger.warning("Failed to parse the value of '%s': %s", topic, payload)
+            return
+        if topic in self.legacy_map:
+            key, convert = self.legacy_map[topic]
+            try:
+                parts = convert(value)
+            except Exception:
+                logger.warning("Ignoring the value of '%s': %s",
+                               topic,
+                               value,
+                               exc_info=True)
+                return
+            self._ui_legacy.setdefault(key, {}).update(parts)
+            return
         parts = topic.split("/")
         for i in range(len(parts) - 1, 1, -1):
             key = "/".join(parts[:i])
@@ -567,11 +594,6 @@ class UiMqttBridge:
                 break
         else:
             logger.debug("Ignoring message topic '%s'", topic)
-            return
-        try:
-            value = json.loads(payload)
-        except ValueError:
-            logger.warning("Failed to parse the value of '%s': %s", topic, payload)
             return
         self._ui_legacy.setdefault(key, {})["/".join(parts[i:])] = value
 
@@ -681,5 +703,8 @@ class UiMqttBridge:
                     widget.toggled.connect(queue)
                 elif hasattr(widget, "activated"):
                     widget.activated.connect(queue)
+                elif hasattr(widget, "editingFinished"):
+                    # Line edits: when the user is done, not on every keystroke.
+                    widget.editingFinished.connect(queue)
                 else:
                     assert f"Widget type not handled: {widget}"

@@ -1,8 +1,11 @@
+import logging
 import textwrap
 import asyncio
 
 from math import inf
 from . import mqtt
+
+logger = logging.getLogger(__name__)
 
 # Unit conversions
 kilo = (
@@ -25,6 +28,37 @@ milli = (
     lambda widgets: mqtt.read(widgets) * 1e-3,
     lambda widgets, value: mqtt.write(widgets, value * 1e3),
 )
+
+# A check box bound to the negation of a setting.
+invert = (
+    lambda widgets: not mqtt.read(widgets),
+    lambda widgets, value: mqtt.write(widgets, not value),
+)
+
+
+def radio_group(choices: list[str]):
+    """Read and write handlers binding a group of radio buttons (one per choice, in the
+    order of `choices`) to a setting with one of `choices` as its value."""
+
+    def read(widgets):
+        for i in range(1, len(widgets)):
+            if widgets[i].isChecked():
+                return choices[i]
+        # Default to first value, as Qt can sometimes transiently have all buttons
+        # of a radio group disabled (apparently so when clicking an already-selected
+        # button).
+        return choices[0]
+
+    def write(widgets, value):
+        one_checked = False
+        for widget, choice in zip(widgets, choices):
+            checked = choice == value
+            widget.setChecked(checked)
+            one_checked |= checked
+        if not one_checked:
+            logger.warning("Unexpected value: '%s' (choices: '%s')", value, choices)
+
+    return read, write
 
 
 def link_spinbox_to_is_inf_checkbox():

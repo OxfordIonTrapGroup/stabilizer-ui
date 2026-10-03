@@ -96,6 +96,8 @@ class AbstractStabilizerInterface:
         #: The widgets disabled because the firmware does not have their setting, with
         #: their tooltips.
         self._unavailable = dict[QWidget, str]()
+        #: Whether a setting changed in the UI is being written right now.
+        self._writing = False
 
     async def change(self, setting):
         """Write a bound setting, compiling filter recipes to raw coefficients."""
@@ -131,6 +133,7 @@ class AbstractStabilizerInterface:
         logger.debug("Got stream target from stream thread.")
 
         settings_map = ui.set_mqtt_configs(stream_target)
+        legacy_map = ui.legacy_ui_map()
         # Written when the user renames the device (`deviceRenamed`).
         settings_map[DEVICE_NAME_KEY] = UiMqttConfig(
             [], lambda _: ui.device_name,
@@ -146,6 +149,7 @@ class AbstractStabilizerInterface:
                 True, f"Connected to MQTT broker at {broker_address.get_ip()}.")
 
             self._bridge = bridge
+            bridge.legacy_map = legacy_map
             self._connect_ui(ui, bridge)
 
             interface = MqttInterface(bridge.client,
@@ -309,7 +313,11 @@ class AbstractStabilizerInterface:
             setting = self.app_root.child(key)
             self._update_all_topics()
             self._stream_requested |= key == self._stream_key
-            await self.change(setting)
+            self._writing = True
+            try:
+                await self.change(setting)
+            finally:
+                self._writing = False
             self._ui_value_received(key)
         elif self._keys_to_read:
             await self._read(self._keys_to_read.pop())
@@ -558,6 +566,17 @@ class AbstractStabilizerInterface:
         if self._interface is None or not self._device_ready or self._syncing:
             raise ConnectionError("Not connected to Stabilizer")
         return await self._interface.get(key)
+
+    async def flush(self):
+        """Wait until the settings changed in the UI have been written to the device, and
+        read back (so that the widgets show what the device has), raising
+        `ConnectionError` if the device is not connected."""
+        while True:
+            if self._interface is None or not self._device_ready or self._syncing:
+                raise ConnectionError("Not connected to Stabilizer")
+            if not (self._bridge.keys_to_write or self._writing or self._keys_to_read):
+                return
+            await asyncio.sleep(0.02)
 
     async def request_settings_change(self,
                                       key: str,

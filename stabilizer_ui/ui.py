@@ -215,13 +215,20 @@ class AbstractUiWindow(QMainWindow):
     def setCentralWidget(self, widget):
         # Subclasses only set the central widget after our constructor.
         super().setCentralWidget(widget)
-        widget.setEnabled(self._settings_enabled)
+        for child in self.settings_widgets():
+            child.setEnabled(self._settings_enabled)
+
+    def settings_widgets(self) -> list:
+        """The widgets disabled while the device settings are unconfirmed (see
+        `set_settings_enabled()`): the central widget, unless a subclass has parts (e.g. a
+        log) which stay usable."""
+        return [self.centralWidget()] if self.centralWidget() is not None else []
 
     def set_settings_enabled(self, enabled: bool):
         """Disable hardware controls and plots while their state is unconfirmed."""
         self._settings_enabled = enabled
-        if self.centralWidget() is not None:
-            self.centralWidget().setEnabled(enabled)
+        for widget in self.settings_widgets():
+            widget.setEnabled(enabled)
         self.menuBar().setEnabled(enabled)
         self.streamTakeOverButton.setEnabled(enabled)
         for child in self.findChildren(QDialog):
@@ -246,6 +253,11 @@ class AbstractUiWindow(QMainWindow):
 
     def set_mqtt_configs(self, _stream_target: NetworkAddress):
         raise NotImplementedError
+
+    def legacy_ui_map(self) -> dict:
+        """UI state topics of earlier layouts which are not below a current key, and how
+        they map onto the current keys (see `UiMqttBridge.legacy_map`)."""
+        return {}
 
     def set_firmware(self, firmware: Firmware):
         """Called with the firmware of the device each time it has connected, to disable

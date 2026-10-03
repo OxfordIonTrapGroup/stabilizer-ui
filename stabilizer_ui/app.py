@@ -36,21 +36,47 @@ def create_application() -> QtWidgets.QApplication:
     return app
 
 
+def target_module(target: str):
+    """The `app` module of a target (in `stabilizer_ui.target`).
+
+    Besides `UiWindow`, `StabilizerInterface`, `topics` and `TITLE`, it may define
+    `add_arguments(parser)` for command line arguments of its own,
+    `device_db_defaults(args, entry)` to fill them in from a `device_db` entry, and
+    `start(ui, interface, loop, args)`, which `run_ui()` calls before running the event
+    loop (for tasks and servers of the target), and which returns a function to call when
+    the UI is closed (or `None`).
+    """
+    return importlib.import_module(f"stabilizer_ui.target.{target}.app")
+
+
+def add_target_arguments(parser: argparse.ArgumentParser, targets: list[str]):
+    """Add the command line arguments of the given targets (modules in
+    `stabilizer_ui.target`) to `parser`, in a group each."""
+    for target in targets:
+        module = target_module(target)
+        add_arguments = getattr(module, "add_arguments", None)
+        if add_arguments is not None:
+            add_arguments(parser.add_argument_group(f"{target} options"))
+
+
 def run_ui(loop: QEventLoop,
            target: str,
            broker_address: NetworkAddress,
            device_id: str,
            name: str,
            stream_port: int = 0,
-           firmware: Firmware = CURRENT):
+           firmware: Firmware = CURRENT,
+           args: Optional[argparse.Namespace] = None):
     """Show the UI of `target` (a module in `stabilizer_ui.target`) for a device, and run
     until it is closed (exiting the process).
 
     :param name: The name of the device (empty if it has none). The window follows the
         name retained on the broker, and the user can change it.
     :param firmware: The firmware the device is expected to run (it is asked anyway).
+    :param args: The parsed command line arguments (including those of the target, see
+        `target_module()`), if any.
     """
-    module = importlib.import_module(f"stabilizer_ui.target.{target}.app")
+    module = target_module(target)
     module.topics.app_root.name = device_id
 
     # Find out which local IP address we are going to direct the stream to.
@@ -87,10 +113,17 @@ def run_ui(loop: QEventLoop,
             SweepRunner(stabilizer_interface, stream_thread, ui.device_label,
                         ui.afe_gains, ui.settings_snapshot))
 
+    start = getattr(module, "start", None)
+    cleanup = None
+    if start is not None:
+        cleanup = start(ui, stabilizer_interface, loop, args)
+
     try:
         sys.exit(loop.run_forever())
     finally:
         stream_thread.close()
+        if cleanup is not None:
+            cleanup()
         with suppress(asyncio.CancelledError):
             stabilizer_task.cancel()
             loop.run_until_complete(stabilizer_task)
@@ -109,6 +142,7 @@ def run_from_device_db(target: str, description: str):
                         help="Stabilizer name as entered in the device database")
     parser.add_argument("--stream-port", default=0, type=int)
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    add_target_arguments(parser, [target])
     args = parser.parse_args()
 
     if args.debug:
@@ -127,6 +161,9 @@ def run_from_device_db(target: str, description: str):
 
     device_id = stabilizer.get("net_id", fmt_mac(stabilizer["mac-address"]))
     broker_address = stabilizer["broker"]
+    defaults = getattr(target_module(target), "device_db_defaults", None)
+    if defaults is not None:
+        defaults(args, stabilizer)
 
     app = create_application()
     with QEventLoop(app) as loop:
@@ -134,7 +171,7 @@ def run_from_device_db(target: str, description: str):
         firmware = loop.run_until_complete(
             _expected_firmware(broker_address, target, device_id))
         run_ui(loop, target, broker_address, device_id, args.stabilizer_name,
-               args.stream_port, firmware)
+               args.stream_port, firmware, args)
 
 
 async def _expected_firmware(broker_address: NetworkAddress, target: str,
@@ -350,6 +387,7 @@ def main():
                         help="List the devices found and exit")
     parser.add_argument("--stream-port", default=0, type=int)
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    add_target_arguments(parser, sorted(set(TARGETS.values())))
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -382,7 +420,7 @@ def main():
                 logger.error("There is no UI for %s", device.app)
                 sys.exit(1)
         run_ui(loop, device.target, device.broker, device.id, device.name,
-               args.stream_port, device.firmware or CURRENT)
+               args.stream_port, device.firmware or CURRENT, args)
 
 
 if __name__ == "__main__":
