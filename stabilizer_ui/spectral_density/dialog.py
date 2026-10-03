@@ -9,7 +9,7 @@ import re
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 from stabilizer_psd import FFT_SIZE
 
 from .estimate import DETREND_METHODS, Estimate, Spectrum, load_csv, save_csv
@@ -197,6 +197,12 @@ class SpectralDensityWindow(QtWidgets.QDialog):
         self.save_button.clicked.connect(self._save)
         self.list_widget.itemChanged.connect(self._item_changed)
         self.list_widget.currentRowChanged.connect(lambda _: self._update_buttons())
+        # Delete (or Backspace, labelled delete on Mac keyboards) in the list removes the
+        # selected trace, unless it is being renamed.
+        for key in [QtCore.Qt.Key.Key_Delete, QtCore.Qt.Key.Key_Backspace]:
+            shortcut = QtGui.QShortcut(QtGui.QKeySequence(key), self.list_widget)
+            shortcut.setContext(QtCore.Qt.ShortcutContext.WidgetShortcut)
+            shortcut.activated.connect(self.remove_button.click)
         return panel
 
     def _make_plot(self) -> QtWidgets.QWidget:
