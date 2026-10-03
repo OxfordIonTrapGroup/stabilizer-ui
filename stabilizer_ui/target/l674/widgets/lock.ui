@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>LockPanel</class>
+ <widget class="QWidget" name="LockPanel">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>760</width>
+    <height>720</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="panelLayout">
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QGroupBox" name="aomLockGroup">
+     <property name="title">
+      <string>AOM lock (Vescent controller)</string>
+     </property>
+     <layout class="QHBoxLayout" name="aomLockLayout">
+      <property name="topMargin">
+       <number>6</number>
+      </property>
+      <property name="bottomMargin">
+       <number>6</number>
+      </property>
+      <item>
+       <widget class="QCheckBox" name="enableAOMLockBox">
+        <property name="toolTip">
+         <string>Release the hold of the Vescent AOM lock (auxiliary TTL output LVDS7 low). Unticked, the output is high and the AOM lock is held.</string>
+        </property>
+        <property name="text">
+         <string>Enable (release hold)</string>
+        </property>
+        <property name="shortcut">
+         <string>F5</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="aomLockSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="pztLockGroup">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>1</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="title">
+      <string>SolsTiS PZT lock (Stabilizer)</string>
+     </property>
+     <layout class="QVBoxLayout" name="pztLockLayout">
+      <property name="topMargin">
+       <number>6</number>
+      </property>
+      <property name="bottomMargin">
+       <number>6</number>
+      </property>
+      <item>
+       <layout class="QHBoxLayout" name="lockModeLayout">
+        <item>
+         <widget class="QRadioButton" name="disablePztButton">
+          <property name="toolTip">
+           <string>Zero coefficients for the first filter of both channels: both DAC outputs are zero.</string>
+          </property>
+          <property name="text">
+           <string>Disable (zero output)</string>
+          </property>
+          <property name="shortcut">
+           <string>F6</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="rampPztButton">
+          <property name="toolTip">
+           <string>Pass ADC0 through to the fast PZT with a gain of 5 (about ±10 V from the Vescent servo box ramp), with the slow PZT output zero, for finding the resonance.</string>
+          </property>
+          <property name="text">
+           <string>Pass through (ramp)</string>
+          </property>
+          <property name="shortcut">
+           <string>F7</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QRadioButton" name="enablePztButton">
+          <property name="toolTip">
+           <string>Feed back with the filters designed below.</string>
+          </property>
+          <property name="text">
+           <string>Enable (feed back)</string>
+          </property>
+          <property name="shortcut">
+           <string>F8</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="lockModeSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QLabel" name="gainRampTimeLabel">
+          <property name="text">
+           <string>Gain ramp time:</string>
+          </property>
+          <property name="buddy">
+           <cstring>gainRampTimeBox</cstring>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QDoubleSpinBox" name="gainRampTimeBox">
+          <property name="toolTip">
+           <string>Time over which the error signal gain is ramped from zero to one when the lock is enabled (0 for no ramp).</string>
+          </property>
+          <property name="keyboardTracking">
+           <bool>false</bool>
+          </property>
+          <property name="suffix">
+           <string> s</string>
+          </property>
+          <property name="decimals">
+           <number>3</number>
+          </property>
+          <property name="maximum">
+           <double>10.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.010000000000000</double>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QTabWidget" name="channelTabWidget">
+        <property name="currentIndex">
+         <number>-1</number>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="adc1Group">
+     <property name="title">
+      <string>ADC1 input (cavity transmission)</string>
+     </property>
+     <layout class="QVBoxLayout" name="adc1Layout">
+      <property name="topMargin">
+       <number>6</number>
+      </property>
+      <property name="bottomMargin">
+       <number>6</number>
+      </property>
+      <item>
+       <layout class="QHBoxLayout" name="lockDetectLayout">
+        <item>
+         <widget class="QLabel" name="lockDetectLabel">
+          <property name="text">
+           <string>Lock detection: threshold</string>
+          </property>
+          <property name="buddy">
+           <cstring>lockDetectThresholdBox</cstring>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QDoubleSpinBox" name="lockDetectThresholdBox">
+          <property name="toolTip">
+           <string>The lock is detected (LVDS6 high) while the transmission is above this (in volts at the ADC1 input, before the AFE gain).</string>
+          </property>
+          <property name="keyboardTracking">
+           <bool>false</bool>
+          </property>
+          <property name="suffix">
+           <string> V</string>
+          </property>
+          <property name="decimals">
+           <number>3</number>
+          </property>
+          <property name="minimum">
+           <double>-10.000000000000000</double>
+          </property>
+          <property name="maximum">
+           <double>10.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.001000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lockDetectDelayLabel">
+          <property name="text">
+           <string>holdoff</string>
+          </property>
+          <property name="buddy">
+           <cstring>lockDetectDelayBox</cstring>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QDoubleSpinBox" name="lockDetectDelayBox">
+          <property name="toolTip">
+           <string>Time the transmission has to stay above the threshold before the lock is reported.</string>
+          </property>
+          <property name="keyboardTracking">
+           <bool>false</bool>
+          </property>
+          <property name="suffix">
+           <string> s</string>
+          </property>
+          <property name="decimals">
+           <number>3</number>
+          </property>
+          <property name="maximum">
+           <double>10.000000000000000</double>
+          </property>
+          <property name="singleStep">
+           <double>0.100000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="afe1GainLabel">
+          <property name="text">
+           <string>AFE gain:</string>
+          </property>
+          <property name="buddy">
+           <cstring>afe1GainBox</cstring>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="afe1GainBox">
+          <property name="toolTip">
+           <string>Gain of the ADC1 analog front end.</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="adc1ReadingLabel">
+          <property name="text">
+           <string>Reading:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="adc1ReadingEdit">
+          <property name="toolTip">
+           <string>The filtered transmission as polled from the device, coloured by the lock state (green: locked, red: out of lock, yellow: relocking).</string>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>90</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">QLineEdit { background-color: grey; }</string>
+          </property>
+          <property name="text">
+           <string>&lt;pending&gt;</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="lockDetectSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="relockGroup">
+     <property name="title">
+      <string>Automatic relocking</string>
+     </property>
+     <layout class="QGridLayout" name="relockLayout">
+      <property name="topMargin">
+       <number>6</number>
+      </property>
+      <property name="bottomMargin">
+       <number>6</number>
+      </property>
+      <item row="0" column="0" colspan="2">
+       <widget class="QCheckBox" name="enableRelockingBox">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="toolTip">
+         <string>Relock the laser when the transmission drops below the threshold: tune it back to the frequency the wavemeter read while it was locked (with the SolsTiS etalon and resonator), then enable the AOM and PZT locks. Available once the wavemeter answers.</string>
+        </property>
+        <property name="text">
+         <string>Enable relocking</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2" colspan="4">
+       <widget class="QLabel" name="relockStatusLabel">
+        <property name="text">
+         <string/>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="wandServerLabel">
+        <property name="text">
+         <string>WAnD server:</string>
+        </property>
+        <property name="buddy">
+         <cstring>wandServerEdit</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="wandServerEdit">
+        <property name="toolTip">
+         <string>The WAnD wavemeter server (sipyco RPC) giving the laser frequency, as host:port. Stored on the broker with the other UI state.</string>
+        </property>
+        <property name="placeholderText">
+         <string>host:port</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="2">
+       <widget class="QLabel" name="wandChannelLabel">
+        <property name="text">
+         <string>Channel:</string>
+        </property>
+        <property name="buddy">
+         <cstring>wandChannelEdit</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="3">
+       <widget class="QLineEdit" name="wandChannelEdit">
+        <property name="toolTip">
+         <string>The laser (channel) of the wavemeter server.</string>
+        </property>
+        <property name="placeholderText">
+         <string>laser name</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="4">
+       <widget class="QLabel" name="solstisHostLabel">
+        <property name="text">
+         <string>SolsTiS:</string>
+        </property>
+        <property name="buddy">
+         <cstring>solstisHostEdit</cstring>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="5">
+       <widget class="QLineEdit" name="solstisHostEdit">
+        <property name="toolTip">
+         <string>The ICE-Bloc controller of the SolsTiS laser (its web interface), as host or host:port.</string>
+        </property>
+        <property name="placeholderText">
+         <string>host[:port]</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

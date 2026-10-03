@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SlowChannelWidget</class>
+ <widget class="QWidget" name="SlowChannelWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>579</width>
+    <height>500</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="settingsLayout">
+     <item>
+      <widget class="QLabel" name="inputLabel">
+       <property name="toolTip">
+        <string>The slow PZT channel filters the output of the fast PZT channel (channel 0), not ADC1.</string>
+       </property>
+       <property name="text">
+        <string>Input: output of the fast PZT channel (channel 0)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="runModeLabel">
+       <property name="text">
+        <string>Run:</string>
+       </property>
+       <property name="buddy">
+        <cstring>runModeBox</cstring>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="runModeBox">
+       <property name="toolTip">
+        <string>Run the filters, hold their outputs, or hold while digital input DI1 is low.</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="settingsSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="IIRTabs">
+     <property name="currentIndex">
+      <number>-1</number>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

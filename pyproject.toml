@@ -15,6 +15,9 @@ dependencies = [
     "stabilizer",
     "scipy>=1.13",
     "h5py>=3.11",
+    # Automatic relocking (`l674`): the WAnD wavemeter RPC and the SolsTiS ICE-Bloc websocket.
+    "sipyco",
+    "websockets>=15",
 ]
 
 [project.scripts]
@@ -22,6 +25,7 @@ stabilizer_ui = "stabilizer_ui.app:main"
 dual_iir_ui = "stabilizer_ui.target.dual_iir.app:main"
 fnc_ui = "stabilizer_ui.target.fnc.app:main"
 current_sense_ui = "stabilizer_ui.target.current_sense.app:main"
+l674_ui = "stabilizer_ui.target.l674.app:main"
 
 [dependency-groups]
 dev = [
@@ -40,6 +44,7 @@ psd = ["stabilizer-psd"]
 default-groups = "all"
 
 [tool.uv.sources]
+sipyco = { git = "https://github.com/m-labs/sipyco.git" }
 stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
 stabilizer-psd = { path = "psd" }
 

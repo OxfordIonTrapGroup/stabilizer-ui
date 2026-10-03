@@ -17,7 +17,12 @@ logger = logging.getLogger(__name__)
 
 #: The UI targets (modules in `stabilizer_ui.target`), by the name of the application in
 #: the MQTT prefix (the name of the firmware binary).
-TARGETS = {"dual-iir": "dual_iir", "fnc": "fnc", "current_sense": "current_sense"}
+TARGETS = {
+    "dual-iir": "dual_iir",
+    "fnc": "fnc",
+    "current_sense": "current_sense",
+    "l674": "l674",
+}
 
 #: Time to wait for the retained messages after subscribing, in seconds.
 RETAINED_TIMEOUT = 1.0
