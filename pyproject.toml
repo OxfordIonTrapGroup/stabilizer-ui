@@ -18,6 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
+stabilizer_ui = "stabilizer_ui.app:main"
 dual_iir_ui = "stabilizer_ui.target.dual_iir.app:main"
 fnc_ui = "stabilizer_ui.target.fnc.app:main"
 current_sense_ui = "stabilizer_ui.target.current_sense.app:main"

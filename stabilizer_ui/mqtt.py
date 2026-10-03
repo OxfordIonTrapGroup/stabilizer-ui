@@ -78,7 +78,7 @@ class MqttInterface:
         #: of randomness).
         self.client_id = str(uuid.uuid4()).split("-")[0]
         self._response_base = f"{topic_base}/response_{self.client_id}"
-        self._client.on_message = self._on_message
+        self._client.on_message = self.handle_message
 
     def subscribe(self):
         """Start a new session, including after a broker reconnect."""
@@ -159,7 +159,7 @@ class MqttInterface:
             timeout = self._timeout
         if len(self._pending) > self._maxsize:
             # By construction, `correlation_data` should always be removed from
-            # `_pending` either by `_on_message()` or after `_timeout`. If something
+            # `_pending` either by `handle_message()` or after `_timeout`. If something
             # goes wrong, however, the dictionary could grow indefinitely.
             raise RuntimeError("Too many unhandled requests")
         result = asyncio.Future()
@@ -187,7 +187,9 @@ class MqttInterface:
         finally:
             self._pending.pop(correlation_data, None)
 
-    def _on_message(self, _client, topic, payload, _qos, properties) -> int:
+    def handle_message(self, _client, topic, payload, _qos, properties) -> int:
+        """Handle a message received by the client (the callback of the client, unless
+        several interfaces share it)."""
         if self._error is not None:
             return 0
         if not topic.startswith(self._response_base):
