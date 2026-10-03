@@ -374,6 +374,11 @@ def values_match(a, b) -> bool:
     return a == b
 
 
+#: The name the user has given the device (retained UI state, a JSON string, empty if
+#: none), which the device list shows.
+DEVICE_NAME_KEY = "ui/name"
+
+
 class UiMqttBridge:
     """Keeps the widgets in sync with the MQTT topics they are bound to (`configs`).
 

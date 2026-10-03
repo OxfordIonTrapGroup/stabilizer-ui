@@ -46,7 +46,8 @@ def run_ui(loop: QEventLoop,
     """Show the UI of `target` (a module in `stabilizer_ui.target`) for a device, and run
     until it is closed (exiting the process).
 
-    :param name: The name of the device shown in the window title.
+    :param name: The name of the device (empty if it has none). The window follows the
+        name retained on the broker, and the user can change it.
     :param firmware: The firmware the device is expected to run (it is asked anyway).
     """
     module = importlib.import_module(f"stabilizer_ui.target.{target}.app")
@@ -57,7 +58,8 @@ def run_ui(loop: QEventLoop,
     local_ip = get_local_ip(broker_address.get_ip())
     requested_stream_target = NetworkAddress.from_str_ip(local_ip, stream_port)
 
-    ui = module.UiWindow(f"{module.TITLE} [{name}]")
+    ui = module.UiWindow(module.TITLE)
+    ui.set_device(device_id, name)
     ui.show()
 
     ui.update_comm_status(True,
@@ -78,12 +80,12 @@ def run_ui(loop: QEventLoop,
         loop,
     )
     stream_thread.start()
-    ui.set_stream_thread(stream_thread, name)
+    ui.set_stream_thread(stream_thread, ui.device_label)
 
     if hasattr(ui, "set_sweep_runner"):
         ui.set_sweep_runner(
-            SweepRunner(stabilizer_interface, stream_thread, name, ui.afe_gains,
-                        ui.settings_snapshot))
+            SweepRunner(stabilizer_interface, stream_thread, ui.device_label,
+                        ui.afe_gains, ui.settings_snapshot))
 
     try:
         sys.exit(loop.run_forever())
@@ -150,7 +152,7 @@ async def _expected_firmware(broker_address: NetworkAddress, target: str,
 class DeviceDialog(QtWidgets.QDialog):
     """Lists the devices on the brokers, to choose the one to open."""
 
-    COLUMNS = ["Device", "Application", "Firmware", "Status", "Broker"]
+    COLUMNS = ["Name", "ID", "Application", "Firmware", "Status", "Broker"]
 
     DISCONNECTED_TOOLTIP = (
         "<p>Also list devices which are not connected to the broker right now.</p>"
@@ -161,10 +163,11 @@ class DeviceDialog(QtWidgets.QDialog):
         "lost. With the earlier firmware (v0.9), that message says \"disconnected\", so "
         "the device stays in the list after it has been switched off or unplugged, "
         "possibly for good. The current firmware (v0.11) erases the status instead, so "
-        "its devices drop off the list.</p>"
-        "<p>To open a disconnected device with the current firmware (the UI then waits "
-        "for it to connect), give it as &lt;application&gt;/&lt;ID&gt; on the command "
-        "line, e.g. <code>stabilizer_ui dual-iir/44-b7-d0-c7-7d-24</code>.</p>")
+        "its devices drop off the list, unless they have been given a name (which the "
+        "broker keeps as well; see Device → Rename… in the window of a device).</p>"
+        "<p>To open a disconnected device which is not listed (the UI then waits for it "
+        "to connect), give it as &lt;application&gt;/&lt;ID&gt; on the command line, "
+        "e.g. <code>stabilizer_ui dual-iir/44-b7-d0-c7-7d-24</code>.</p>")
 
     def __init__(self, brokers: list[NetworkAddress]):
         super().__init__()
@@ -242,8 +245,9 @@ class DeviceDialog(QtWidgets.QDialog):
                 firmware = device.firmware.name
             status = {True: "connected", False: "disconnected", None: "?"}[device.alive]
             for column, text in enumerate([
-                    device.id, device.app if device.target else f"{device.app} (no UI)",
-                    firmware, status, f"{device.broker.get_ip()}:{device.broker.port}"
+                    device.name, device.id,
+                    device.app if device.target else f"{device.app} (no UI)", firmware,
+                    status, f"{device.broker.get_ip()}:{device.broker.port}"
             ]):
                 item = QtWidgets.QTableWidgetItem(text)
                 if device.target is None:
@@ -293,14 +297,21 @@ async def choose_device(brokers: list[NetworkAddress]) -> Optional[Device]:
 
 
 async def find_device(brokers: list[NetworkAddress], spec: str) -> Device:
-    """The device given as `[<app>/]<ID>`, with `<ID>` a part of the ID. Raises
-    `LookupError` if there is no (or more than one) such device."""
+    """The device given as `[<app>/]<name or ID>`. A part of the name (in any case) or of
+    the ID is enough if it is unique; a whole name or ID takes precedence over parts.
+    Raises `LookupError` if there is no (or more than one) such device."""
     app, _, device_id = spec.rpartition("/")
 
     def matches(device: Device):
-        return device_id in device.id and app in ("", device.app)
+        return app in ("", device.app) and (device_id in device.id
+                                            or device_id.lower() in device.name.lower())
 
     devices = await discover(brokers, matches)
+    exact = [
+        device for device in devices
+        if device_id == device.id or device_id.lower() == device.name.lower()
+    ]
+    devices = exact or devices
     if len(devices) > 1:
         raise LookupError(f"Several devices match '{spec}': " +
                           ", ".join(f"{d} on {d.broker.get_ip()}" for d in devices))
@@ -324,8 +335,8 @@ def main():
         "device",
         metavar="DEVICE",
         nargs="?",
-        help="The MQTT ID of the device (its MAC address, unless "
-        "configured otherwise; a unique part of it is enough), optionally "
+        help="The name of the device or its MQTT ID (its MAC address, unless "
+        "configured otherwise; a unique part of either is enough), optionally "
         "as <app>/<ID> (e.g. dual-iir/fc-0f-e7-23-d5-6e). Without, the "
         "devices found are listed to choose from.")
     parser.add_argument(
@@ -350,8 +361,8 @@ def main():
         for device in asyncio.run(discover(brokers)):
             firmware = device.firmware or device.error or "?"
             status = {True: "connected", False: "disconnected", None: "?"}[device.alive]
-            print(f"{device.id}\t{device.app}\t{firmware}\t{status}\t"
-                  f"{device.broker.get_ip()}:{device.broker.port}")
+            print(f"{device.name or '-'}\t{device.id}\t{device.app}\t{firmware}\t"
+                  f"{status}\t{device.broker.get_ip()}:{device.broker.port}")
         return
 
     app = create_application()
@@ -370,8 +381,8 @@ def main():
             if device.target is None:
                 logger.error("There is no UI for %s", device.app)
                 sys.exit(1)
-        run_ui(loop, device.target, device.broker, device.id, device.id, args.stream_port,
-               device.firmware or CURRENT)
+        run_ui(loop, device.target, device.broker, device.id, device.name,
+               args.stream_port, device.firmware or CURRENT)
 
 
 if __name__ == "__main__":

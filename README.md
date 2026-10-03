@@ -25,17 +25,21 @@ device runs when it connects.
    commands. Everything but the spectral density window works without it.
 3. Run `uv run stabilizer_ui`. It lists the devices connected to the MQTT broker
    (`10.255.6.4:1883` by default; give others with `--broker HOST[:PORT]`, as often as
-   needed) with their application and firmware version, and opens the UI for the one
-   chosen. *Show disconnected devices* adds those with the v0.9 firmware which have been
-   connected before (the v0.11 firmware leaves no trace on the broker when it
-   disconnects). To open a device directly, give its MQTT ID (its MAC address, unless
-   configured otherwise; a unique part of it is enough):
+   needed) with their name, application and firmware version, and opens the UI for the
+   one chosen. *Show disconnected devices* adds those which have a name, and those with
+   the v0.9 firmware which have been connected before (the v0.11 firmware leaves no trace
+   on the broker when it disconnects). To open a device directly, give its name or MQTT
+   ID (its MAC address, unless configured otherwise); a unique part of either is enough:
    ```
-   uv run stabilizer_ui 72-9e
+   uv run stabilizer_ui lab1_729
    ```
    `--list` prints all the devices found instead. To open a device with the v0.11 firmware
-   which is not connected, give it as `<application>/<ID>` (e.g.
+   which is not connected and has no name, give it as `<application>/<ID>` (e.g.
    `dual-iir/44-b7-d0-c7-7d-24`); the UI then waits for it.
+
+   Name a device with *Device → Rename…* in its window. The name is stored on the broker
+   (retained, as `ui/name` below the device's topic), so everybody sees it in the window
+   title and the list of devices, and recordings and measurements are named after it.
 
    On the right hand side should be a live stream of the IO data of the stabilizer -- you
    may need to disable some firewall restrictions to get this to work properly.

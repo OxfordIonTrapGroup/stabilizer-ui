@@ -98,6 +98,10 @@ class RecordBar(QtWidgets.QWidget):
         self._settings = settings
         self._update()
 
+    def set_device(self, device: str):
+        """Name the files after `device` (the name of the device)."""
+        self._device = device
+
     @property
     def recorder(self) -> StreamRecorder | None:
         """The current recording."""

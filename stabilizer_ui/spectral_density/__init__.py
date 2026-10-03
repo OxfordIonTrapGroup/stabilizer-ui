@@ -24,6 +24,11 @@ class SpectralDensityMixin:
         super().set_stream_thread(stream_thread, device)
         self.spectralDensityAction.setEnabled(True)
 
+    def set_device_name(self, name: str):
+        super().set_device_name(name)
+        if self._spectral_density_window is not None:
+            self._spectral_density_window.set_device(self.device_label)
+
     def show_spectral_density(self):
         if self._spectral_density_window is None:
             try:

@@ -9,8 +9,8 @@ from PyQt6.QtWidgets import QWidget
 
 from .ui import AbstractUiWindow
 from .firmware import CURRENT, Firmware
-from .mqtt import (MiniconfError, MqttInterface, NetworkAddress, UiMqttBridge, set_will,
-                   values_match)
+from .mqtt import (DEVICE_NAME_KEY, MiniconfError, MqttInterface, NetworkAddress,
+                   UiMqttBridge, UiMqttConfig, set_will, values_match)
 from .iir.filters import settings_coefficients
 from .topic_tree import TopicTree
 
@@ -131,6 +131,11 @@ class AbstractStabilizerInterface:
         logger.debug("Got stream target from stream thread.")
 
         settings_map = ui.set_mqtt_configs(stream_target)
+        # Written when the user renames the device (`deviceRenamed`).
+        settings_map[DEVICE_NAME_KEY] = UiMqttConfig(
+            [], lambda _: ui.device_name,
+            lambda _, name: ui.set_device_name(name if isinstance(name, str) else ""))
+        self.app_root.get_or_create_child(DEVICE_NAME_KEY)
         self._stream_target = str(stream_target)
 
         try:
@@ -215,6 +220,7 @@ class AbstractStabilizerInterface:
 
         ui.streamTakeOverButton.clicked.connect(
             lambda: bridge.queue_write(self._stream_key))
+        ui.deviceRenamed.connect(lambda _name: bridge.queue_write(DEVICE_NAME_KEY))
 
         for ui_channel in self.app_root.child("ui").children():
             for iir in ui_channel.children():

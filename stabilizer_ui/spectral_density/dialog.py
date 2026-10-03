@@ -60,10 +60,9 @@ class SpectralDensityWindow(QtWidgets.QDialog):
 
     def __init__(self, stream_thread, device: str, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"Spectral Density [{device}]")
         self.setWindowFlag(QtCore.Qt.WindowType.WindowMaximizeButtonHint)
         self.stream_thread = stream_thread
-        self.device = device
+        self.set_device(device)
         parser = stream_thread.parser
         self._names = list(parser.StreamData._fields)
         self._units = parser.units()
@@ -104,6 +103,11 @@ class SpectralDensityWindow(QtWidgets.QDialog):
         self._rebuild_plot()
         self._update_buttons()
         self._update_status([])
+
+    def set_device(self, device: str):
+        """Show the name of the device, and name the files after it."""
+        self.device = device
+        self.setWindowTitle(f"Spectral Density [{device}]")
 
     #
     # Layout.

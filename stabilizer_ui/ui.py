@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-from PyQt6.QtWidgets import (QMainWindow, QDialog, QMenu, QMessageBox, QLabel,
-                             QPushButton)
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import (QMainWindow, QDialog, QInputDialog, QMenu, QMessageBox,
+                             QLabel, QPushButton)
 from PyQt6.QtGui import QPalette
 from typing import Optional, TYPE_CHECKING
 
@@ -19,12 +20,22 @@ class AbstractUiWindow(QMainWindow):
     """Abstract class for main UI window
 
     Subclasses are expected to have the widgets for the device settings in
-    `channelTabWidget`, and the scope as `fftScopeWidget`.
+    `channelTabWidget`, and the scope as `fftScopeWidget`, and to set the window title
+    to the name of the application (the device is added by `set_device()`).
     """
+
+    #: Emitted with the new name when the user renames the device.
+    deviceRenamed = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
 
+        #: The MQTT ID of the device and its name (empty if it has none), see
+        #: `set_device()`.
+        self.device_id = ""
+        self.device_name = ""
+        #: The window title without the device, once known.
+        self._title: Optional[str] = None
         self._connection_is_nominal = True
         self.stylesheet = {}
         self._tools_menu = None
@@ -56,6 +67,9 @@ class AbstractUiWindow(QMainWindow):
         # only have one here.
         self.statusBar().setStyleSheet("QStatusBar::item { border-width: 0px; }")
 
+        self.renameAction = self.menuBar().addMenu("&Device").addAction("&Rename…")
+        self.renameAction.triggered.connect(self._rename_clicked)
+
         # Start disabled, not just once the MQTT task first runs, to avoid a flash of
         # enabled widgets.
         self.set_settings_enabled(False)
@@ -86,6 +100,51 @@ class AbstractUiWindow(QMainWindow):
             "Stabilizer had panicked, but has since restarted. " +
             "You may need to change some settings if the issue persists.")
         self._panicMessageBox.setStandardButtons(QMessageBox.StandardButton.Ok)
+
+    @property
+    def device_label(self) -> str:
+        """The name of the device, or its ID if it has none."""
+        return self.device_name or self.device_id
+
+    def set_device(self, device_id: str, name: str = ""):
+        """Show the device (by `name`, or the ID if it is empty) in the window title."""
+        self.device_id = device_id
+        self.set_device_name(name)
+
+    def set_device_name(self, name: str):
+        """Show the device by `name` (by its ID if it is empty), in the window title and
+        the names of the files written."""
+        self.device_name = name
+        self._update_title()
+        self._stream_device = self.device_label
+        self.fftScopeWidget.record_bar.set_device(self.device_label)
+
+    def rename_device(self, name: str):
+        """Give the device a new name, as the user does."""
+        self.set_device_name(name.strip())
+        self.deviceRenamed.emit(self.device_name)
+
+    def _rename_clicked(self):
+        name, ok = QInputDialog.getText(
+            self,
+            "Rename device",
+            f"Name of {self.device_id}, shown in the window title and the list of "
+            "devices, for everybody\n(stored on the MQTT broker; leave it empty for "
+            "none):",
+            text=self.device_name)
+        if ok:
+            self.rename_device(name)
+
+    def _update_title(self):
+        if self._title is None:
+            # As set by the subclass.
+            self._title = self.windowTitle()
+        title = self._title
+        if self.device_label:
+            title += f" [{self.device_label}]"
+        if not self._connection_is_nominal:
+            title += " [OFFLINE]"
+        self.setWindowTitle(title)
 
     def tools_menu(self) -> QMenu:
         """The Tools menu (added on first use)."""
@@ -179,13 +238,10 @@ class AbstractUiWindow(QMainWindow):
     def _set_hardware_live_styling(self, is_live: bool):
         if is_live:
             self.stylesheet.pop("background-color", None)
-            self.setWindowTitle(self._windowTitle)
         else:
             bg = "maroon" if self.is_dark_theme() else "mistyrose"
             self.stylesheet["background-color"] = bg
-            self._windowTitle = self.windowTitle()
-            self.setWindowTitle(f"{self._windowTitle} [OFFLINE]")
-
+        self._update_title()
         self._setStyleSheet()
 
     def set_mqtt_configs(self, _stream_target: NetworkAddress):

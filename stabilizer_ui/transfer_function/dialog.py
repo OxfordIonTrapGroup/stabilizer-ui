@@ -133,9 +133,9 @@ class TransferFunctionWindow(QtWidgets.QDialog):
 
     def __init__(self, runner: SweepRunner, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(f"Transfer Function [{runner.device}]")
         self.setWindowFlag(QtCore.Qt.WindowType.WindowMaximizeButtonHint)
         self.runner = runner
+        self.update_title()
         self.measurements: list[Measurement] = []
         self._colours: dict[int, str] = {}
         self._next_colour = 0
@@ -164,6 +164,10 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self._load_parameters()
         self._update_sweep_info()
         self._update_buttons()
+
+    def update_title(self):
+        """Show the name of the device (as the runner has it)."""
+        self.setWindowTitle(f"Transfer Function [{self.runner.device}]")
 
     def keyPressEvent(self, event):
         # Enter in a sweep parameter runs a measurement, and in an analysis parameter
@@ -970,6 +974,13 @@ class TransferFunctionMixin:
         """Enable transfer function measurements using the given `SweepRunner`."""
         self._sweep_runner = runner
         self.transferFunctionAction.setEnabled(True)
+
+    def set_device_name(self, name: str):
+        super().set_device_name(name)
+        if self._sweep_runner is not None:
+            self._sweep_runner.device = self.device_label
+        if self._transfer_function_window is not None:
+            self._transfer_function_window.update_title()
 
     def set_firmware(self, firmware):
         super().set_firmware(firmware)
