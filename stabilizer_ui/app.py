@@ -152,12 +152,29 @@ class DeviceDialog(QtWidgets.QDialog):
 
     COLUMNS = ["Device", "Application", "Firmware", "Status", "Broker"]
 
+    DISCONNECTED_TOOLTIP = (
+        "<p>Also list devices which are not connected to the broker right now.</p>"
+        "<p>The broker (the server through which the devices and UIs exchange messages) "
+        "keeps the last status message each device has sent, and hands it to anyone who "
+        "connects later. A device announces \"connected\" when it connects, and leaves "
+        "another message with the broker, to be sent on its behalf if the connection is "
+        "lost. With the earlier firmware (v0.9), that message says \"disconnected\", so "
+        "the device stays in the list after it has been switched off or unplugged, "
+        "possibly for good. The current firmware (v0.11) erases the status instead, so "
+        "its devices drop off the list.</p>"
+        "<p>To open a disconnected device with the current firmware (the UI then waits "
+        "for it to connect), give it as &lt;application&gt;/&lt;ID&gt; on the command "
+        "line, e.g. <code>stabilizer_ui dual-iir/44-b7-d0-c7-7d-24</code>.</p>")
+
     def __init__(self, brokers: list[NetworkAddress]):
         super().__init__()
         self.setWindowTitle("Stabilizer UI")
         self.resize(640, 320)
         self._brokers = brokers
+        self._brokers_text = ", ".join(f"{b.get_ip()}:{b.port}" for b in brokers)
+        #: The devices found, and those of them listed.
         self._devices: list[Device] = []
+        self._shown: list[Device] = []
 
         self.table = QtWidgets.QTableWidget(0, len(self.COLUMNS))
         self.table.setHorizontalHeaderLabels(self.COLUMNS)
@@ -170,6 +187,10 @@ class DeviceDialog(QtWidgets.QDialog):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.itemSelectionChanged.connect(self._selection_changed)
         self.table.itemDoubleClicked.connect(lambda _item: self._open())
+
+        self.disconnected_box = QtWidgets.QCheckBox("Show disconnected devices")
+        self.disconnected_box.setToolTip(self.DISCONNECTED_TOOLTIP)
+        self.disconnected_box.toggled.connect(self._show_devices)
 
         self.status_label = QtWidgets.QLabel()
 
@@ -186,25 +207,33 @@ class DeviceDialog(QtWidgets.QDialog):
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.table)
+        layout.addWidget(self.disconnected_box)
         layout.addWidget(self.status_label)
         layout.addWidget(buttons)
 
         self.refresh()
 
     def refresh(self):
-        brokers = ", ".join(f"{b.get_ip()}:{b.port}" for b in self._brokers)
-        self.status_label.setText(f"Searching {brokers}…")
+        self.status_label.setText(f"Searching {self._brokers_text}…")
         self.refresh_button.setEnabled(False)
-        asyncio.ensure_future(self._refresh(brokers))
+        asyncio.ensure_future(self._refresh())
 
-    async def _refresh(self, brokers: str):
+    async def _refresh(self):
         try:
-            devices = await discover(self._brokers)
+            self._devices = await discover(self._brokers)
         finally:
             self.refresh_button.setEnabled(True)
-        self._devices = devices
-        self.table.setRowCount(len(devices))
-        for row, device in enumerate(devices):
+        self._show_devices()
+
+    def _show_devices(self):
+        show_disconnected = self.disconnected_box.isChecked()
+        self._shown = [
+            device for device in self._devices
+            if show_disconnected or device.alive is not False
+        ]
+        self.table.clearSelection()
+        self.table.setRowCount(len(self._shown))
+        for row, device in enumerate(self._shown):
             if device.target is None:
                 firmware = "–"
             elif device.firmware is None:
@@ -221,14 +250,24 @@ class DeviceDialog(QtWidgets.QDialog):
                     item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEnabled)
                 self.table.setItem(row, column, item)
         self.table.resizeColumnsToContents()
-        self.status_label.setText(f"{len(devices)} devices on {brokers}. (Devices with "
-                                  "firmware v0.11 are only listed while connected.)")
+
+        disconnected = sum(device.alive is False for device in self._devices)
+        if show_disconnected:
+            text = f"{len(self._shown)} devices on {self._brokers_text}"
+            if disconnected:
+                text += f" ({disconnected} of them disconnected)"
+        else:
+            text = f"{len(self._shown)} connected devices on {self._brokers_text}"
+            if disconnected:
+                text += f" ({disconnected} disconnected not shown)"
+        self.status_label.setText(text + ".")
+        self._selection_changed()
 
     def selected(self) -> Optional[Device]:
         rows = {index.row() for index in self.table.selectedIndexes()}
         if len(rows) != 1:
             return None
-        device = self._devices[rows.pop()]
+        device = self._shown[rows.pop()]
         return device if device.target is not None else None
 
     def _selection_changed(self):

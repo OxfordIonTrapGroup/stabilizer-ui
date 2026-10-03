@@ -23,17 +23,19 @@ device runs when it connects.
    and, on Windows, the MSVC build tools. Where it cannot be built, leave it out with
    `uv sync --no-group psd`, or set `UV_NO_GROUP=psd` in the environment for all uv
    commands. Everything but the spectral density window works without it.
-3. Run `uv run stabilizer_ui`. It lists the devices on the MQTT broker (`10.255.6.4:1883`
-   by default; give others with `--broker HOST[:PORT]`, as often as needed) with their
-   application and firmware version, and opens the UI for the one chosen. To open a device
-   directly, give its MQTT ID (its MAC address, unless configured otherwise; a unique part
-   of it is enough):
+3. Run `uv run stabilizer_ui`. It lists the devices connected to the MQTT broker
+   (`10.255.6.4:1883` by default; give others with `--broker HOST[:PORT]`, as often as
+   needed) with their application and firmware version, and opens the UI for the one
+   chosen. *Show disconnected devices* adds those with the v0.9 firmware which have been
+   connected before (the v0.11 firmware leaves no trace on the broker when it
+   disconnects). To open a device directly, give its MQTT ID (its MAC address, unless
+   configured otherwise; a unique part of it is enough):
    ```
    uv run stabilizer_ui 72-9e
    ```
-   `--list` prints the devices instead. Devices with the v0.11 firmware are only found while
-   they are connected to the broker; give one which is not as `<application>/<ID>` (e.g.
-   `dual-iir/44-b7-d0-c7-7d-24`) to wait for it.
+   `--list` prints all the devices found instead. To open a device with the v0.11 firmware
+   which is not connected, give it as `<application>/<ID>` (e.g.
+   `dual-iir/44-b7-d0-c7-7d-24`); the UI then waits for it.
 
    On the right hand side should be a live stream of the IO data of the stabilizer -- you
    may need to disable some firewall restrictions to get this to work properly.
