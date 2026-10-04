@@ -229,8 +229,9 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.retake_box = QtWidgets.QCheckBox("Retake sweeps with lost stream data")
         self.retake_box.setToolTip(
             "Repeat a sweep if stream data was lost after it was triggered (up to "
-            f"{MAX_RETAKES} times per sweep). Otherwise, what was lost is filled in from "
-            "the response, and left out of the noise estimate.")
+            f"{MAX_RETAKES} times per sweep, then keeping the capture with the least "
+            "lost). Otherwise, what was lost is filled in from the response, and left "
+            "out of the noise estimate.")
         form.addRow(self.retake_box)
         self.sweep_info = QtWidgets.QLabel()
         self.sweep_info.setWordWrap(True)

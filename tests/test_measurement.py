@@ -130,10 +130,11 @@ def test_retake():
 
 def test_retake_limit(monkeypatch):
     monkeypatch.setattr(measurement_module, "MAX_RETAKES", 2)
-    runner, interface, stream = make_runner([{1}, {2}, {3}, {4}])
+    runner, interface, stream = make_runner([{1, 2}, {3}, {4, 5}, {6}])
     measurement, messages = run(runner, 1, retake_lost=True)
     assert stream.captures == 3
     assert measurement.retakes == 2
+    # The capture with the fewest lost batches is kept.
     assert lost_frames(measurement.lost_batches[0]) == {3}
 
 

@@ -32,7 +32,7 @@ POST_TRIGGER_MARGIN = (0.3, 0.1)
 #: Time to wait for the first stream data, in seconds.
 STREAM_TIMEOUT = 2.0
 #: How often a sweep is retaken when stream data was lost after the trigger (if
-#: requested) before it is kept as it is.
+#: requested) before the capture with the fewest lost batches is kept.
 MAX_RETAKES = 5
 
 
@@ -372,8 +372,9 @@ class SweepRunner:
             analysis, which determines how long to capture after the sweep.
         :param progress: Called with a status message and the fraction completed.
         :param retake_lost: Repeat a sweep if stream data was lost after it was
-            triggered (up to `MAX_RETAKES` times per sweep), instead of leaving the
-            analysis to fill it in.
+            triggered (up to `MAX_RETAKES` times per sweep, after which the capture
+            with the fewest lost batches is kept), instead of leaving the analysis to
+            fill it in.
         """
         loop = asyncio.get_running_loop()
         parser = self.stream_thread.parser
@@ -401,6 +402,9 @@ class SweepRunner:
         runs, lost_batches, batch_size = [], [], None
         running = False
         run, retaken, retakes = 0, 0, 0
+        # The capture of the current sweep with the fewest batches lost after the
+        # trigger so far: (number lost, data, lost batches).
+        best = None
         try:
             while run < n_runs:
                 label = f"Sweep {run + 1} of {n_runs}"
@@ -448,6 +452,8 @@ class SweepRunner:
 
                 data, lost = capture.assemble()
                 affected = np.sum(lost >= trigger_batch)
+                if best is None or affected < best[0]:
+                    best = (affected, data, lost)
                 if affected and retake_lost:
                     if retaken < MAX_RETAKES:
                         retaken += 1
@@ -455,9 +461,10 @@ class SweepRunner:
                         logger.info("Retaking sweep %d: %d stream batches lost", run + 1,
                                     affected)
                         continue
+                    affected, data, lost = best
                     logger.warning(
-                        "Keeping sweep %d with %d stream batches lost after %d retakes",
-                        run + 1, affected, retaken)
+                        "Keeping sweep %d with %d stream batches lost (the fewest) after "
+                        "%d retakes", run + 1, affected, retaken)
                 elif affected:
                     logger.warning("%d stream batches lost during sweep %d", affected,
                                    run + 1)
@@ -465,7 +472,7 @@ class SweepRunner:
                 to_machine_units(parser, data)
                 runs.append(data)
                 lost_batches.append(lost)
-                run, retaken = run + 1, 0
+                run, retaken, best = run + 1, 0, None
         finally:
             try:
                 await self._stop_source(channel, running)
