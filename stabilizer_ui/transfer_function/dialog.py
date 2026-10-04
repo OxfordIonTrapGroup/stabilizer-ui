@@ -874,19 +874,13 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.margin_label.setVisible(bool(margins))
 
     def _designed_controller(self, measurement: Measurement, f: np.ndarray):
-        """The response of the filter configured during the measurement, if known (in
+        """The response of the filters configured during the measurement, if known (in
         V/V, i.e. including the AFE gain)."""
-        n = measurement.channel
-        ba = measurement.settings.get("biquads", {}).get(str(n))
-        gain = measurement.settings.get("afe_gains", {}).get(str(n))
-        running = measurement.settings.get(f"settings/ch/{n}/run", "Run") == "Run"
-        if ba is None or gain is None or not running:
+        sos = measurement.settings.get("controller_sos", {}).get(str(measurement.channel))
+        if not sos:
             return None
-        # idsp convention: y0 = b0 x0 + b1 x1 + b2 x2 + a1 y1 + a2 y2.
-        _, h = signal.freqz(ba[:3], [1, -ba[3], -ba[4]],
-                            worN=f,
-                            fs=1 / measurement.sweep.sample_period)
-        return gain * h
+        _, h = signal.sosfreqz(sos, worN=f, fs=1 / measurement.sweep.sample_period)
+        return h
 
     def _plot_details(self, *_):
         tab = self.tabs.currentIndex()
@@ -976,7 +970,9 @@ class TransferFunctionWindow(QtWidgets.QDialog):
 class TransferFunctionMixin:
     """Adds the transfer function window to the main window of a `dual-iir`-like target.
 
-    Expects the `channels` of the window to be `AbstractChannelSettings`.
+    Expects the `channels` of the window to be `AbstractChannelSettings`, whose
+    `controller_sos()` gives the designed response the measured controller is compared
+    to.
     """
 
     def _add_transfer_function_action(self):
@@ -1018,16 +1014,17 @@ class TransferFunctionMixin:
         self._transfer_function_window.activateWindow()
 
     def afe_gains(self) -> list[int]:
-        return [int(channel.afeGainBox.currentText()[1:]) for channel in self.channels]
+        return [channel.afe_gain() for channel in self.channels]
 
     def settings_snapshot(self) -> dict:
-        """The current settings (by topic), the AFE gains, and the coefficients of the
-        (first) biquad of each channel, to store with measurements."""
+        """The current settings (by topic), the AFE gains, and the designed response of
+        each channel (`AbstractChannelSettings.controller_sos()`), to store with
+        measurements."""
         settings = super().settings_snapshot()
         gains = self.afe_gains()
         settings["afe_gains"] = {str(ch): gain for ch, gain in enumerate(gains)}
-        settings["biquads"] = {
-            str(ch): channel.iir_widgets[0].coefficients
+        settings["controller_sos"] = {
+            str(ch): channel.controller_sos()
             for ch, channel in enumerate(self.channels)
         }
         return settings

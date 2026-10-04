@@ -15,6 +15,14 @@ from ..utils import link_spinbox_to_is_inf_checkbox, kilo, kilo2
 MISMATCH_DELAY = 2.0
 
 
+def idsp_to_sos(coefficients) -> list[float]:
+    """Convert biquad coefficients in the `idsp` convention (`[b0, b1, b2, a1, a2]` with
+    `y0 = b0*x0 + b1*x1 + b2*x2 + a1*y1 + a2*y2`) to a second-order section in the
+    convention of `scipy.signal` (`[b0, b1, b2, 1, -a1, -a2]`)."""
+    b0, b1, b2, a1, a2 = coefficients
+    return [b0, b1, b2, 1.0, -a1, -a2]
+
+
 class AbstractChannelSettings(QtWidgets.QWidget):
     """ Abstract class for creating custom channel widgets.
     Sets up AFE gains and IIR filter settings.
@@ -39,6 +47,32 @@ class AbstractChannelSettings(QtWidgets.QWidget):
         self.IIRTabs.setTabEnabled(index, available)
         self.IIRTabs.setTabToolTip(
             index, "" if available else "Not available in the firmware of the device")
+
+    def afe_gain(self) -> int:
+        return int(self.afeGainBox.currentText()[1:])
+
+    def controller_sos(self) -> list[list[float]] | None:
+        """The designed response of the channel from its ADC input to its DAC output (in
+        V/V, i.e. including the AFE gain), as second-order sections in the convention of
+        `scipy.signal`, or `None` if it is not known or the filters do not run.
+
+        This is the cascade of the filters the firmware of the device has, as designed in
+        the UI.
+        """
+        if self.runModeBox.currentText() != "Run":
+            return None
+        sections = []
+        for index, iir in enumerate(self.iir_widgets):
+            if not self.IIRTabs.isTabEnabled(index):
+                continue
+            if iir.coefficients is None:
+                return None
+            sections.append(idsp_to_sos(iir.coefficients))
+        if not sections:
+            return None
+        gain = self.afe_gain()
+        sections[0][:3] = [gain * b for b in sections[0][:3]]
+        return sections
 
 
 class ChannelSettings(AbstractChannelSettings):
@@ -143,14 +177,9 @@ class _IIRWidget(QtWidgets.QWidget):
 
     def update_transfer_function(self, coefficients):
         self.coefficients = list(coefficients)
-        # The coefficients are in the `idsp` convention,
-        # `y0 = b0*x0 + b1*x1 + b2*x2 + a1*y1 + a2*y2`.
-        f, h = signal.freqz(
-            coefficients[:3],
-            np.r_[1, [-c for c in coefficients[3:]]],
-            worN=self.frequencies,
-            fs=1 / self.sample_period,
-        )
+        f, h = signal.sosfreqz([idsp_to_sos(coefficients)],
+                               worN=self.frequencies,
+                               fs=1 / self.sample_period)
         # TODO: setData isn't working?
         self.widgets["transferFunctionView"].clear()
         self.widgets["transferFunctionView"].plot(f, 20 * np.log10(np.absolute(h)))

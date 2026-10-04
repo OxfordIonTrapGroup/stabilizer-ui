@@ -1,11 +1,13 @@
 """The `l674` window and interface: the lock mode override of the biquads, the UI state of
-the earlier layout, and the bindings."""
+the earlier layout, the bindings, and the designed controller response."""
 import asyncio
 import json
 import os
 import sys
 
+import numpy as np
 import pytest
+from scipy import signal
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -202,6 +204,34 @@ def test_legacy_ui_state(window):
     bridge._loading = False
     bridge._show_legacy_values()
     assert slow.filterComboBox.currentText() == "through"
+
+
+def test_controller_sos(window):
+    """The designed controller response is the cascade of the available biquads of the
+    channel, including the AFE gain."""
+    channel = window.channels[0]
+    pi = [0.5, -0.4, 0.0, 1.0, 0.0]
+    notch = [0.9, -1.7, 0.9, 1.7, -0.8]
+    channel.iir_widgets[0].update_transfer_function(pi)
+    channel.iir_widgets[1].update_transfer_function(notch)
+    channel.afeGainBox.setCurrentText("G2")
+    channel.runModeBox.setCurrentText("Run")
+
+    w = np.linspace(0.01, np.pi, 64)  # (not at the pole of the integrator)
+
+    def response(ba):
+        return signal.freqz(ba[:3], [1, -ba[3], -ba[4]], worN=w)[1]
+
+    sos = window.settings_snapshot()["controller_sos"]["0"]
+    np.testing.assert_allclose(
+        signal.sosfreqz(sos, worN=w)[1], 2 * response(pi) * response(notch))
+
+    channel.set_iir_available(1, False)
+    np.testing.assert_allclose(
+        signal.sosfreqz(channel.controller_sos(), worN=w)[1], 2 * response(pi))
+
+    channel.runModeBox.setCurrentText("Hold")
+    assert channel.controller_sos() is None
 
 
 def test_lock_state_display(window):

@@ -218,7 +218,7 @@ stimulus.
 
 From the ADC and DAC responses of the excited channel, it shows the plant (ADC/DAC), the
 loop gain (with crossover frequency and phase margin), the controller (compared to the
-designed filter), and the sensitivity functions. With the channel set to *Hold*, this
+designed filters), and the sensitivity functions. With the channel set to *Hold*, this
 measures the plant open-loop; with the loop closed, everything is measured in situ. The
 dashed lines show the estimated noise of each measurement.
 
