@@ -16,19 +16,6 @@ CHANNELS = ["ADC0", "ADC1", "DAC0", "DAC1"]
 LATENCY = 2 * BATCH_SIZE
 
 
-def firmware_phase(sweep: ess.Sweep, n: int) -> np.ndarray:
-    """Phase (in turns) of the first `n` samples of the firmware `SweptSine` source,
-    following the integer arithmetic of `idsp::Sweep` and `idsp::AccuOsc`."""
-    state, accu = sweep.state, 0
-    phase = np.empty(n)
-    for i in range(n):
-        phase[i] = accu / 2**64
-        frequency = state
-        state += sweep.rate * ((frequency + (1 << 31)) >> 32)
-        accu = (accu + frequency) % 2**64
-    return phase
-
-
 def _resonant_lowpass(f0, q):
     """Second-order low-pass filter (b, a) with the given resonance frequency and Q."""
     w0 = 2 * np.pi * f0
@@ -80,6 +67,11 @@ def make_runs(sweep,
         dac1 = np.full(length, -0.2)
         runs.append(np.array([adc0, adc1, dac0, dac1]))
     return runs
+
+
+#: The analysis is in the `stabilizer_psd` extension (`psd/`), which is optional.
+needs_analysis = pytest.mark.skipif(not ess.available(),
+                                    reason="needs the stabilizer_psd extension")
 
 
 def analyse(sweep, runs, ir_window=None, gaps=None, **kwargs):
@@ -137,20 +129,6 @@ def test_design():
         ess.Sweep.design(1e3, 100, 1, 1, TS)
 
 
-def test_phase_matches_firmware():
-    sweep = ess.Sweep.design(500, 300e3, 0.15, 1.0, TS)
-    n = sweep.length
-    phase = sweep.phase()
-    error = phase - firmware_phase(sweep, n)
-    error -= np.round(error)
-    assert np.max(np.abs(error)) < 1e-9
-
-    approximation = sweep.cycles * np.expm1(np.arange(n) * sweep.growth)
-    error = phase - approximation
-    error -= np.round(error)
-    assert np.max(np.abs(error)) < 1e-3
-
-
 def test_harmonic_delay():
     sweep = ess.Sweep.design(500, 300e3, 0.15, 1.0, TS)
     n = np.arange(1000)
@@ -162,6 +140,25 @@ def test_harmonic_delay():
         assert np.allclose(difference - np.round(difference), 0, atol=1e-9)
 
 
+@needs_analysis
+def test_excitation():
+    sweep = ess.Sweep.design(500, 300e3, 0.15, 1.0, TS)
+    x = sweep.excitation()
+    assert x.shape == (sweep.length, )
+    # DAC codes, within the amplitude (the sine table reaches the minimum of the i32
+    # range, so the negative peak is one code larger).
+    codes = x / ess.DAC_VOLTS_PER_LSB
+    assert np.allclose(codes, np.round(codes), atol=1e-9)
+    assert np.max(np.abs(x)) <= sweep.amplitude * (1 + 1e-6)
+    # The designed sweep, to within the quantisation, the accuracy of the firmware's sine
+    # table and the phase error of its fixed-point frequency state.
+    n = np.arange(sweep.length)
+    designed = sweep.amplitude * np.sin(
+        2 * np.pi * sweep.cycles * np.expm1(n * sweep.growth))
+    assert np.max(np.abs(x - designed)) < ess.DAC_VOLTS_PER_LSB + 1e-3 * sweep.amplitude
+
+
+@needs_analysis
 def test_open_loop_plant():
     sweep = ess.Sweep.design(100, 300e3, 0.3, 0.5, TS)
     plant = delayed(*_resonant_lowpass(20e3, 5))
@@ -185,6 +182,7 @@ def test_open_loop_plant():
     assert np.max(np.abs(plant_estimate - expected) / np.abs(expected)) < 5e-3
 
 
+@needs_analysis
 def test_closed_loop():
     sweep = ess.Sweep.design(50, 300e3, 0.5, 0.2, TS)
 
@@ -235,6 +233,7 @@ def harmonics_by_name(analysis, k):
     return by_name(analysis.harmonics[k]), by_name(analysis.harmonic_noise[k])
 
 
+@needs_analysis
 def test_harmonic_distortion():
     sweep = ess.Sweep.design(1e3, 100e3, 0.2, 1.0, TS)
     a2, a3, a4 = 0.01, 0.02, 0.008
@@ -263,6 +262,7 @@ def test_harmonic_distortion():
         assert np.all(np.isfinite(harmonic_noise["ADC0"]))
 
 
+@needs_analysis
 def test_harmonic_noise_estimate():
     # For a linear system, the harmonic responses are just noise.
     sweep = ess.Sweep.design(500, 300e3, 0.3, 0.1, TS)
@@ -275,6 +275,7 @@ def test_harmonic_noise_estimate():
         assert 0.5 < ratio < 2, k
 
 
+@needs_analysis
 def test_noise_estimate():
     sweep = ess.Sweep.design(200, 300e3, 0.2, 0.1, TS)
     plant = delayed(*_resonant_lowpass(50e3, 2))
@@ -292,6 +293,7 @@ def test_noise_estimate():
         assert 0.4 < ratio < 2.5
 
 
+@needs_analysis
 def test_noise_estimate_band_edge():
     # Near the band edges, the response window cuts the long ringing of the band
     # limiting filter, which the noise estimate must not mistake for noise. For a channel
@@ -312,6 +314,7 @@ def test_noise_estimate_band_edge():
         assert 0.5 < ratio < 1.8, points
 
 
+@needs_analysis
 def test_lost_data():
     sweep = ess.Sweep.design(200, 300e3, 0.2, 0.1, TS)
     plant = delayed(*_resonant_lowpass(50e3, 2))
@@ -341,11 +344,19 @@ def test_lost_data():
     assert np.max(np.abs(filled.responses[CHANNELS.index("DAC0")] - 1)) < 1e-3
     assert np.max(np.abs(filled.responses[-1])) < 1e-3
 
-    # What is missing also appears as spurious harmonics, and in the noise window.
+    # What is missing also appears as spurious harmonics, and in the noise window. The
+    # harmonics are left out where the window receives what remains of the lost data
+    # (around the frequencies of the losses), as its harmonic content is not modelled.
     for k in filled.harmonics:
+        assert np.all(np.isfinite(clean.harmonics[k]))
         level = np.max(np.abs(clean.harmonics[k][adc0]))
         assert np.max(np.abs(raw.harmonics[k][adc0])) > 10 * level, k
-        assert np.max(np.abs(filled.harmonics[k][adc0])) < 3 * level, k
+        harmonic = filled.harmonics[k][adc0]
+        valid = np.isfinite(harmonic)
+        fk = filled.harmonic_frequencies[k]
+        assert not valid[np.searchsorted(fk, 5e3)] and valid[np.searchsorted(fk, 20e3)], k
+        assert 0.5 < np.mean(valid) < 1, k
+        assert np.max(np.abs(harmonic[valid])) < 3 * level, k
     noise = filled.noise[adc0]
     valid = np.isfinite(noise)
     # Within the frequency range the noise window receives from the times of the losses
@@ -366,6 +377,7 @@ def test_lost_data():
     assert error(averaged) < 5e-3
 
 
+@needs_analysis
 def test_averaging():
     sweep = ess.Sweep.design(200, 300e3, 0.1, 0.1, TS)
     plant = delayed(*_resonant_lowpass(50e3, 2))
@@ -376,6 +388,7 @@ def test_averaging():
     assert ratio == pytest.approx(0.5, rel=0.2)
 
 
+@needs_analysis
 def test_missing_sweep():
     sweep = ess.Sweep.design(200, 300e3, 0.1, 0.1, TS)
     runs = make_runs(sweep, ([1], [1]), ([1], [1]))

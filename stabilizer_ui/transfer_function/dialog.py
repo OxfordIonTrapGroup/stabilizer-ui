@@ -982,12 +982,17 @@ class TransferFunctionMixin:
         self.transferFunctionAction = self.tools_menu().addAction("&Transfer function…")
         self.transferFunctionAction.setShortcut("Ctrl+T")
         self.transferFunctionAction.setEnabled(False)
+        if not ess.available():
+            # The analysis is in the `stabilizer_psd` extension (`psd/`), which is
+            # optional; without it, the measurements are not offered.
+            self.transferFunctionAction.setText(
+                "Transfer function (needs the stabilizer-psd package, see psd/)")
         self.transferFunctionAction.triggered.connect(self.show_transfer_function)
 
     def set_sweep_runner(self, runner: SweepRunner):
         """Enable transfer function measurements using the given `SweepRunner`."""
         self._sweep_runner = runner
-        self.transferFunctionAction.setEnabled(True)
+        self.transferFunctionAction.setEnabled(ess.available())
 
     def set_device_name(self, name: str):
         super().set_device_name(name)
@@ -998,6 +1003,8 @@ class TransferFunctionMixin:
 
     def set_firmware(self, firmware):
         super().set_firmware(firmware)
+        if not ess.available():
+            return
         # The measurements need the swept-sine source.
         available = firmware.has("settings/trigger")
         action = self.transferFunctionAction

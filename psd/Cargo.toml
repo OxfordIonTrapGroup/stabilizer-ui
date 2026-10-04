@@ -11,7 +11,14 @@ name = "stabilizer_psd"
 crate-type = ["cdylib"]
 
 [dependencies]
+# The firmware's sweep oscillator, for reproducing the excitation exactly. Keep the
+# version equal to the one the firmware pins (stabilizer-stream depends on it too).
+idsp = "0.21"
+num-complex = "0.4"
+numpy = "0.29"
 pyo3 = { version = "0.29", features = ["abi3-py312"] }
+rayon = "1"
+realfft = "3"
 # The upstream library builds on Linux only, and with the dependencies of the egui app.
 stabilizer-stream = { git = "https://github.com/OxfordIonTrapGroup/stabilizer-stream", branch = "portable-lib", default-features = false }
 

@@ -1,7 +1,40 @@
 from collections.abc import Buffer
 
+import numpy as np
+
 #: FFT size of each stage.
 FFT_SIZE: int
+
+
+def sweep_excitation(sweep: tuple[int, int, int, float, float]) -> np.ndarray:
+    """The excitation of the firmware `SweptSine` source for `sweep` (as for
+    `analyse_sweep()`), in volts: exactly what the device adds to the DAC output, as it is
+    reproduced with the firmware's own oscillator (`idsp`) and scaling.
+    """
+
+
+def analyse_sweep(runs: list[np.ndarray],
+                  sweep: tuple[int, int, int, float, float],
+                  reference: int,
+                  batch_size: int,
+                  ir_window: float,
+                  points_per_decade: int = 100,
+                  max_harmonic: int = 4,
+                  offsets: list[int] | None = None,
+                  gaps: list[np.ndarray] | None = None,
+                  memory: int = 2 << 30) -> dict:
+    """Transfer function estimation from an exponential sine sweep (`src/ess.rs`), as
+    called by `stabilizer_ui.transfer_function.ess.analyse()` (see there for the
+    parameters and the conversion of the result).
+
+    `runs` are C-contiguous float64 arrays (channels, samples) in volts, with lost data
+    interpolated linearly; `gaps` int64 arrays (n, 2) of the sample ranges of such data;
+    `sweep` is `(rate, state, length, amplitude, sample_period)`. The channels of the
+    runs are analysed in parallel, as many at a time as fit the `memory` budget (in
+    bytes) for their buffers. Returns a dict of the results, with frequencies in
+    cycles/sample and times in samples. Raises `ValueError` if the data cannot be
+    analysed.
+    """
 
 
 class Stage:

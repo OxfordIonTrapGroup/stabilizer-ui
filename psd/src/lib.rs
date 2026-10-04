@@ -1,9 +1,12 @@
 //! Python bindings for the online power spectral density estimation of
 //! [stabilizer-stream](https://github.com/quartiq/stabilizer-stream).
 
+mod ess;
+
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use pyo3::{buffer::PyBuffer, exceptions::PyValueError, prelude::*};
+use numpy::{PyArray1, PyArray2, PyReadonlyArray2, PyUntypedArrayMethods};
+use pyo3::{buffer::PyBuffer, exceptions::PyValueError, prelude::*, types::PyDict};
 use stabilizer_stream::{AvgOpts, Detrend, MergeOpts};
 
 /// FFT size of each stage.
@@ -157,10 +160,144 @@ struct Stage {
     processed: usize,
 }
 
+/// The sweep parameters `(rate, state, length, amplitude, sample_period)`.
+fn parse_sweep(
+    (rate, state, length, amplitude, sample_period): (i64, i64, usize, f64, f64),
+) -> PyResult<ess::Sweep> {
+    let rate = i32::try_from(rate).map_err(|_| PyValueError::new_err("Sweep rate out of range"))?;
+    Ok(ess::Sweep::new(
+        rate,
+        state,
+        length,
+        amplitude,
+        sample_period,
+    ))
+}
+
+/// The excitation of the firmware `SweptSine` source for `sweep` (as for
+/// `analyse_sweep()`), in volts: exactly what the device adds to the DAC output, as it is
+/// reproduced with the firmware's own oscillator (`idsp`) and scaling.
+#[pyfunction]
+fn sweep_excitation<'py>(
+    py: Python<'py>,
+    sweep: (i64, i64, usize, f64, f64),
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let sweep = parse_sweep(sweep)?;
+    Ok(PyArray1::from_vec(py, py.detach(|| sweep.excitation())))
+}
+
+/// Transfer function estimation from an exponential sine sweep (`ess.rs`), as called by
+/// `stabilizer_ui.transfer_function.ess.analyse()` (see there for the parameters).
+///
+/// `runs` are C-contiguous float64 arrays (channels, samples) in volts, with lost data
+/// interpolated linearly; `gaps` int64 arrays (n, 2) of the sample ranges of such data;
+/// `sweep` is `(rate, state, length, amplitude, sample_period)`. The channels of the
+/// runs are analysed in parallel, as many at a time as fit the `memory` budget (in
+/// bytes) for their buffers. Returns a dict of the results, with frequencies in
+/// cycles/sample and times in samples.
+#[pyfunction]
+#[pyo3(signature = (runs, sweep, reference, batch_size, ir_window, points_per_decade = 100, max_harmonic = 4, offsets = None, gaps = None, memory = 2 << 30))]
+#[allow(clippy::too_many_arguments)]
+fn analyse_sweep<'py>(
+    py: Python<'py>,
+    runs: Vec<PyReadonlyArray2<'py, f64>>,
+    sweep: (i64, i64, usize, f64, f64),
+    reference: usize,
+    batch_size: usize,
+    ir_window: f64,
+    points_per_decade: u32,
+    max_harmonic: u32,
+    offsets: Option<Vec<i64>>,
+    gaps: Option<Vec<PyReadonlyArray2<'py, i64>>>,
+    memory: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    // The channels as slices of the arrays (no copy).
+    let runs: Vec<Vec<&[f64]>> = runs
+        .iter()
+        .map(|run| {
+            let length = run.shape()[1].max(1);
+            Ok(run.as_slice()?.chunks_exact(length).collect())
+        })
+        .collect::<PyResult<_>>()?;
+    let gaps: Option<Vec<Vec<(i64, i64)>>> = gaps.map(|gaps| {
+        gaps.iter()
+            .map(|g| {
+                g.as_array()
+                    .outer_iter()
+                    .map(|row| (row[0], row[1]))
+                    .collect()
+            })
+            .collect()
+    });
+    let sweep = parse_sweep(sweep)?;
+    let settings = ess::Settings {
+        ir_window,
+        points_per_decade,
+        max_harmonic,
+        memory,
+    };
+    let analysis = py
+        .detach(|| {
+            ess::analyse(
+                &runs,
+                &sweep,
+                reference,
+                batch_size,
+                &settings,
+                offsets.as_deref(),
+                gaps.as_deref(),
+            )
+        })
+        .map_err(PyValueError::new_err)?;
+
+    let array2 = |v: &[Vec<f64>]| PyArray2::from_vec2(py, v);
+    let carray2 = |v: &[Vec<num_complex::Complex64>]| PyArray2::from_vec2(py, v);
+    let dict = PyDict::new(py);
+    dict.set_item("frequencies", PyArray1::from_vec(py, analysis.frequencies))?;
+    dict.set_item("responses", carray2(&analysis.responses)?)?;
+    dict.set_item("noise", array2(&analysis.noise)?)?;
+    dict.set_item("harmonic_orders", analysis.harmonic_orders)?;
+    dict.set_item(
+        "harmonic_frequencies",
+        analysis
+            .harmonic_frequencies
+            .into_iter()
+            .map(|f| PyArray1::from_vec(py, f))
+            .collect::<Vec<_>>(),
+    )?;
+    dict.set_item(
+        "harmonics",
+        analysis
+            .harmonics
+            .iter()
+            .map(|h| carray2(h))
+            .collect::<Result<Vec<_>, _>>()?,
+    )?;
+    dict.set_item(
+        "harmonic_noise",
+        analysis
+            .harmonic_noise
+            .iter()
+            .map(|h| array2(h))
+            .collect::<Result<Vec<_>, _>>()?,
+    )?;
+    dict.set_item("ir_start", analysis.ir_start)?;
+    dict.set_item("impulse_responses", array2(&analysis.impulse_responses)?)?;
+    dict.set_item("ir_window", analysis.ir_window)?;
+    dict.set_item("noise_window", analysis.noise_window)?;
+    dict.set_item("harmonic_windows", analysis.harmonic_windows)?;
+    dict.set_item("offsets", analysis.offsets)?;
+    dict.set_item("gap_frequencies", analysis.gap_frequencies)?;
+    dict.set_item("warnings", analysis.warnings)?;
+    Ok(dict)
+}
+
 #[pymodule]
 fn stabilizer_psd(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("FFT_SIZE", FFT_SIZE)?;
     m.add_class::<PsdCascade>()?;
     m.add_class::<Stage>()?;
+    m.add_function(wrap_pyfunction!(sweep_excitation, m)?)?;
+    m.add_function(wrap_pyfunction!(analyse_sweep, m)?)?;
     Ok(())
 }

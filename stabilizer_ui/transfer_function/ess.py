@@ -9,19 +9,26 @@ they can be separated by windowing. For the start frequency we use an integer nu
 cycles per harmonic delay ("synchronized" swept sine, Novák et al., JAES 63, 786 (2015)),
 which gives the harmonic impulse responses a well-defined phase.
 
-All frequencies are in Hz and all times in seconds unless noted otherwise; internally,
-frequencies are in cycles/sample and times in samples.
+The analysis itself (`analyse()`) is implemented in Rust in the `stabilizer_psd`
+extension (`psd/src/ess.rs`, `stabilizer_psd.analyse_sweep()`), as it is heavy. The
+extension also reproduces the excitation exactly (`Sweep.excitation()`), with the
+firmware's own oscillator. This module holds the sweep design, the settings and result
+types, and the quantities derived from the responses.
+
+All frequencies are in Hz and all times in seconds unless noted otherwise.
 """
 
 from __future__ import annotations
 
-import array
 import math
 from dataclasses import dataclass, field
-from functools import partial
 
 import numpy as np
-from scipy import fft as sfft
+
+try:
+    import stabilizer_psd as _psd
+except ImportError:  # The extension is optional (it needs a Rust toolchain to build).
+    _psd = None
 
 #: Fixed-point scale of the firmware sweep rate (`1 + rate / 2^32` is the per-sample
 #: frequency growth factor) and of the frequency state (`state / 2^64` is the frequency
@@ -38,33 +45,19 @@ DAC_FULL_SCALE = np.float32(4.096) * np.float32(2.5)
 MAX_AMPLITUDE = float(DAC_FULL_SCALE)
 DAC_VOLTS_PER_LSB = MAX_AMPLITUDE / (1 << 15)
 
-#: Width of the raised-cosine tapers at either end of the analysis band, in octaves.
-#: No results are reported for these regions.
+#: Width of the raised-cosine tapers at either end of the analysis band, in octaves (as
+#: in `psd/src/ess.rs`). No results are reported for these regions.
 BAND_EDGE_TAPER = 1 / 12
-
-#: Regularisation of the inverse filter, relative to the expected sweep power spectral
-#: density.
-_REGULARISATION = 1e-4
-
-#: Fraction of the impulse response window over which it is faded out.
-_FADE_OUT = 0.25
-
-#: Margin, in octaves, around the frequencies at which a window of the impulse response
-#: receives the record at the time of lost data (see `_affected()`), for the spectral
-#: leakage of the window.
-_GAP_MARGIN = 1 / 24
-
-#: Maximum number of passes of filling in lost data from the estimated response
-#: (`fill_gaps()` in `analyse()`), and the relative change of the fill at which to stop.
-#: Each pass reduces what remains by the relative error of the response estimate at the
-#: frequency of the sweep at the time of the loss, which is the fraction of the
-#: data lost there (within the frequency resolution).
-_GAP_FILL_PASSES = 8
-_GAP_FILL_TOLERANCE = 1e-3
 
 
 class AnalysisError(Exception):
     """The captured data could not be analysed."""
+
+
+def _extension():
+    if _psd is None:
+        raise ImportError("The analysis needs the stabilizer-psd package (in psd/)")
+    return _psd
 
 
 @dataclass(frozen=True)
@@ -156,39 +149,17 @@ class Sweep:
         """
         return math.log(k) / self.growth
 
-    def phase(self) -> np.ndarray:
-        """The phase of each sample, in turns.
-
-        This follows the fixed-point arithmetic of the firmware, as the rounding errors
-        accumulate to a noticeable phase error for long sweeps.
-        """
-        # `idsp::Sweep`: the frequency state for each sample.
-        frequencies = array.array("q")
-        append = frequencies.append
-        state, rate = self.state, self.rate
-        for _ in range(self.length):
-            append(state)
-            state += rate * ((state + (1 << 31)) >> 32)
-        # `idsp::AccuOsc`: a wrapping 64-bit phase accumulator, of which the top 32 bits
-        # are used.
-        accumulator = np.zeros(self.length, np.uint64)
-        np.cumsum(np.frombuffer(frequencies, np.int64)[:-1].view(np.uint64),
-                  out=accumulator[1:])
-        return (accumulator >> np.uint64(32)) / 2**32
-
     def excitation(self) -> np.ndarray:
-        """The excitation added to the DAC output, in volts.
-
-        This follows the firmware including the quantisation to DAC codes, which is
-        significant for small amplitudes.
+        """The excitation added to the DAC output, in volts, exactly as the firmware
+        generates it: the extension runs the firmware's oscillator (including its
+        fixed-point phase and sine table) and the scaling to DAC codes, so this needs
+        `available()`.
         """
-        # `idsp::cossin` (approximated), scaled by `signal_generator::Scaler` (computed
-        # in single precision), and truncated to the 16 bit DAC code.
-        sine = np.clip(np.round(np.sin(2 * np.pi * self.phase()) * 2**31), -2**31,
-                       2**31 - 1).astype(np.int64)
-        scale = np.float32(self.amplitude) * (np.float32(1) / DAC_FULL_SCALE)
-        amplitude = int(scale * np.float32(2**31))
-        return ((sine * amplitude) >> 47) * DAC_VOLTS_PER_LSB
+        return _extension().sweep_excitation(self._parameters())
+
+    def _parameters(self) -> tuple:
+        """The sweep as passed to the extension."""
+        return (self.rate, self.state, self.length, self.amplitude, self.sample_period)
 
     def source_config(self) -> dict:
         """The settings of the firmware signal source (`ch/<n>/source/...`)."""
@@ -251,7 +222,8 @@ class Analysis:
     #: responses are available, in Hz.
     harmonic_frequencies: dict[int, np.ndarray]
     #: For each harmonic order k, the complex response of each channel at k times the
-    #: fundamental frequency, (n_channels, n_freq_k).
+    #: fundamental frequency, (n_channels, n_freq_k); NaN where lost stream data affects
+    #: it.
     harmonics: dict[int, np.ndarray]
     #: Estimated noise (1σ) of `harmonics`, or NaN if not available.
     harmonic_noise: dict[int, np.ndarray]
@@ -274,208 +246,9 @@ class Analysis:
         return len(self.offsets)
 
 
-def _band_window(f: np.ndarray, f1: float, f2: float) -> np.ndarray:
-    """Band-pass window with raised-cosine edges (in log frequency)."""
-    with np.errstate(divide="ignore"):
-        log_f = np.log2(f)
-    rise = np.clip((log_f - math.log2(f1)) / BAND_EDGE_TAPER, 0, 1)
-    fall = np.clip((math.log2(f2) - log_f) / BAND_EDGE_TAPER, 0, 1)
-    return np.sin(0.5 * np.pi * rise)**2 * np.sin(0.5 * np.pi * fall)**2
-
-
-def _minimum_phase(magnitude: np.ndarray, n_fft: int, floor: float = 1e-6) -> np.ndarray:
-    """Minimum phase spectrum with the given magnitude (sampled as by `rfft(·, n_fft)`),
-    computed via the real cepstrum."""
-    cepstrum = sfft.irfft(np.log(np.maximum(magnitude, floor)), n_fft)
-    cepstrum[1:(n_fft + 1) // 2] *= 2
-    cepstrum[n_fft // 2 + 1:] = 0
-    return np.exp(sfft.rfft(cepstrum, n_fft))
-
-
-class _Window:
-    """Time window for an impulse response, rising over the `pre` samples before time
-    zero, then flat for `length` samples, the last part of which are faded out."""
-
-    def __init__(self, pre: int, length: int):
-        self.pre = pre
-        fade = max(1, int(_FADE_OUT * length))
-        self.taper = np.concatenate([
-            np.sin(0.5 * np.pi * (np.arange(pre) + 0.5) / pre)**2,
-            np.ones(length - fade),
-            np.cos(0.5 * np.pi * (np.arange(fade) + 0.5) / fade)**2,
-        ])
-
-
-def _segment(h: np.ndarray, start: int, length: int) -> np.ndarray:
-    # The FFT length is chosen such that negative lags (e.g. the harmonics of a sweep
-    # starting at the beginning of the record) wrap around without aliasing.
-    return np.take(h, np.arange(start, start + length), mode="wrap")
-
-
-def _grid_average(f: np.ndarray,
-                  values: np.ndarray,
-                  grid: np.ndarray,
-                  points_per_decade: int,
-                  rms: bool = False,
-                  correlation: float = 1.0) -> np.ndarray:
-    """Average `values` (sampled at the uniformly spaced `f`) over the frequency interval
-    represented by each point of the logarithmic `grid`, interpolating where the interval
-    is narrower than the spacing of `f`.
-
-    With `rms`, `values` are taken to be noise samples, and the noise of their (complex)
-    average is returned, for values correlated over `correlation` samples.
-    """
-    half_width = 10**(0.5 / points_per_decade)
-    lo = np.searchsorted(f, grid / half_width)
-    hi = np.searchsorted(f, grid * half_width)
-    averaged = hi > lo
-    counts = (hi - lo)[averaged]
-    # The values in each interval, concatenated, and the intervals' bounds in this list.
-    starts = np.cumsum(counts) - counts
-    ends = starts + counts
-    index = np.arange(np.sum(counts)) + np.repeat(lo[averaged] - starts, counts)
-
-    def interval_sum(x, start, end):
-        cumulative = np.concatenate([[0], np.cumsum(x)])
-        return cumulative[end] - cumulative[start]
-
-    if rms:
-        result = np.interp(grid, f, np.abs(values))
-        power = interval_sum(np.abs(values[index])**2, starts, ends) / counts
-        result[averaged] = np.sqrt(power * np.minimum(1, correlation / counts))
-        return result
-
-    result = np.interp(grid, f, values.real) + 1j * np.interp(grid, f, values.imag)
-    if not len(counts):
-        return result
-    # The phase can change considerably over the interval (due to delays), which would
-    # bias a complex average. Thus, estimate the local group delay from the change in
-    # phase (relative to the value at the centre, to avoid wrapping) between the lower
-    # and upper half of each interval, and compensate for it in the average. (Averaging
-    # magnitude and phase separately instead would be biased by noise.)
-    centre = result[averaged]
-    v, fv = values[index], f[index]
-    relative_phase = np.angle(v * np.repeat(np.conj(centre), counts))
-    middles = starts + counts // 2
-    lower, upper = middles - starts, ends - middles
-    with np.errstate(invalid="ignore", divide="ignore"):
-        slope = ((interval_sum(relative_phase, middles, ends) / upper -
-                  interval_sum(relative_phase, starts, middles) / lower) /
-                 (interval_sum(fv, middles, ends) / upper -
-                  interval_sum(fv, starts, middles) / lower))
-    slope = np.where(lower > 0, slope, 0)
-    rotation = np.exp(-1j * np.repeat(slope, counts) *
-                      (fv - np.repeat(grid[averaged], counts)))
-    result[averaged] = interval_sum(v * rotation, starts, ends) / counts
-    return result
-
-
-class _Deconvolver:
-    """Deconvolves records of a given length with the sweep."""
-
-    def __init__(self, sweep: Sweep, excitation: np.ndarray, record_length: int):
-        self.n_fft = sfft.next_fast_len(record_length + sweep.length, real=True)
-        # Normalise the impulse responses to the (nominal) amplitude.
-        self.amplitude = sweep.amplitude
-        spectrum = sfft.rfft(excitation / self.amplitude, self.n_fft)
-        f = np.arange(len(spectrum)) / self.n_fft
-        f1 = sweep.f_start * sweep.sample_period
-        f2 = sweep.f_stop * sweep.sample_period
-        # Limit the band with a minimum phase filter, as the long and acausal components
-        # of a zero phase one would be cut off by the time windows.
-        band = _minimum_phase(_band_window(f, f1, f2), self.n_fft)
-        # Expected power spectral density of the sweep (stationary phase approximation).
-        expected = np.empty_like(f)
-        expected[1:] = 1 / (4 * sweep.growth * f[1:])
-        expected[0] = expected[1]
-        power = np.abs(spectrum)**2
-        self.inverse = band * np.conj(spectrum) / (power + _REGULARISATION * expected)
-        #: The (band-limited) impulse response obtained for a unity-gain system.
-        self.unity = sfft.irfft(self.inverse * spectrum, self.n_fft)
-        #: Position of the peak of `unity`.
-        self.peak_delay = int(np.argmax(np.abs(self.unity[:self.n_fft // 2])))
-        #: Frequencies (cycles/sample) of the spectra of records (`rfft(·, n_fft)`).
-        self.frequencies = f
-
-    def __call__(self, record: np.ndarray, start: int | None = None) -> np.ndarray:
-        """Deconvolve `record`, in which the sweep starts at `start` (if known).
-
-        Steps at the ends of the record would show up in the impulse response, so the
-        record is taken relative to the level before the sweep, and faded in and out.
-        """
-        if start is None:
-            record = record - np.mean(record)
-        else:
-            record = record - np.mean(record[:max(start, 1)])
-            fade = min(start // 2, len(record) // 100)
-            if fade > 0:
-                ramp = np.sin(0.5 * np.pi * (np.arange(fade) + 0.5) / fade)**2
-                record[:fade] *= ramp
-                record[-fade:] *= ramp[::-1]
-        return self.deconvolve(record)
-
-    def deconvolve(self, record: np.ndarray) -> np.ndarray:
-        """Deconvolve `record` as is."""
-        return sfft.irfft(
-            sfft.rfft(record / self.amplitude, self.n_fft) * self.inverse, self.n_fft)
-
-
-def _interpolate_gaps(x: np.ndarray, gaps: np.ndarray) -> np.ndarray:
-    """`x` with the sample ranges `gaps` (start, stop) interpolated linearly from the
-    neighbouring samples (as `Measurement.volts()` does for lost data)."""
-    if not len(gaps):
-        return x
-    mask = np.zeros(len(x), bool)
-    for start, stop in gaps:
-        mask[start:stop] = True
-    index = np.arange(len(x))
-    x = x.copy()
-    x[mask] = np.interp(index[mask], index[~mask], x[~mask])
-    return x
-
-
-def find_sweep_start(h_reference: np.ndarray, record_length: int, unity: np.ndarray,
-                     peak_delay: int, batch_size: int, warnings: list[str]) -> int:
-    """Locate the start of the sweep in the impulse response `h_reference` of a channel
-    which contains the stimulus directly (the DAC output of the excited channel), given
-    the impulse response `unity` of a unity-gain system, which peaks at `peak_delay`."""
-    magnitude = np.abs(h_reference[:record_length])
-    peak = int(np.argmax(magnitude))
-    if magnitude[peak] < 0.1 * abs(unity[peak_delay]):
-        raise AnalysisError("Sweep not found in the captured data")
-    offset = peak - peak_delay
-
-    # The source is updated at batch boundaries, and captures start at one.
-    aligned = int(round(offset / batch_size)) * batch_size
-    if aligned != offset:
-        if abs(aligned - offset) <= 2:
-            warnings.append(f"Sweep start found {offset - aligned} samples off the "
-                            "batch boundary; using the boundary")
-            offset = aligned
-        else:
-            warnings.append("Sweep start not aligned to batch boundary "
-                            f"(offset {offset} samples)")
-    return offset
-
-
-def _affected(f: np.ndarray, gaps: np.ndarray, lag_start: int, lag_stop: int,
-              sweep: Sweep) -> np.ndarray:
-    """Which of the frequencies `f` (cycles/sample) read from a window of the impulse
-    response at lags `lag_start` to `lag_stop` (relative to the sweep start) receive the
-    record at the sample ranges `gaps` (start, stop; relative to the sweep start).
-
-    The deconvolution places the record at time t and frequency f at the lag t - t_f,
-    where t_f is the time at which the sweep passes f (the inverse filter is essentially
-    the time-reversed sweep).
-    """
-    f1 = sweep.f_start * sweep.sample_period
-    margin = 2**_GAP_MARGIN
-    affected = np.zeros(len(f), bool)
-    for start, stop in gaps:
-        low = f1 * math.exp(sweep.growth * (start - lag_stop)) / margin
-        high = f1 * math.exp(sweep.growth * (stop - lag_start)) * margin
-        affected |= (f >= low) & (f <= high)
-    return affected
+def available() -> bool:
+    """Whether `analyse()` is available, i.e. the `stabilizer_psd` extension is."""
+    return _psd is not None
 
 
 def _format_frequency(f: float) -> str:
@@ -488,8 +261,10 @@ def analyse(runs: list[np.ndarray],
             batch_size: int,
             settings: AnalysisSettings,
             offsets: list[int] | None = None,
-            gaps: list[np.ndarray] | None = None) -> Analysis:
-    """Estimate the responses of all channels to the sweep, averaged over several runs.
+            gaps: list[np.ndarray] | None = None,
+            memory: int = 2 << 30) -> Analysis:
+    """Estimate the responses of all channels to the sweep, averaged over several runs
+    (`stabilizer_psd.analyse_sweep()`, see `psd/src/ess.rs` for the method).
 
     :param runs: For each run, the captured data of all channels, (n_channels, length),
         in volts.
@@ -499,333 +274,62 @@ def analyse(runs: list[np.ndarray],
     :param offsets: The start of the sweep in each run, if already known.
     :param gaps: For each run, the ranges of samples (start, stop) which were lost and
         have been interpolated linearly, as an (n, 2) array. The response to the
-        stimulus lost during the sweep is filled in from the estimated response, and the
-        noise estimate of the run is left out at the frequencies affected by what
-        remains (see `fill_gaps()` in the code).
+        stimulus lost during the sweep is filled in from the response, and the noise
+        estimate and the harmonics of the run are left out at the frequencies affected
+        by what remains.
+    :param memory: Memory budget for the buffers of the channels analysed in parallel,
+        in bytes.
+    :raises ImportError: if the extension is not available (see `available()`).
+    :raises AnalysisError: if the data cannot be analysed.
     """
-    warnings = []
-    sample_period = sweep.sample_period
-    f1 = sweep.f_start * sample_period
-    f2 = sweep.f_stop * sample_period
-
-    # Window parameters (in samples). The windows rise smoothly over `pre` samples before
-    # time zero of the respective impulse response: sharp edges would mix the response
-    # near the band edges into the whole band. They are limited by the spacing to the
-    # (earlier) impulse response of the next higher harmonic.
-    n_window = max(16, int(round(settings.ir_window / sample_period)))
-    pre = int(np.clip(0.4 * sweep.harmonic_delay(2), 32, n_window // 2))
-    window = _Window(pre, n_window)
-
-    harmonic_windows = {}
-    end = -pre  # End of the following window.
-    for k in range(2, settings.max_harmonic + 1):
-        delay = sweep.harmonic_delay(k)
-        harmonic_pre = int(0.3 * (sweep.harmonic_delay(k + 1) - delay))
-        length = int(end + delay)
-        if harmonic_pre < 4 or length < 16 or k * f1 >= f2:
-            break
-        harmonic_windows[k] = _Window(harmonic_pre, length)
-        end = int(-delay) - harmonic_pre
-    harmonic_orders = list(harmonic_windows)
-
-    n_spectrum = sfft.next_fast_len(
-        2 * max(len(w.taper) for w in [window, *harmonic_windows.values()]), real=True)
-    f_spectrum = np.arange(n_spectrum // 2 + 1) / n_spectrum
-
-    # Logarithmic frequency grid inside the analysis band.
-    f_lo = f1 * 2**BAND_EDGE_TAPER
-    f_hi = f2 * 2**-BAND_EDGE_TAPER
-    if f_lo >= f_hi:
-        raise AnalysisError("Frequency range too narrow")
-    n_grid = max(2, math.ceil(math.log10(f_hi / f_lo) * settings.points_per_decade) + 1)
-    grid = np.geomspace(f_lo, f_hi, n_grid)
-    # The harmonics only cover output frequencies from k times the start frequency,
-    # leading to an additional band edge there.
-    harmonic_grids = {
-        k: grid[(k * grid <= f_hi) & (grid >= f_lo * 2**(2 * BAND_EDGE_TAPER))]
-        for k in harmonic_orders
-    }
-
-    # The noise is estimated from the impulse response following the response window
-    # (with the window shape of the respective response), starting here.
-    noise_start = n_window - pre
-
-    # Section of the impulse responses to keep for display.
-    ir_start = min(-pre, end)
-    ir_stop = noise_start + max(
-        len(w.taper) for w in [window, *harmonic_windows.values()])
-
-    def spectrum(segment, shift):
-        """Spectrum of an impulse response segment, with time zero `shift` samples into
-        the segment."""
-        return sfft.rfft(segment, n_spectrum) * np.exp(2j * np.pi * f_spectrum * shift)
-
-    def response(h, deconvolve, start, window, frequencies, fraction=0.0, noise=()):
-        """Response at `frequencies` (cycles/sample) from the impulse response `h`
-        with time zero at `start + fraction`.
-
-        The band limits of the deconvolution lead to long components in the impulse
-        responses, which are cut off by the time window, and thus to errors near the band
-        edges. To correct for this, the result is normalised by the same windowing of
-        the impulse response of a unity-gain system with the same bulk delay
-        ("normalised convolution"). This is accurate as long as the response is smooth
-        on the scale of the frequency resolution.
-
-        `noise` is a list of (window, frequencies), for which to estimate the noise from
-        the impulse response following `window`, as for the response itself (e.g. the
-        same `window` and `frequencies`, or those of the harmonics).
-
-        Returns the response, the noise estimates, and the bulk delay found (in samples).
-        """
-        taper = window.taper
-        segment = _segment(h, start - window.pre, len(taper)) * taper
-        # The bulk delay of the response, beyond that of the band limiting filter.
-        delay = int(np.argmax(np.abs(segment[window.pre:]))) - deconvolve.peak_delay
-        reference = _segment(deconvolve.unity, -window.pre - delay, len(taper)) * taper
-        # Remove the bulk delay before averaging over frequency (and restore it after).
-        shift = window.pre + delay
-        values = spectrum(segment, shift)
-        unity_values = spectrum(reference, shift)
-        average = partial(_grid_average,
-                          grid=frequencies,
-                          points_per_decade=settings.points_per_decade)
-        unity_average = average(f_spectrum, unity_values)
-        result = (average(f_spectrum, values) / unity_average *
-                  np.exp(-2j * np.pi * frequencies * (delay - fraction)))
-        if not noise:
-            return result, [], delay
-
-        # The following part of the impulse response contains the noise, as well as the
-        # continuation of the band limiting filter response, which is subtracted using
-        # the response estimate.
-        with np.errstate(invalid="ignore", divide="ignore"):
-            estimate = values / unity_values
-        estimate = np.where(np.isfinite(estimate), estimate, 0)
-        estimates = []
-        for noise_window, noise_frequencies in noise:
-            noise_taper = noise_window.taper
-            noise_values = spectrum(
-                _segment(h, start + noise_start, len(noise_taper)) * noise_taper, shift)
-            continuation = spectrum(
-                _segment(deconvolve.unity, noise_start - delay, len(noise_taper)) *
-                noise_taper, shift)
-            noise_values -= estimate * continuation
-            # The estimate carries the noise of the response window (relative to the
-            # windowed unity response), which the subtraction adds to that of the noise
-            # window. This matters where the continuation is not small against the
-            # windowed unity response, i.e. near the band edges (where the band limiting
-            # filter rings for long); take the added noise out of the power.
-            with np.errstate(invalid="ignore", divide="ignore"):
-                added = np.abs(continuation / unity_values)**2
-            noise_values /= np.sqrt(1 + np.where(np.isfinite(added), added, 0))
-            # Averaging over a frequency interval Δf selects a time span of about 1 / Δf
-            # of the window; the zero-padded spectrum samples are correlated accordingly.
-            correlation = n_spectrum / np.sum(noise_taper**2)
-            noise_average = _grid_average(f_spectrum, noise_values, noise_frequencies,
-                                          settings.points_per_decade, True, correlation)
-            # Relative to the gain of the window, as for the response.
-            gain = _grid_average(
-                f_spectrum,
-                spectrum(
-                    _segment(deconvolve.unity, -noise_window.pre - delay,
-                             len(noise_taper)) * noise_taper, noise_window.pre + delay),
-                noise_frequencies, settings.points_per_decade)
-            estimates.append(noise_average / np.abs(gain))
-        return result, estimates, delay
-
-    def fill_gaps(h, record, deconvolve, offset, gaps, stimulus_spectrum):
-        """Correct the impulse response `h` of `record` for its lost samples (the ranges
-        `gaps`), which have been interpolated linearly.
-
-        The interpolation replaces the response to the stimulus there by a straight
-        line. What it removes is a burst, which the deconvolution spreads along a chirp
-        (the time-reversed sweep) through the impulse response, where it swamps the
-        harmonics and the noise estimate at the frequencies at which the chirp passes
-        their windows, and biases the response at the frequency of the sweep at that
-        time. The linear response of the channel to the stimulus is known from the
-        estimate of its response (and the stimulus exactly), so this models what the
-        interpolation removed, and adds its impulse response back. As the estimate is
-        itself biased by what is missing, this is repeated with the corrected impulse
-        response.
-        """
-        f = deconvolve.frequencies
-        with np.errstate(divide="ignore"):
-            log_f = np.log(f)
-        log_grid = np.log(grid)
-        corrected = h
-        previous = None
-        for _ in range(_GAP_FILL_PASSES):
-            result, _, delay = response(corrected, deconvolve, offset, window, grid)
-            # The response at the frequencies of the record spectrum: interpolate the
-            # smooth part (without the bulk delay) on the logarithmic grid.
-            smooth = result * np.exp(2j * np.pi * grid * delay)
-            estimate = (np.interp(log_f, log_grid, smooth.real) +
-                        1j * np.interp(log_f, log_grid, smooth.imag))
-            estimate *= np.exp(-2j * np.pi * f * delay)
-            model = sfft.irfft(stimulus_spectrum * estimate,
-                               deconvolve.n_fft)[:len(record)]
-            fill = model - _interpolate_gaps(model, gaps)
-            corrected = h + deconvolve.deconvolve(fill)
-            if previous is not None and (np.max(np.abs(fill - previous))
-                                         <= _GAP_FILL_TOLERANCE * np.max(np.abs(fill))):
-                break
-            previous = fill
-        return corrected
-
-    # Additionally analyse the reference channel with the excitation subtracted.
-    n_channels = runs[0].shape[0] + 1
-    responses = np.zeros((len(runs), n_channels, n_grid), complex)
-    noise = np.full((len(runs), n_channels, n_grid), np.nan)
-    harmonics = {
-        k: np.zeros((len(runs), n_channels, len(g)), complex)
-        for k, g in harmonic_grids.items()
-    }
-    harmonic_noise = {k: np.full(v.shape, np.nan) for k, v in harmonics.items()}
-    impulse_responses = np.zeros((n_channels, ir_stop - ir_start))
-    found_offsets = []
-    noise_available = True
-    #: Frequencies of the sweep at the times of lost data.
-    gap_frequencies = []
-
-    excitation = sweep.excitation()
-    deconvolvers = {}
-    for run, records in enumerate(runs):
-        record_length = records.shape[1]
-        # Keep the most recent deconvolver, as the runs usually have the same length.
-        if record_length not in deconvolvers:
-            deconvolvers = {record_length: _Deconvolver(sweep, excitation, record_length)}
-        deconvolve = deconvolvers[record_length]
-        if offsets is None:
-            offset = find_sweep_start(deconvolve(records[reference]), record_length,
-                                      deconvolve.unity, deconvolve.peak_delay, batch_size,
-                                      warnings)
-        else:
-            offset = offsets[run]
-        found_offsets.append(offset)
-
-        after_sweep = record_length - (offset + sweep.length)
-        if after_sweep < 0:
-            raise AnalysisError("The sweep was not captured completely")
-        if after_sweep < n_window:
-            warnings.append("Capture ended before the end of the impulse response "
-                            "window")
-        # The noise windows collect the noise from the following sweep length of the
-        # record.
-        noise_windows = [(window, grid)] + [(harmonic_windows[k], k * harmonic_grids[k])
-                                            for k in harmonic_orders]
-        has_noise = [
-            offset + noise_start + len(w.taper) + sweep.length <= record_length
-            for w, _ in noise_windows
-        ]
-        noise_available &= has_noise[0]
-        # Lost (interpolated) data during the sweep (see `gaps` above), relative to
-        # the start of the sweep.
-        run_gaps = np.zeros((0, 2), int)
-        if gaps is not None and len(gaps[run]):
-            run_gaps = np.clip(
-                np.asarray(gaps[run], int).reshape(-1, 2) - offset, 0, sweep.length)
-            run_gaps = run_gaps[run_gaps[:, 1] > run_gaps[:, 0]]
-        for gap_start, gap_stop in run_gaps:
-            gap_frequencies.append(sweep.f_start * math.exp(sweep.growth *
-                                                            (gap_start + gap_stop) / 2))
-        # The noise estimate is left out where the window receives what remains of
-        # the lost data (see `fill_gaps()`).
-        noise_affected = [
-            _affected(frequencies, run_gaps, noise_start, noise_start + len(w.taper),
-                      sweep) for w, frequencies in noise_windows
-        ]
-
-        stimulus = np.zeros(record_length)
-        stimulus[offset:offset + sweep.length] = excitation
-        stimulus_spectrum = None
-        if len(run_gaps):
-            stimulus_spectrum = sfft.rfft(stimulus, deconvolve.n_fft)
-            # Interpolated like the record, so that the difference is the interpolated
-            # filter output.
-            stimulus = _interpolate_gaps(stimulus, run_gaps + offset)
-        reference_output = records[reference] - stimulus
-        for channel, record in enumerate([*records, reference_output]):
-            h = deconvolve(record, offset)
-            if len(run_gaps):
-                h = fill_gaps(h, record, deconvolve, offset, run_gaps + offset,
-                              stimulus_spectrum)
-            result, noise_estimates, _ = response(h,
-                                                  deconvolve,
-                                                  offset,
-                                                  window,
-                                                  grid,
-                                                  noise=noise_windows)
-            responses[run, channel] = result
-            for i, estimate in enumerate(noise_estimates):
-                if has_noise[i]:
-                    estimate[noise_affected[i]] = np.nan
-                    if i == 0:
-                        noise[run, channel] = estimate
-                    else:
-                        harmonic_noise[harmonic_orders[i - 1]][run, channel] = estimate
-            for k in harmonic_orders:
-                delay = sweep.harmonic_delay(k)
-                result, _, _ = response(h, deconvolve, offset - round(delay),
-                                        harmonic_windows[k], k * harmonic_grids[k],
-                                        round(delay) - delay)
-                harmonics[k][run, channel] = result
-            impulse_responses[channel] += _segment(h, offset + ir_start,
-                                                   ir_stop - ir_start)
-
-    if not noise_available:
-        warnings.append("Capture too short for a noise estimate")
-    if gap_frequencies:
-        gap_frequencies.sort()
-        if len(gap_frequencies) == 1:
-            where = f"at {_format_frequency(gap_frequencies[0])}"
-        elif len(gap_frequencies) <= 3:
-            where = "at " + ", ".join(map(_format_frequency, gap_frequencies))
-        else:
-            where = (f"{len(gap_frequencies)} times between "
-                     f"{_format_frequency(gap_frequencies[0])} and "
-                     f"{_format_frequency(gap_frequencies[-1])}")
-        warnings.append(f"Stream data lost during the sweep {where} (filled in from "
-                        "the response; left out of the noise estimate)")
-
-    n_runs = len(runs)
-
-    def noise_of_average(per_run):
-        """The noise of the average of the independent runs, from the runs with an
-        estimate (NaN where there is none)."""
-        valid = np.isfinite(per_run)
-        with np.errstate(invalid="ignore", divide="ignore"):
-            return np.sqrt(
-                np.sum(np.where(valid, per_run, 0)**2, axis=0) / np.sum(valid, axis=0) /
-                n_runs)
-
+    try:
+        result = _extension().analyse_sweep(
+            [np.ascontiguousarray(run, np.float64) for run in runs],
+            sweep._parameters(),
+            reference,
+            batch_size,
+            settings.ir_window,
+            settings.points_per_decade,
+            settings.max_harmonic,
+            offsets=None if offsets is None else [int(o) for o in offsets],
+            gaps=None if gaps is None else
+            [np.ascontiguousarray(np.asarray(g, np.int64).reshape(-1, 2)) for g in gaps],
+            memory=memory)
+    except ValueError as e:
+        raise AnalysisError(str(e)) from None
+    ts = sweep.sample_period
+    orders = result["harmonic_orders"]
+    ir_start = result["ir_start"]
+    ir_window = result["ir_window"]
+    noise_window = result["noise_window"]
+    warnings = list(result["warnings"])
+    gaps_at = [_format_frequency(f / ts) for f in result["gap_frequencies"]]
+    if gaps_at:
+        where = (f"at {', '.join(gaps_at)}" if len(gaps_at) <= 3 else
+                 f"{len(gaps_at)} times between {gaps_at[0]} and {gaps_at[-1]}")
+        warnings.append(f"Stream data lost during the sweep {where} (filled in from the "
+                        "response; left out of the noise estimate)")
     return Analysis(
-        frequencies=grid / sample_period,
-        responses=np.mean(responses, axis=0),
-        noise=noise_of_average(noise),
+        frequencies=result["frequencies"] / ts,
+        responses=result["responses"],
+        noise=result["noise"],
         harmonic_frequencies={
-            k: g / sample_period
-            for k, g in harmonic_grids.items()
+            k: f / ts
+            for k, f in zip(orders, result["harmonic_frequencies"])
         },
-        harmonics={
-            k: np.mean(v, axis=0)
-            for k, v in harmonics.items()
-        },
-        harmonic_noise={
-            k: noise_of_average(v)
-            for k, v in harmonic_noise.items()
-        },
-        ir_time=np.arange(ir_start, ir_stop) * sample_period,
-        impulse_responses=impulse_responses / n_runs,
-        ir_window=(-pre * sample_period, n_window * sample_period),
-        noise_window=(noise_start * sample_period, (noise_start + len(window.taper)) *
-                      sample_period) if noise_available else None,
+        harmonics=dict(zip(orders, result["harmonics"])),
+        harmonic_noise=dict(zip(orders, result["harmonic_noise"])),
+        ir_time=(ir_start + np.arange(result["impulse_responses"].shape[1])) * ts,
+        impulse_responses=result["impulse_responses"],
+        ir_window=(ir_window[0] * ts, ir_window[1] * ts),
+        noise_window=None if noise_window is None else
+        (noise_window[0] * ts, noise_window[1] * ts),
         harmonic_windows={
-            k: ((-sweep.harmonic_delay(k) - w.pre) * sample_period,
-                (-sweep.harmonic_delay(k) + len(w.taper) - w.pre) * sample_period)
-            for k, w in harmonic_windows.items()
+            k: (w[0] * ts, w[1] * ts)
+            for k, w in zip(orders, result["harmonic_windows"])
         },
-        offsets=found_offsets,
-        warnings=list(dict.fromkeys(warnings)),
+        offsets=list(result["offsets"]),
+        warnings=warnings,
     )
 
 
