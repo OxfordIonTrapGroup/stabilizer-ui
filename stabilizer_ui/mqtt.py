@@ -119,11 +119,19 @@ class MqttInterface:
         return await self._request(self.topic(key), payload, retain, timeout)
 
     async def get(self, key: str) -> Any:
-        """Get the value of the miniconf leaf `key` (relative to the topic base)."""
+        """Get the value of the miniconf leaf `key` (relative to the topic base).
+
+        Raises `MiniconfError` if the device reports an error, or answers with something
+        other than a value (firmware with a miniconf too old to have gets takes the empty
+        payload as a set and answers `OK`).
+        """
         # An empty payload requests the value. (It must not be retained, as that would
         # clear the retained value instead.)
-        value = json.loads(await self._request(self.topic(key), b"", False))
-        return self.firmware.from_device(key, value)
+        message = await self._request(self.topic(key), b"", False)
+        try:
+            return self.firmware.from_device(key, json.loads(message))
+        except (ValueError, KeyError, TypeError):
+            raise MiniconfError(key, f"Not a value: {message!r}") from None
 
     async def detect_firmware(self) -> Firmware:
         """Find out which firmware the device runs (by getting a setting which only one

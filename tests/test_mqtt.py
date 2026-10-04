@@ -5,7 +5,9 @@ import os
 
 import pytest
 
-from stabilizer_ui.mqtt import MqttInterface, UiMqttBridge, UiMqttConfig
+from stabilizer_ui.firmware import FIRMWARES
+from stabilizer_ui.mqtt import (MiniconfError, MqttInterface, UiMqttBridge, UiMqttConfig,
+                                UnsupportedFirmware)
 
 
 class Client:
@@ -21,13 +23,19 @@ class Client:
         self.messages.append((topic, payload, properties))
 
     def reply(self, index, value):
+        self.reply_raw(index, json.dumps(value).encode())
+
+    def reply_raw(self, index, payload, code='Ok'):
         _, _, properties = self.messages[index]
         self.on_message(
-            self, properties['response_topic'],
-            json.dumps(value).encode(), 0, {
+            self, properties['response_topic'], payload, 0, {
                 'correlation_data': [properties['correlation_data']],
-                'user_property': [('code', 'Ok')]
+                'user_property': [('code', code)]
             })
+
+    async def wait_for_request(self, count):
+        while len(self.messages) < count:
+            await asyncio.sleep(0)
 
 
 def test_timeout_aborts_session_and_late_reply_cannot_complete_new_request():
@@ -63,6 +71,33 @@ def test_timeout_aborts_session_and_late_reply_cannot_complete_new_request():
         client.reply(2, 'G5')
         assert await fresh == 'G5'
         assert len(client.subscriptions) == 2
+        assert not interface._pending
+
+    asyncio.run(run())
+
+
+def test_get_answered_without_a_value_is_a_device_error():
+    """Firmware too old for gets answers the empty payload with `OK` (it takes it as a
+    set), which must not crash the caller but count as an unsupported firmware."""
+
+    async def run():
+        client = Client()
+        interface = MqttInterface(client, 'device', 1)
+        interface.subscribe()
+
+        request = asyncio.create_task(interface.get('settings/stream'))
+        await client.wait_for_request(1)
+        client.reply_raw(0, b'OK')
+        with pytest.raises(MiniconfError, match="Not a value: 'OK'"):
+            await request
+        assert not interface._pending
+
+        detect = asyncio.create_task(interface.detect_firmware())
+        for i in range(len(FIRMWARES)):
+            await client.wait_for_request(i + 2)
+            client.reply_raw(i + 1, b'OK')
+        with pytest.raises(UnsupportedFirmware):
+            await detect
         assert not interface._pending
 
     asyncio.run(run())

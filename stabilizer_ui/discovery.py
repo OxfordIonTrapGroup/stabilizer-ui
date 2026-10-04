@@ -162,3 +162,7 @@ async def _probe(device: Device, interface: MqttInterface):
         device.error = str(e)
     except (ConnectionError, TimeoutError):
         device.error = "No answer"
+    except Exception as e:
+        # One device must not take the others on the broker down with it.
+        logger.exception("Failed to probe %s", device)
+        device.error = f"{type(e).__name__}: {e}"
