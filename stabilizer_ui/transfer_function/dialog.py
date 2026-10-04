@@ -393,18 +393,22 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         bode_layout.addWidget(self.margin_label)
         self.tabs.addTab(bode, "Bode")
 
-        # Impulse response.
+        # Deconvolved response.
         ir = QtWidgets.QWidget()
         ir_layout = QtWidgets.QVBoxLayout(ir)
         ir_options = QtWidgets.QHBoxLayout()
         ir_options.addWidget(QtWidgets.QLabel("Channel:"))
         self.ir_channel_box = QtWidgets.QComboBox()
         ir_options.addWidget(self.ir_channel_box)
+        self.ir_log_check = QtWidgets.QCheckBox("Logarithmic")
+        self.ir_log_check.setToolTip(
+            "Show the magnitude of the response in dB instead of the response itself")
+        ir_options.addWidget(self.ir_log_check)
         ir_options.addStretch()
         ir_layout.addLayout(ir_options)
         self.ir_view = GraphicsLayoutWidget()
         self.ir_plot = self.ir_view.addPlot()
-        self.ir_plot.setLabels(left="|h| / dB", bottom="Time after sweep start / ms")
+        self.ir_plot.setLabels(bottom="Time after sweep start / ms")
         self.ir_plot.showGrid(True, True, 0.3)
         self.ir_plot.setDownsampling(auto=True, mode="peak")
         self.ir_plot.setClipToView(True)
@@ -414,7 +418,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
             "windows (orange, from the right: 2nd, 3rd, …)")
         ir_note.setStyleSheet("color: gray")
         ir_layout.addWidget(ir_note)
-        self.tabs.addTab(ir, "Impulse response")
+        self.tabs.addTab(ir, "Deconvolved response")
 
         # Distortion.
         distortion = QtWidgets.QWidget()
@@ -460,6 +464,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.harmonics_box.valueChanged.connect(self._plot_distortion)
         self.harmonics_box.valueChanged.connect(self._save_parameters)
         self.ir_channel_box.currentIndexChanged.connect(self._plot_impulse_response)
+        self.ir_log_check.toggled.connect(self._plot_impulse_response)
         self.distortion_channel_box.currentIndexChanged.connect(self._plot_distortion)
         self.tabs.currentChanged.connect(self._plot_details)
         return panel
@@ -909,9 +914,14 @@ class TransferFunctionWindow(QtWidgets.QDialog):
                                              brush=pg.mkBrush(*brush))
                 self.ir_plot.addItem(region)
         h = analysis.impulse_responses[channel]
-        floor = np.max(np.abs(h)) * 1e-9 + 1e-30
+        if self.ir_log_check.isChecked():
+            floor = np.max(np.abs(h)) * 1e-9 + 1e-30
+            h = _db(np.abs(h) + floor)
+            self.ir_plot.setLabels(left="|h| / dB")
+        else:
+            self.ir_plot.setLabels(left="h")
         self.ir_plot.plot(1e3 * analysis.ir_time,
-                          _db(np.abs(h) + floor),
+                          h,
                           pen=pg.mkPen(self._colours[id(measurement)]))
 
     def _shown_harmonics(self, measurement: Measurement) -> list[int]:
