@@ -15,7 +15,8 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from scipy import signal
 
 from . import ess
-from .measurement import (Measurement, SweepRunner, PRE_TRIGGER, post_trigger_duration)
+from .measurement import (Measurement, SweepRunner, MAX_RETAKES, PRE_TRIGGER,
+                          post_trigger_duration)
 from ..plot import COLOURS, FrequencyAxis, GraphicsLayoutWidget, format_frequency
 from ..scientific_spinbox import ScientificSpinBox
 
@@ -29,6 +30,7 @@ DEFAULTS = {
     "duration": 1.0,
     "amplitude": 0.1,
     "runs": 1,
+    "retake_lost": True,
     "auto_window": True,
     "ir_window": 100.0,
     "points_per_decade": 100,
@@ -224,6 +226,12 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.runs_box.setRange(1, 100)
         self.runs_box.setToolTip("Number of sweeps to average")
         form.addRow("Averages:", self.runs_box)
+        self.retake_box = QtWidgets.QCheckBox("Retake sweeps with lost stream data")
+        self.retake_box.setToolTip(
+            "Repeat a sweep if stream data was lost after it was triggered (up to "
+            f"{MAX_RETAKES} times per sweep). Otherwise, what was lost is filled in from "
+            "the response, and left out of the noise estimate.")
+        form.addRow(self.retake_box)
         self.sweep_info = QtWidgets.QLabel()
         self.sweep_info.setWordWrap(True)
         form.addRow(self.sweep_info)
@@ -474,6 +482,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
             "duration": self.duration_box.value(),
             "amplitude": self.amplitude_box.value(),
             "runs": self.runs_box.value(),
+            "retake_lost": self.retake_box.isChecked(),
             "auto_window": self.auto_window_box.isChecked(),
             "ir_window": self.window_box.value(),
             "points_per_decade": self.points_box.value(),
@@ -498,6 +507,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self.duration_box.setValue(values["duration"])
         self.amplitude_box.setValue(values["amplitude"])
         self.runs_box.setValue(values["runs"])
+        self.retake_box.setChecked(values["retake_lost"])
         self.auto_window_box.setChecked(values["auto_window"])
         self.window_box.setValue(values["ir_window"])
         self.points_box.setValue(values["points_per_decade"])
@@ -580,7 +590,7 @@ class TransferFunctionWindow(QtWidgets.QDialog):
         self._save_parameters()
         self._task = asyncio.ensure_future(
             self._measure(sweep, self.channel_box.currentIndex(), self.runs_box.value(),
-                          self._analysis_settings(sweep)))
+                          self._analysis_settings(sweep), self.retake_box.isChecked()))
         self._update_buttons()
 
     def _cancel(self):
@@ -588,16 +598,20 @@ class TransferFunctionWindow(QtWidgets.QDialog):
             self._task.cancel()
 
     async def _measure(self, sweep: ess.Sweep, channel: int, runs: int,
-                       settings: ess.AnalysisSettings):
+                       settings: ess.AnalysisSettings, retake_lost: bool):
         try:
             measurement = await self.runner.run(sweep, channel, runs, settings.ir_window,
-                                                self._progress)
+                                                self._progress, retake_lost)
             self._progress("Analysing…", 1)
             await asyncio.get_running_loop().run_in_executor(None, measurement.analyse,
                                                              settings)
             self._add(measurement)
-            warnings = "; ".join(measurement.analysis.warnings)
-            self._progress(f"Done. {warnings}" if warnings else "Done", 1)
+            notes = list(measurement.analysis.warnings)
+            if measurement.retakes:
+                notes.append(f"{measurement.retakes} sweep"
+                             f"{'' if measurement.retakes == 1 else 's'} retaken for "
+                             "lost stream data")
+            self._progress("Done. " + "; ".join(notes) if notes else "Done", 1)
         except asyncio.CancelledError:
             self._progress("Cancelled", 0)
         except Exception as e:

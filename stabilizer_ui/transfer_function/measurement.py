@@ -31,6 +31,9 @@ PRE_TRIGGER = 0.1
 POST_TRIGGER_MARGIN = (0.3, 0.1)
 #: Time to wait for the first stream data, in seconds.
 STREAM_TIMEOUT = 2.0
+#: How often a sweep is retaken when stream data was lost after the trigger (if
+#: requested) before it is kept as it is.
+MAX_RETAKES = 5
 
 
 def post_trigger_duration(sweep: ess.Sweep, ir_window: float) -> float:
@@ -60,6 +63,8 @@ class Measurement:
         default_factory=lambda: datetime.datetime.now().isoformat(timespec="seconds"))
     #: Snapshot of the device and UI settings (topic path to value).
     settings: dict = field(default_factory=dict)
+    #: Number of sweeps retaken because stream data was lost.
+    retakes: int = 0
     name: str = ""
     analysis_settings: ess.AnalysisSettings | None = None
     analysis: ess.Analysis | None = None
@@ -152,6 +157,7 @@ class Measurement:
             f.attrs["excited_channel"] = self.channel
             f.attrs["channel_names"] = self.channel_names
             f.attrs["batch_size"] = self.batch_size
+            f.attrs["retakes"] = self.retakes
 
             sweep = f.create_group("sweep")
             sweep.attrs["description"] = (
@@ -244,6 +250,7 @@ class Measurement:
                 device=str(f.attrs["device"]),
                 timestamp=str(f.attrs["timestamp"]),
                 settings=json.loads(f.attrs["settings"]),
+                retakes=int(f.attrs.get("retakes", 0)),
                 name=str(f.attrs["name"]),
             )
             if "analysis" in f:
@@ -352,18 +359,21 @@ class SweepRunner:
         if stop_running:
             await self.interface.set_setting("settings/trigger", True)
 
-    async def run(
-            self,
-            sweep: ess.Sweep,
-            channel: int,
-            n_runs: int,
-            ir_window: float,
-            progress: Callable[[str, float], None] = lambda *_: None) -> Measurement:
+    async def run(self,
+                  sweep: ess.Sweep,
+                  channel: int,
+                  n_runs: int,
+                  ir_window: float,
+                  progress: Callable[[str, float], None] = lambda *_: None,
+                  retake_lost: bool = False) -> Measurement:
         """Measure the response to `n_runs` sweeps on the given channel.
 
         :param ir_window: The impulse response window that will be used for the
             analysis, which determines how long to capture after the sweep.
         :param progress: Called with a status message and the fraction completed.
+        :param retake_lost: Repeat a sweep if stream data was lost after it was
+            triggered (up to `MAX_RETAKES` times per sweep), instead of leaving the
+            analysis to fill it in.
         """
         loop = asyncio.get_running_loop()
         parser = self.stream_thread.parser
@@ -390,8 +400,12 @@ class SweepRunner:
 
         runs, lost_batches, batch_size = [], [], None
         running = False
+        run, retaken, retakes = 0, 0, 0
         try:
-            for run in range(n_runs):
+            while run < n_runs:
+                label = f"Sweep {run + 1} of {n_runs}"
+                if retaken:
+                    label += f" (retake {retaken})"
                 capture = StreamCapture(loop, parser.n_sources)
                 self.stream_thread.start_capture(capture)
                 try:
@@ -403,8 +417,11 @@ class SweepRunner:
                     while capture.batches * batch_period < PRE_TRIGGER:
                         await asyncio.sleep(0.01)
 
-                    progress(f"Sweep {run + 1} of {n_runs}…", run / n_runs)
+                    progress(f"{label}…", run / n_runs)
                     running = True
+                    # The sweep starts after the trigger is acknowledged, so losses
+                    # from here on can affect it.
+                    trigger_batch = capture.batches
                     await self.interface.set_setting("settings/trigger", True)
                     # The sweep starts right after the trigger is acknowledged.
                     duration = post_trigger_duration(sweep, ir_window)
@@ -414,8 +431,7 @@ class SweepRunner:
                         start = capture.batches
                         while True:
                             done = (capture.batches - start) / (capture.target - start)
-                            progress(f"Sweep {run + 1} of {n_runs}…",
-                                     (run + min(done, 1)) / n_runs)
+                            progress(f"{label}…", (run + min(done, 1)) / n_runs)
                             await asyncio.sleep(0.1)
 
                     reporter = asyncio.create_task(report())
@@ -431,13 +447,25 @@ class SweepRunner:
                     self.stream_thread.stop_capture()
 
                 data, lost = capture.assemble()
+                affected = np.sum(lost >= trigger_batch)
+                if affected and retake_lost:
+                    if retaken < MAX_RETAKES:
+                        retaken += 1
+                        retakes += 1
+                        logger.info("Retaking sweep %d: %d stream batches lost", run + 1,
+                                    affected)
+                        continue
+                    logger.warning(
+                        "Keeping sweep %d with %d stream batches lost after %d retakes",
+                        run + 1, affected, retaken)
+                elif affected:
+                    logger.warning("%d stream batches lost during sweep %d", affected,
+                                   run + 1)
                 batch_size = capture.batch_size
                 to_machine_units(parser, data)
                 runs.append(data)
                 lost_batches.append(lost)
-                if len(lost):
-                    logger.warning("%d stream batches lost during sweep %d", len(lost),
-                                   run + 1)
+                run, retaken = run + 1, 0
         finally:
             try:
                 await self._stop_source(channel, running)
@@ -453,4 +481,5 @@ class SweepRunner:
                            runs=runs,
                            lost_batches=lost_batches,
                            device=self.device,
-                           settings=settings)
+                           settings=settings,
+                           retakes=retakes)
