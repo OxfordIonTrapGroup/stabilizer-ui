@@ -45,7 +45,7 @@ default-groups = "all"
 
 [tool.uv.sources]
 sipyco = { git = "https://github.com/m-labs/sipyco.git" }
-stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py" }
+stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py", branch = "next" }
 stabilizer-psd = { path = "psd" }
 
 [build-system]
