@@ -23,8 +23,15 @@ use num_complex::Complex64 as C64;
 use rayon::prelude::*;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 
-/// DAC full scale, in volts, as the firmware computes it (single precision).
+/// DAC full scale, in volts, as the firmware computes it (single precision); it scales
+/// the stimulus amplitude to DAC codes.
 const DAC_FULL_SCALE: f32 = 4.096 * 2.5;
+/// Volts per DAC code of the excitation. This must be the scale at which the captured
+/// stream data is converted to volts (`stabilizer.DAC_VOLTS_PER_LSB`, double
+/// precision), as the excitation is subtracted from the DAC records: with the single
+/// precision full scale (10.240001 V), a 7e-8 copy of the stimulus (-143 dB) would be
+/// left in the filter output.
+const DAC_VOLTS_PER_LSB: f64 = 4.096 * 2.5 / 32768.0;
 /// Width of the raised-cosine tapers at either end of the analysis band, in octaves.
 const BAND_EDGE_TAPER: f64 = 1.0 / 12.0;
 /// Regularisation of the inverse filter, relative to the expected sweep PSD.
@@ -84,13 +91,15 @@ impl Sweep {
     /// The excitation added to the DAC output, in volts, exactly as the firmware
     /// generates it: `idsp::AccuOsc` over `idsp::Sweep` (with its table-based sine),
     /// scaled by `signal_generator::Scaler` (computed in single precision) and
-    /// truncated to the 16-bit DAC code.
+    /// truncated to the 16-bit DAC code, which is converted to volts at the scale of
+    /// the stream data.
     pub fn excitation(&self) -> Vec<f64> {
         let amplitude = (self.amplitude as f32 * DAC_FULL_SCALE.recip() * 2147483648f32) as i64;
-        let volts_per_lsb = DAC_FULL_SCALE as f64 / 32768.0;
         AccuOsc::new(self.source.clone())
             .take(self.length)
-            .map(|c| ((((c.im() as i64 * amplitude) >> 31) as i32) >> 16) as f64 * volts_per_lsb)
+            .map(|c| {
+                ((((c.im() as i64 * amplitude) >> 31) as i32) >> 16) as f64 * DAC_VOLTS_PER_LSB
+            })
             .collect()
     }
 }

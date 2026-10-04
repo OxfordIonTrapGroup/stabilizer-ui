@@ -5,7 +5,7 @@ import pytest
 from scipy import signal
 
 import stabilizer.iir_coefficients as iir
-from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD as TS
+from stabilizer import DAC_VOLTS_PER_LSB, DEFAULT_DUAL_IIR_SAMPLE_PERIOD as TS
 
 from stabilizer_ui.transfer_function import ess
 
@@ -145,9 +145,12 @@ def test_excitation():
     sweep = ess.Sweep.design(500, 300e3, 0.15, 1.0, TS)
     x = sweep.excitation()
     assert x.shape == (sweep.length, )
-    # DAC codes, within the amplitude (the sine table reaches the minimum of the i32
-    # range, so the negative peak is one code larger).
-    codes = x / ess.DAC_VOLTS_PER_LSB
+    # DAC codes at the scale of the stream data (a different scale in the extension,
+    # such as the single precision full scale, leaves a copy of the stimulus in the
+    # filter output), within the amplitude (the sine table reaches the minimum of the
+    # i32 range, so the negative peak is one code larger).
+    assert ess.DAC_VOLTS_PER_LSB == DAC_VOLTS_PER_LSB
+    codes = x / DAC_VOLTS_PER_LSB
     assert np.allclose(codes, np.round(codes), atol=1e-9)
     assert np.max(np.abs(x)) <= sweep.amplitude * (1 + 1e-6)
     # The designed sweep, to within the quantisation, the accuracy of the firmware's sine

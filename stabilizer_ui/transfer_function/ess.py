@@ -24,6 +24,7 @@ import math
 from dataclasses import dataclass, field
 
 import numpy as np
+import stabilizer
 
 try:
     import stabilizer_psd as _psd
@@ -43,7 +44,10 @@ MAX_STOP_FREQUENCY = 0.49
 #: added to the DAC output in machine units, so its amplitude must stay below this.
 DAC_FULL_SCALE = np.float32(4.096) * np.float32(2.5)
 MAX_AMPLITUDE = float(DAC_FULL_SCALE)
-DAC_VOLTS_PER_LSB = MAX_AMPLITUDE / (1 << 15)
+#: Volts per DAC code of `Sweep.excitation()`: the scale of the captured stream data,
+#: from which the excitation is subtracted (not the single precision full scale above,
+#: which differs by 7e-8).
+DAC_VOLTS_PER_LSB = stabilizer.DAC_VOLTS_PER_LSB
 
 #: Width of the raised-cosine tapers at either end of the analysis band, in octaves (as
 #: in `psd/src/ess.rs`). No results are reported for these regions.
@@ -371,8 +375,11 @@ def derived_quantity(quantity: str, responses: dict, noise: dict,
     y, y_noise = responses[filter_output_name(n)], noise[filter_output_name(n)]
 
     def ratio(a, a_noise, b, b_noise):
+        # (The relative form, |a / b| hypot(a_noise / |a|, b_noise / |b|), is not
+        # defined where a is exactly zero, e.g. the filter output of a blocked IIR.)
         value = a / b
-        return value, np.abs(value) * np.hypot(a_noise / np.abs(a), b_noise / np.abs(b))
+        b_abs = np.abs(b)
+        return value, np.hypot(a_noise / b_abs, np.abs(a) * b_noise / b_abs**2)
 
     with np.errstate(divide="ignore", invalid="ignore"):
         if quantity == "plant":

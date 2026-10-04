@@ -176,7 +176,8 @@ fn parse_sweep(
 
 /// The excitation of the firmware `SweptSine` source for `sweep` (as for
 /// `analyse_sweep()`), in volts: exactly what the device adds to the DAC output, as it is
-/// reproduced with the firmware's own oscillator (`idsp`) and scaling.
+/// reproduced with the firmware's own oscillator (`idsp`) and scaling, at the scale of
+/// the stream data (`stabilizer.DAC_VOLTS_PER_LSB`).
 #[pyfunction]
 fn sweep_excitation<'py>(
     py: Python<'py>,
