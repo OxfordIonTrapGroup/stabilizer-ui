@@ -270,6 +270,26 @@ def test_noise_estimate():
         assert 0.4 < ratio < 2.5
 
 
+def test_noise_estimate_band_edge():
+    # Near the band edges, the response window cuts the long ringing of the band
+    # limiting filter, which the noise estimate must not mistake for noise. For a channel
+    # with noise only, the bulk delay found is arbitrary, which makes this worse.
+    sweep = ess.Sweep.design(200, 300e3, 0.2, 0.1, TS)
+    plant = delayed(*_resonant_lowpass(50e3, 2))
+    rng = np.random.default_rng(1)
+    responses, estimates = [], []
+    for run in make_runs(sweep, plant, ([1], [1]), noise=3e-3, n_runs=8):
+        run[1] = 3e-3 * rng.standard_normal(run.shape[1])
+        analysis = analyse(sweep, [run])
+        responses.append(analysis.responses[1])
+        estimates.append(analysis.noise[1])
+    responses, estimates = np.array(responses), np.array(estimates)
+    scatter = np.std(responses, axis=0, ddof=1)
+    for points in [slice(0, 4), slice(4, 12), slice(-4, None)]:
+        ratio = np.sqrt(np.mean(estimates[:, points]**2) / np.mean(scatter[points]**2))
+        assert 0.5 < ratio < 1.8, points
+
+
 def test_averaging():
     sweep = ess.Sweep.design(200, 300e3, 0.1, 0.1, TS)
     plant = delayed(*_resonant_lowpass(50e3, 2))

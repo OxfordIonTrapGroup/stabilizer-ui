@@ -542,9 +542,18 @@ def analyse(runs: list[np.ndarray],
             noise_taper = noise_window.taper
             noise_values = spectrum(
                 _segment(h, start + noise_start, len(noise_taper)) * noise_taper, shift)
-            noise_values -= estimate * spectrum(
+            continuation = spectrum(
                 _segment(deconvolve.unity, noise_start - delay, len(noise_taper)) *
                 noise_taper, shift)
+            noise_values -= estimate * continuation
+            # The estimate carries the noise of the response window (relative to the
+            # windowed unity response), which the subtraction adds to that of the noise
+            # window. This matters where the continuation is not small against the
+            # windowed unity response, i.e. near the band edges (where the band limiting
+            # filter rings for long); take the added noise out of the power.
+            with np.errstate(invalid="ignore", divide="ignore"):
+                added = np.abs(continuation / unity_values)**2
+            noise_values /= np.sqrt(1 + np.where(np.isfinite(added), added, 0))
             # Averaging over a frequency interval Δf selects a time span of about 1 / Δf
             # of the window; the zero-padded spectrum samples are correlated accordingly.
             correlation = n_spectrum / np.sum(noise_taper**2)
