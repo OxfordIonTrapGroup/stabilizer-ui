@@ -826,8 +826,11 @@ class TransferFunctionWindow(QtWidgets.QDialog):
             for k in self._shown_harmonics(measurement):
                 harmonic_f, harmonic, harmonic_noise = measurement.harmonic(quantity, k)
                 magnitude = np.abs(harmonic)
-                with np.errstate(invalid="ignore"):
-                    magnitude[magnitude < HARMONIC_THRESHOLD * harmonic_noise] = np.nan
+                if np.any(np.isfinite(harmonic_noise)):
+                    # (Also hidden where the noise is not known, e.g. due to lost data.)
+                    with np.errstate(invalid="ignore"):
+                        magnitude[~(magnitude >= HARMONIC_THRESHOLD *
+                                    harmonic_noise)] = np.nan
                 style = HARMONIC_STYLES.get(k, QtCore.Qt.PenStyle.DotLine)
                 harmonic_pen = (pg.mkPen(colour, width=1, dash=style) if isinstance(
                     style, list) else pg.mkPen(colour, width=1, style=style))

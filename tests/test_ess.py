@@ -82,9 +82,31 @@ def make_runs(sweep,
     return runs
 
 
-def analyse(sweep, runs, ir_window=None, **kwargs):
+def analyse(sweep, runs, ir_window=None, gaps=None, **kwargs):
     settings = ess.AnalysisSettings(ir_window or ess.default_ir_window(sweep), **kwargs)
-    return ess.analyse(runs, sweep, CHANNELS.index("DAC0"), BATCH_SIZE, settings)
+    return ess.analyse(runs,
+                       sweep,
+                       CHANNELS.index("DAC0"),
+                       BATCH_SIZE,
+                       settings,
+                       gaps=gaps)
+
+
+def lose(run, sweep, frequencies, batches=21, offset=1024):
+    """The data of a run with `batches` lost while the sweep is at each of the given
+    frequencies, interpolated linearly (as `Measurement.volts()` does), and the lost
+    ranges (start, stop)."""
+    run = run.copy()
+    gaps = []
+    for f in frequencies:
+        start = offset + int(np.log(f / sweep.f_start) / sweep.growth)
+        stop = start + batches * BATCH_SIZE
+        run[:, start:stop] = np.linspace(run[:, start - 1],
+                                         run[:, stop],
+                                         stop - start + 2,
+                                         axis=1)[:, 1:-1]
+        gaps.append((start, stop))
+    return run, np.array(gaps)
 
 
 def by_name(values):
@@ -288,6 +310,60 @@ def test_noise_estimate_band_edge():
     for points in [slice(0, 4), slice(4, 12), slice(-4, None)]:
         ratio = np.sqrt(np.mean(estimates[:, points]**2) / np.mean(scatter[points]**2))
         assert 0.5 < ratio < 1.8, points
+
+
+def test_lost_data():
+    sweep = ess.Sweep.design(200, 300e3, 0.2, 0.1, TS)
+    plant = delayed(*_resonant_lowpass(50e3, 2))
+    runs = make_runs(sweep, plant, ([1], [1]), noise=3e-5, n_runs=2)
+    lossy, gaps = lose(runs[0], sweep, [5e3, 60e3])
+
+    clean = analyse(sweep, [runs[1]])
+    raw = analyse(sweep, [lossy])
+    filled = analyse(sweep, [lossy], gaps=[gaps])
+    assert not raw.warnings
+    assert len(filled.warnings) == 1
+    assert filled.warnings[0].startswith("Stream data lost during the sweep at 5.0")
+    assert "60." in filled.warnings[0]
+
+    # The interpolation removes the stimulus (at least partly) while the sweep is at the
+    # frequencies of the losses, which biases the responses there; the fill restores
+    # them.
+    f = clean.frequencies
+    expected = frequency_response(*plant, f)
+    adc0 = CHANNELS.index("ADC0")
+
+    def error(analysis):
+        return np.max(np.abs(analysis.responses[adc0] - expected) / np.abs(expected))
+
+    assert error(raw) > 0.1
+    assert error(filled) < 5e-3
+    assert np.max(np.abs(filled.responses[CHANNELS.index("DAC0")] - 1)) < 1e-3
+    assert np.max(np.abs(filled.responses[-1])) < 1e-3
+
+    # What is missing also appears as spurious harmonics, and in the noise window.
+    for k in filled.harmonics:
+        level = np.max(np.abs(clean.harmonics[k][adc0]))
+        assert np.max(np.abs(raw.harmonics[k][adc0])) > 10 * level, k
+        assert np.max(np.abs(filled.harmonics[k][adc0])) < 3 * level, k
+    noise = filled.noise[adc0]
+    valid = np.isfinite(noise)
+    # Within the frequency range the noise window receives from the times of the losses
+    # (down to the band edge for the early one), the noise is not estimated.
+    assert not np.all(valid) and valid[-1]
+    assert not valid[np.searchsorted(f, 5e3)] and not valid[np.searchsorted(f, 500)]
+    assert valid[np.searchsorted(f, 1e3)] and valid[np.searchsorted(f, 20e3)]
+    assert np.all(np.isfinite(clean.noise[adc0]))
+    ratio = np.sqrt(np.mean(noise[valid]**2) / np.mean(clean.noise[adc0][valid]**2))
+    assert 0.7 < ratio < 1.5
+    assert np.max(raw.noise[adc0] / clean.noise[adc0]) > 10
+
+    # The noise of the average is estimated from the runs which have one.
+    averaged = analyse(sweep, [lossy, runs[1]], gaps=[gaps, np.zeros((0, 2), int)])
+    assert np.all(np.isfinite(averaged.noise))
+    ratio = np.median(averaged.noise[adc0] / clean.noise[adc0])
+    assert ratio == pytest.approx(1 / np.sqrt(2), rel=0.2)
+    assert error(averaged) < 5e-3
 
 
 def test_averaging():

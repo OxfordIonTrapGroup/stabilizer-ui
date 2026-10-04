@@ -49,6 +49,19 @@ _REGULARISATION = 1e-4
 #: Fraction of the impulse response window over which it is faded out.
 _FADE_OUT = 0.25
 
+#: Margin, in octaves, around the frequencies at which a window of the impulse response
+#: receives the record at the time of lost data (see `_affected()`), for the spectral
+#: leakage of the window.
+_GAP_MARGIN = 1 / 24
+
+#: Maximum number of passes of filling in lost data from the estimated response
+#: (`fill_gaps()` in `analyse()`), and the relative change of the fill at which to stop.
+#: Each pass reduces what remains by the relative error of the response estimate at the
+#: frequency of the sweep at the time of the loss, which is the fraction of the
+#: data lost there (within the frequency resolution).
+_GAP_FILL_PASSES = 8
+_GAP_FILL_TOLERANCE = 1e-3
+
 
 class AnalysisError(Exception):
     """The captured data could not be analysed."""
@@ -381,6 +394,8 @@ class _Deconvolver:
         self.unity = sfft.irfft(self.inverse * spectrum, self.n_fft)
         #: Position of the peak of `unity`.
         self.peak_delay = int(np.argmax(np.abs(self.unity[:self.n_fft // 2])))
+        #: Frequencies (cycles/sample) of the spectra of records (`rfft(·, n_fft)`).
+        self.frequencies = f
 
     def __call__(self, record: np.ndarray, start: int | None = None) -> np.ndarray:
         """Deconvolve `record`, in which the sweep starts at `start` (if known).
@@ -397,8 +412,26 @@ class _Deconvolver:
                 ramp = np.sin(0.5 * np.pi * (np.arange(fade) + 0.5) / fade)**2
                 record[:fade] *= ramp
                 record[-fade:] *= ramp[::-1]
+        return self.deconvolve(record)
+
+    def deconvolve(self, record: np.ndarray) -> np.ndarray:
+        """Deconvolve `record` as is."""
         return sfft.irfft(
             sfft.rfft(record / self.amplitude, self.n_fft) * self.inverse, self.n_fft)
+
+
+def _interpolate_gaps(x: np.ndarray, gaps: np.ndarray) -> np.ndarray:
+    """`x` with the sample ranges `gaps` (start, stop) interpolated linearly from the
+    neighbouring samples (as `Measurement.volts()` does for lost data)."""
+    if not len(gaps):
+        return x
+    mask = np.zeros(len(x), bool)
+    for start, stop in gaps:
+        mask[start:stop] = True
+    index = np.arange(len(x))
+    x = x.copy()
+    x[mask] = np.interp(index[mask], index[~mask], x[~mask])
+    return x
 
 
 def find_sweep_start(h_reference: np.ndarray, record_length: int, unity: np.ndarray,
@@ -425,12 +458,37 @@ def find_sweep_start(h_reference: np.ndarray, record_length: int, unity: np.ndar
     return offset
 
 
+def _affected(f: np.ndarray, gaps: np.ndarray, lag_start: int, lag_stop: int,
+              sweep: Sweep) -> np.ndarray:
+    """Which of the frequencies `f` (cycles/sample) read from a window of the impulse
+    response at lags `lag_start` to `lag_stop` (relative to the sweep start) receive the
+    record at the sample ranges `gaps` (start, stop; relative to the sweep start).
+
+    The deconvolution places the record at time t and frequency f at the lag t - t_f,
+    where t_f is the time at which the sweep passes f (the inverse filter is essentially
+    the time-reversed sweep).
+    """
+    f1 = sweep.f_start * sweep.sample_period
+    margin = 2**_GAP_MARGIN
+    affected = np.zeros(len(f), bool)
+    for start, stop in gaps:
+        low = f1 * math.exp(sweep.growth * (start - lag_stop)) / margin
+        high = f1 * math.exp(sweep.growth * (stop - lag_start)) * margin
+        affected |= (f >= low) & (f <= high)
+    return affected
+
+
+def _format_frequency(f: float) -> str:
+    return f"{f / 1e3:.3g} kHz" if f >= 1e3 else f"{f:.3g} Hz"
+
+
 def analyse(runs: list[np.ndarray],
             sweep: Sweep,
             reference: int,
             batch_size: int,
             settings: AnalysisSettings,
-            offsets: list[int] | None = None) -> Analysis:
+            offsets: list[int] | None = None,
+            gaps: list[np.ndarray] | None = None) -> Analysis:
     """Estimate the responses of all channels to the sweep, averaged over several runs.
 
     :param runs: For each run, the captured data of all channels, (n_channels, length),
@@ -439,6 +497,11 @@ def analyse(runs: list[np.ndarray],
         output of the excited channel), used to locate the sweep start.
     :param batch_size: The stream batch size; the sweep starts at a batch boundary.
     :param offsets: The start of the sweep in each run, if already known.
+    :param gaps: For each run, the ranges of samples (start, stop) which were lost and
+        have been interpolated linearly, as an (n, 2) array. The response to the
+        stimulus lost during the sweep is filled in from the estimated response, and the
+        noise estimate of the run is left out at the frequencies affected by what
+        remains (see `fill_gaps()` in the code).
     """
     warnings = []
     sample_period = sweep.sample_period
@@ -510,8 +573,9 @@ def analyse(runs: list[np.ndarray],
 
         `noise` is a list of (window, frequencies), for which to estimate the noise from
         the impulse response following `window`, as for the response itself (e.g. the
-        same `window` and `frequencies`, or those of the harmonics). If given, the noise
-        estimates are returned as the second element.
+        same `window` and `frequencies`, or those of the harmonics).
+
+        Returns the response, the noise estimates, and the bulk delay found (in samples).
         """
         taper = window.taper
         segment = _segment(h, start - window.pre, len(taper)) * taper
@@ -529,7 +593,7 @@ def analyse(runs: list[np.ndarray],
         result = (average(f_spectrum, values) / unity_average *
                   np.exp(-2j * np.pi * frequencies * (delay - fraction)))
         if not noise:
-            return result
+            return result, [], delay
 
         # The following part of the impulse response contains the noise, as well as the
         # continuation of the band limiting filter response, which is subtracted using
@@ -567,7 +631,46 @@ def analyse(runs: list[np.ndarray],
                              len(noise_taper)) * noise_taper, noise_window.pre + delay),
                 noise_frequencies, settings.points_per_decade)
             estimates.append(noise_average / np.abs(gain))
-        return result, estimates
+        return result, estimates, delay
+
+    def fill_gaps(h, record, deconvolve, offset, gaps, stimulus_spectrum):
+        """Correct the impulse response `h` of `record` for its lost samples (the ranges
+        `gaps`), which have been interpolated linearly.
+
+        The interpolation replaces the response to the stimulus there by a straight
+        line. What it removes is a burst, which the deconvolution spreads along a chirp
+        (the time-reversed sweep) through the impulse response, where it swamps the
+        harmonics and the noise estimate at the frequencies at which the chirp passes
+        their windows, and biases the response at the frequency of the sweep at that
+        time. The linear response of the channel to the stimulus is known from the
+        estimate of its response (and the stimulus exactly), so this models what the
+        interpolation removed, and adds its impulse response back. As the estimate is
+        itself biased by what is missing, this is repeated with the corrected impulse
+        response.
+        """
+        f = deconvolve.frequencies
+        with np.errstate(divide="ignore"):
+            log_f = np.log(f)
+        log_grid = np.log(grid)
+        corrected = h
+        previous = None
+        for _ in range(_GAP_FILL_PASSES):
+            result, _, delay = response(corrected, deconvolve, offset, window, grid)
+            # The response at the frequencies of the record spectrum: interpolate the
+            # smooth part (without the bulk delay) on the logarithmic grid.
+            smooth = result * np.exp(2j * np.pi * grid * delay)
+            estimate = (np.interp(log_f, log_grid, smooth.real) +
+                        1j * np.interp(log_f, log_grid, smooth.imag))
+            estimate *= np.exp(-2j * np.pi * f * delay)
+            model = sfft.irfft(stimulus_spectrum * estimate,
+                               deconvolve.n_fft)[:len(record)]
+            fill = model - _interpolate_gaps(model, gaps)
+            corrected = h + deconvolve.deconvolve(fill)
+            if previous is not None and (np.max(np.abs(fill - previous))
+                                         <= _GAP_FILL_TOLERANCE * np.max(np.abs(fill))):
+                break
+            previous = fill
+        return corrected
 
     # Additionally analyse the reference channel with the excitation subtracted.
     n_channels = runs[0].shape[0] + 1
@@ -581,6 +684,8 @@ def analyse(runs: list[np.ndarray],
     impulse_responses = np.zeros((n_channels, ir_stop - ir_start))
     found_offsets = []
     noise_available = True
+    #: Frequencies of the sweep at the times of lost data.
+    gap_frequencies = []
 
     excitation = sweep.excitation()
     deconvolvers = {}
@@ -613,43 +718,90 @@ def analyse(runs: list[np.ndarray],
             for w, _ in noise_windows
         ]
         noise_available &= has_noise[0]
+        # Lost (interpolated) data during the sweep (see `gaps` above), relative to
+        # the start of the sweep.
+        run_gaps = np.zeros((0, 2), int)
+        if gaps is not None and len(gaps[run]):
+            run_gaps = np.clip(
+                np.asarray(gaps[run], int).reshape(-1, 2) - offset, 0, sweep.length)
+            run_gaps = run_gaps[run_gaps[:, 1] > run_gaps[:, 0]]
+        for gap_start, gap_stop in run_gaps:
+            gap_frequencies.append(sweep.f_start * math.exp(sweep.growth *
+                                                            (gap_start + gap_stop) / 2))
+        # The noise estimate is left out where the window receives what remains of
+        # the lost data (see `fill_gaps()`).
+        noise_affected = [
+            _affected(frequencies, run_gaps, noise_start, noise_start + len(w.taper),
+                      sweep) for w, frequencies in noise_windows
+        ]
 
-        reference_output = records[reference].copy()
-        reference_output[offset:offset + sweep.length] -= excitation
+        stimulus = np.zeros(record_length)
+        stimulus[offset:offset + sweep.length] = excitation
+        stimulus_spectrum = None
+        if len(run_gaps):
+            stimulus_spectrum = sfft.rfft(stimulus, deconvolve.n_fft)
+            # Interpolated like the record, so that the difference is the interpolated
+            # filter output.
+            stimulus = _interpolate_gaps(stimulus, run_gaps + offset)
+        reference_output = records[reference] - stimulus
         for channel, record in enumerate([*records, reference_output]):
             h = deconvolve(record, offset)
-            result, noise_estimates = response(h,
-                                               deconvolve,
-                                               offset,
-                                               window,
-                                               grid,
-                                               noise=noise_windows)
+            if len(run_gaps):
+                h = fill_gaps(h, record, deconvolve, offset, run_gaps + offset,
+                              stimulus_spectrum)
+            result, noise_estimates, _ = response(h,
+                                                  deconvolve,
+                                                  offset,
+                                                  window,
+                                                  grid,
+                                                  noise=noise_windows)
             responses[run, channel] = result
             for i, estimate in enumerate(noise_estimates):
                 if has_noise[i]:
+                    estimate[noise_affected[i]] = np.nan
                     if i == 0:
                         noise[run, channel] = estimate
                     else:
                         harmonic_noise[harmonic_orders[i - 1]][run, channel] = estimate
             for k in harmonic_orders:
                 delay = sweep.harmonic_delay(k)
-                result = response(h, deconvolve, offset - round(delay),
-                                  harmonic_windows[k], k * harmonic_grids[k],
-                                  round(delay) - delay)
+                result, _, _ = response(h, deconvolve, offset - round(delay),
+                                        harmonic_windows[k], k * harmonic_grids[k],
+                                        round(delay) - delay)
                 harmonics[k][run, channel] = result
             impulse_responses[channel] += _segment(h, offset + ir_start,
                                                    ir_stop - ir_start)
 
     if not noise_available:
         warnings.append("Capture too short for a noise estimate")
+    if gap_frequencies:
+        gap_frequencies.sort()
+        if len(gap_frequencies) == 1:
+            where = f"at {_format_frequency(gap_frequencies[0])}"
+        elif len(gap_frequencies) <= 3:
+            where = "at " + ", ".join(map(_format_frequency, gap_frequencies))
+        else:
+            where = (f"{len(gap_frequencies)} times between "
+                     f"{_format_frequency(gap_frequencies[0])} and "
+                     f"{_format_frequency(gap_frequencies[-1])}")
+        warnings.append(f"Stream data lost during the sweep {where} (filled in from "
+                        "the response; left out of the noise estimate)")
 
     n_runs = len(runs)
-    # The noise of the average of independent runs.
-    averaged_noise = np.sqrt(np.mean(noise**2, axis=0) / n_runs)
+
+    def noise_of_average(per_run):
+        """The noise of the average of the independent runs, from the runs with an
+        estimate (NaN where there is none)."""
+        valid = np.isfinite(per_run)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            return np.sqrt(
+                np.sum(np.where(valid, per_run, 0)**2, axis=0) / np.sum(valid, axis=0) /
+                n_runs)
+
     return Analysis(
         frequencies=grid / sample_period,
         responses=np.mean(responses, axis=0),
-        noise=averaged_noise,
+        noise=noise_of_average(noise),
         harmonic_frequencies={
             k: g / sample_period
             for k, g in harmonic_grids.items()
@@ -659,7 +811,7 @@ def analyse(runs: list[np.ndarray],
             for k, v in harmonics.items()
         },
         harmonic_noise={
-            k: np.sqrt(np.mean(v**2, axis=0) / n_runs)
+            k: noise_of_average(v)
             for k, v in harmonic_noise.items()
         },
         ir_time=np.arange(ir_start, ir_stop) * sample_period,

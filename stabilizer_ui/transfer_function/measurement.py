@@ -96,15 +96,23 @@ class Measurement:
                 channel[mask] = np.interp(index[mask], index[~mask], channel[~mask])
         return data
 
+    def gaps(self, run: int) -> np.ndarray:
+        """The ranges of samples (start, stop) of a run which were lost (and are
+        interpolated by `volts()`), as an (n, 2) array."""
+        lost = np.sort(self.lost_batches[run])
+        if not len(lost):
+            return np.zeros((0, 2), int)
+        breaks = np.flatnonzero(np.diff(lost) > 1) + 1
+        starts = lost[np.concatenate([[0], breaks])]
+        stops = lost[np.concatenate([breaks - 1, [len(lost) - 1]])] + 1
+        return np.column_stack([starts, stops]) * self.batch_size
+
     def analyse(self, settings: ess.AnalysisSettings) -> ess.Analysis:
         offsets = self.analysis.offsets if self.analysis is not None else None
-        analysis = ess.analyse([self.volts(i) for i in range(len(self.runs))], self.sweep,
-                               self.reference, self.batch_size, settings, offsets)
-        lost = sum(len(lost) for lost in self.lost_batches)
-        if lost:
-            total = sum(run.shape[1] for run in self.runs) // self.batch_size
-            analysis.warnings.append(
-                f"{lost} of {total} stream batches lost (interpolated)")
+        runs = range(len(self.runs))
+        analysis = ess.analyse([self.volts(i) for i in runs], self.sweep, self.reference,
+                               self.batch_size, settings, offsets,
+                               [self.gaps(i) for i in runs])
         self.analysis_settings = settings
         self.analysis = analysis
         return analysis
