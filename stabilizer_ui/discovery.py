@@ -31,6 +31,9 @@ RETAINED_TIMEOUT = 1.0
 #: metadata does not tell), in seconds.
 PROBE_TIMEOUT = 2.0
 
+#: Time to wait for the broker to take a new name, in seconds.
+RENAME_TIMEOUT = 5.0
+
 
 @dataclass
 class Device:
@@ -191,6 +194,34 @@ async def _discover(broker: NetworkAddress,
         await client.disconnect()
     # Those with a name first.
     return sorted(devices, key=lambda device: (not device.name, device.label.lower()))
+
+
+async def rename(device: Device, name: str):
+    """Give `device` a new name (empty for none), retained on its broker, where every UI
+    of the device follows it. Returns once the broker has passed it on."""
+    topic = f"{device.prefix}/{DEVICE_NAME_KEY}"
+    payload = json.dumps(name).encode("utf-8")
+    passed_on = asyncio.get_running_loop().create_future()
+
+    def handle_message(client, msg_topic, msg_payload, qos, properties):
+        # Skip the name retained before, which arrives first on subscribing.
+        if (msg_topic == topic and msg_payload == payload and not properties.get("retain")
+                and not passed_on.done()):
+            passed_on.set_result(None)
+        return 0
+
+    client = MqttClient(client_id="")
+    client.on_message = handle_message
+    async with asyncio.timeout(RENAME_TIMEOUT):
+        await client.connect(device.broker.get_ip(),
+                             port=device.broker.port,
+                             keepalive=10)
+        try:
+            client.subscribe(Subscription(topic))
+            client.publish(topic, payload, qos=0, retain=True)
+            await passed_on
+        finally:
+            await client.disconnect()
 
 
 async def _probe(device: Device, interface: MqttInterface):

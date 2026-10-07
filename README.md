@@ -41,9 +41,10 @@ device runs when it connects: from the build metadata the firmware keeps on the 
    which is not connected and has no name, give it as `<application>/<ID>` (e.g.
    `dual-iir/44-b7-d0-c7-7d-24`); the UI then waits for it.
 
-   Name a device with *Device → Rename…* in its window. The name is stored on the broker
-   (retained, as `ui/name` below the device's topic), so everybody sees it in the window
-   title and the list of devices, and recordings and measurements are named after it.
+   To name a device, select it in the list and click its name. The name is stored on the
+   broker (retained, as `ui/name` below the device's topic), so everybody sees it in the
+   window title and the list of devices, and recordings and measurements are named after
+   it.
 
    On the right hand side should be a live stream of the IO data of the stabilizer -- you
    may need to disable some firewall restrictions to get this to work properly.

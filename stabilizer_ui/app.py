@@ -16,7 +16,7 @@ from PyQt6 import QtCore, QtWidgets
 from qasync import QEventLoop
 from stabilizer.stream import get_local_ip
 
-from .discovery import TARGETS, Device, discover, parse_broker
+from .discovery import TARGETS, Device, discover, parse_broker, rename
 from .firmware import CURRENT, Firmware
 from .mqtt import NetworkAddress
 from .stream.thread import StreamThread
@@ -202,10 +202,14 @@ class DeviceDialog(QtWidgets.QDialog):
         "the device stays in the list after it has been switched off or unplugged, "
         "possibly for good. The current firmware (v0.11) erases the status instead, so "
         "its devices drop off the list, unless they have been given a name (which the "
-        "broker keeps as well; see Device → Rename… in the window of a device).</p>"
+        "broker keeps as well).</p>"
         "<p>To open a disconnected device which is not listed (the UI then waits for it "
         "to connect), give it as &lt;application&gt;/&lt;ID&gt; on the command line, "
         "e.g. <code>stabilizer_ui dual-iir/44-b7-d0-c7-7d-24</code>.</p>")
+
+    NAME_TOOLTIP = (
+        "The name of the device, shown in its window title and this list, for everybody "
+        "(stored on the MQTT broker). Click it in the selected row to change it.")
 
     def __init__(self, brokers: list[NetworkAddress]):
         super().__init__()
@@ -223,11 +227,15 @@ class DeviceDialog(QtWidgets.QDialog):
             QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(
             QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        # Not on double-click, which opens the device, nor on pressing Return (as on
+        # macOS), which opens it as well.
+        self.table.setEditTriggers(
+            QtWidgets.QAbstractItemView.EditTrigger.SelectedClicked)
         self.table.verticalHeader().hide()
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.itemSelectionChanged.connect(self._selection_changed)
         self.table.itemDoubleClicked.connect(lambda _item: self._open())
+        self.table.itemChanged.connect(self._item_changed)
 
         self.disconnected_box = QtWidgets.QCheckBox("Show disconnected devices")
         self.disconnected_box.setToolTip(self.DISCONNECTED_TOOLTIP)
@@ -283,6 +291,10 @@ class DeviceDialog(QtWidgets.QDialog):
                     f"{device.broker.get_ip()}:{device.broker.port}"
             ]):
                 item = QtWidgets.QTableWidgetItem(text)
+                if column == self.COLUMNS.index("Name"):
+                    item.setToolTip(self.NAME_TOOLTIP)
+                else:
+                    item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
                 if column == self.COLUMNS.index("Firmware"):
                     item.setToolTip(device.firmware_details)
                 if device.target is None:
@@ -315,6 +327,37 @@ class DeviceDialog(QtWidgets.QDialog):
     def _open(self):
         if self.selected() is not None:
             self.accept()
+
+    def _item_changed(self, item: QtWidgets.QTableWidgetItem):
+        """Rename the device if its name has been edited."""
+        if item.column() != self.COLUMNS.index("Name"):
+            return
+        device = self._shown[item.row()]
+        name = item.text().strip()
+        if name != device.name:
+            # Right away, for opening the device meanwhile (and as `setText()` comes
+            # back here).
+            before, device.name = device.name, name
+            asyncio.ensure_future(self._rename(device, before))
+        item.setText(name)
+
+    async def _rename(self, device: Device, before: str):
+        """Store the new name of `device` on the broker, going back to `before` if that
+        fails."""
+        name = device.name
+        try:
+            await rename(device, name)
+        except Exception as e:
+            logger.warning("Failed to rename %s: %r", device, e)
+            if device.name != name:
+                # Renamed again meanwhile.
+                return
+            device.name = before
+            self.status_label.setText(
+                f"Failed to rename {device}: {str(e) or type(e).__name__}")
+            for row, shown in enumerate(self._shown):
+                if shown is device:
+                    self.table.item(row, self.COLUMNS.index("Name")).setText(before)
 
 
 async def choose_device(brokers: list[NetworkAddress]) -> Optional[Device]:

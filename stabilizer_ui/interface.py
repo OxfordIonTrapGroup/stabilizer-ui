@@ -134,7 +134,7 @@ class AbstractStabilizerInterface:
 
         settings_map = ui.set_mqtt_configs(stream_target)
         legacy_map = ui.legacy_ui_map()
-        # Written when the user renames the device (`deviceRenamed`).
+        # Followed, not written: devices are renamed in the device list (`DeviceDialog`).
         settings_map[DEVICE_NAME_KEY] = UiMqttConfig(
             [], lambda _: ui.device_name,
             lambda _, name: ui.set_device_name(name if isinstance(name, str) else ""))
@@ -224,7 +224,6 @@ class AbstractStabilizerInterface:
 
         ui.streamTakeOverButton.clicked.connect(
             lambda: bridge.queue_write(self._stream_key))
-        ui.deviceRenamed.connect(lambda _name: bridge.queue_write(DEVICE_NAME_KEY))
 
         for ui_channel in self.app_root.child("ui").children():
             for iir in ui_channel.children():

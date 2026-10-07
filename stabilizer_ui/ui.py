@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import (QMainWindow, QDialog, QInputDialog, QMenu, QMessageBox,
-                             QLabel, QPushButton)
+from PyQt6.QtWidgets import (QMainWindow, QDialog, QMenu, QMessageBox, QLabel,
+                             QPushButton)
 from PyQt6.QtGui import QPalette
 from typing import Optional, TYPE_CHECKING
 
@@ -23,9 +22,6 @@ class AbstractUiWindow(QMainWindow):
     `channelTabWidget`, and the scope as `fftScopeWidget`, and to set the window title
     to the name of the application (the device is added by `set_device()`).
     """
-
-    #: Emitted with the new name when the user renames the device.
-    deviceRenamed = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -69,9 +65,6 @@ class AbstractUiWindow(QMainWindow):
         # Avoid the small lines to the right of every status bar item, since we
         # only have one here.
         self.statusBar().setStyleSheet("QStatusBar::item { border-width: 0px; }")
-
-        self.renameAction = self.menuBar().addMenu("&Device").addAction("&Rename…")
-        self.renameAction.triggered.connect(self._rename_clicked)
 
         # Start disabled, not just once the MQTT task first runs, to avoid a flash of
         # enabled widgets.
@@ -121,22 +114,6 @@ class AbstractUiWindow(QMainWindow):
         self._update_title()
         self._stream_device = self.device_label
         self.fftScopeWidget.record_bar.set_device(self.device_label)
-
-    def rename_device(self, name: str):
-        """Give the device a new name, as the user does."""
-        self.set_device_name(name.strip())
-        self.deviceRenamed.emit(self.device_name)
-
-    def _rename_clicked(self):
-        name, ok = QInputDialog.getText(
-            self,
-            "Rename device",
-            f"Name of {self.device_id}, shown in the window title and the list of "
-            "devices, for everybody\n(stored on the MQTT broker; leave it empty for "
-            "none):",
-            text=self.device_name)
-        if ok:
-            self.rename_device(name)
 
     def _update_title(self):
         if self._title is None:
