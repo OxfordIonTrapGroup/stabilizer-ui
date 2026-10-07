@@ -228,6 +228,44 @@ def test_no_data_at_all(tmp_path):
     assert "start_time" not in attrs
 
 
+def test_time_limit(tmp_path):
+    """The recording stops by itself at the time limit (within a batch), also if the
+    stream is interrupted after it."""
+    path = tmp_path / "rec.h5"
+    raw = make_data(BATCHES_PER_FRAME * 10)
+    gap = int(1.5 * recorder_module.MAX_GAP / (BATCH_SIZE * TS))
+    received = frames(raw[:105]) + frames(raw[105:], 105 + gap)
+    # Frame 2 is lost, and the limit is in frame 4.
+    del received[2]
+    n = 4 * BATCHES_PER_FRAME * BATCH_SIZE + 13
+    recorder = StreamRecorder(str(path), make_parser(), SOURCES, TS, time_limit=n * TS)
+    assert recorder.time_limit == n * TS
+    recorder.add(received[:3])
+    time.sleep(0.2)
+    recorder.add(received[3:])
+    recorder.wait(5)
+    assert recorder.finished and recorder.error is None
+    assert recorder.samples == n and recorder.duration == n * TS
+    data, lost, _, _ = read(path)
+    lost_batches = range(2 * BATCHES_PER_FRAME, 3 * BATCHES_PER_FRAME)
+    np.testing.assert_array_equal(data, expected(raw, lost_batches)[:, :n])
+    assert lost.tolist() == [[2 * 21 * BATCH_SIZE, 21 * BATCH_SIZE]]
+
+
+def test_time_limit_in_lost_data(tmp_path):
+    """Lost data up to the time limit is counted up to there."""
+    path = tmp_path / "rec.h5"
+    raw = make_data(BATCHES_PER_FRAME * 4)
+    received = frames(raw)
+    del received[2]
+    n = 2 * BATCHES_PER_FRAME * BATCH_SIZE + 5
+    recorder = record(path, [received], time_limit=n * TS)
+    assert recorder.error is None and recorder.samples == n and recorder.lost == 5
+    data, lost, _, _ = read(path)
+    np.testing.assert_array_equal(data, expected(raw, [2 * BATCHES_PER_FRAME])[:, :n])
+    assert lost.tolist() == [[n - 5, 5]]
+
+
 def test_backlog(tmp_path, monkeypatch):
     monkeypatch.setattr(recorder_module, "MAX_BACKLOG", 10_000)
     raw = make_data(BATCHES_PER_FRAME * 100)
@@ -315,6 +353,29 @@ def test_lost_at_end_decimated(tmp_path):
     np.testing.assert_array_equal(
         data,
         decimated(raw, 1024, range(8 * BATCHES_PER_FRAME, 9 * BATCHES_PER_FRAME))[0])
+
+
+@needs_psd
+def test_time_limit_decimated(tmp_path):
+    """With decimation, the time limit is rounded to whole samples of the recording."""
+    path = tmp_path / "rec.h5"
+    raw = make_data(BATCHES_PER_FRAME * 10)
+    ratio, n = 4, 101
+    # 404 stream samples, ending within a batch (101.4 samples rounded down).
+    recorder = record(path, [frames(raw)],
+                      decimation=ratio,
+                      time_limit=101.4 * ratio * TS)
+    assert recorder.error is None and recorder.samples == ratio * n
+    assert recorder.time_limit == ratio * n * TS
+    decimation = Decimation(ratio, [None] * len(SOURCES))
+    reference, _ = decimation.process(expected(raw)[:, :ratio * n])
+    tail, extrapolated = decimation.finish()
+    reference = np.concatenate([reference, tail], axis=1)
+    data, lost, _, _ = read(path)
+    assert data.shape == (len(SOURCES), n) and len(lost) == 0
+    np.testing.assert_array_equal(data, reference)
+    assert read_extrapolated(path) == [[0, decimation.edge],
+                                       [n - extrapolated, extrapolated]]
 
 
 def test_invalid_decimation(tmp_path):

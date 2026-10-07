@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 UPDATE_INTERVAL = 250
 #: Time without stream data after which the status mentions it, in seconds.
 NO_DATA_WARNING = 1.0
+#: The units offered for the time limit, and their length in seconds.
+TIME_UNITS = (("s", 1), ("min", 60), ("h", 3600))
 
 
 def _record_icon() -> QtGui.QIcon:
@@ -45,8 +47,9 @@ def _warning(text: str) -> str:
 
 
 class RecordDialog(QtWidgets.QDialog):
-    """Asks which sources of the stream to record, and at which sample rate (the full rate
-    of the stream, or lower, decimated), showing the data rate of the selection.
+    """Asks which sources of the stream to record, at which sample rate (the full rate of
+    the stream, or lower, decimated), and for how long (until stopped, or up to a time
+    limit), showing the data rate of the selection.
 
     The choice is remembered (in the `QSettings`) when the dialog is accepted, and shown
     again the next time it is opened (`load()`).
@@ -87,6 +90,31 @@ class RecordDialog(QtWidgets.QDialog):
         self.rate_box.currentIndexChanged.connect(self._update)
         layout.addRow("Sample rate:", self.rate_box)
 
+        limit = QtWidgets.QHBoxLayout()
+        self.limit_box = QtWidgets.QCheckBox("Stop after")
+        self.limit_box.setToolTip(
+            "Stop the recording by itself once it holds this much data (rounded to whole "
+            "samples of the recording)")
+        self.limit_box.toggled.connect(self._update)
+        limit.addWidget(self.limit_box)
+        self.limit_value_box = QtWidgets.QSpinBox()
+        self.limit_value_box.setRange(1, 9999)
+        self.limit_value_box.valueChanged.connect(self._update)
+        limit.addWidget(self.limit_value_box)
+        self.limit_unit_box = QtWidgets.QComboBox()
+        for name, seconds in TIME_UNITS:
+            self.limit_unit_box.addItem(name, seconds)
+        self.limit_unit_box.currentIndexChanged.connect(self._update)
+        limit.addWidget(self.limit_unit_box)
+        limit.addStretch()
+        duration_label = QtWidgets.QLabel("Duration:")
+        # Centred on the row rather than at its top, as `QFormLayout` puts labels: on
+        # macOS, the row is taller than the others, as the box layout leaves room for the
+        # focus ring of the combo box.
+        duration_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred,
+                                     QtWidgets.QSizePolicy.Policy.Expanding)
+        layout.addRow(duration_label, limit)
+
         self.data_rate_label = QtWidgets.QLabel()
         layout.addRow("Data rate:", self.data_rate_label)
 
@@ -114,6 +142,12 @@ class RecordDialog(QtWidgets.QDialog):
             box.setChecked(name in selected)
         index = self.rate_box.findData(settings.value("recorder/decimation", 1, int))
         self.rate_box.setCurrentIndex(max(index, 0))
+        self.limit_box.setChecked(
+            settings.value("recorder/time_limit_enabled", False, bool))
+        self.limit_value_box.setValue(settings.value("recorder/time_limit", 1, int))
+        index = self.limit_unit_box.findText(
+            settings.value("recorder/time_limit_unit", "min", str))
+        self.limit_unit_box.setCurrentIndex(max(index, 0))
         self._update()
 
     def accept(self):
@@ -121,6 +155,9 @@ class RecordDialog(QtWidgets.QDialog):
         settings.setValue("recorder/sources",
                           ",".join(self._names[i] for i in self.sources()))
         settings.setValue("recorder/decimation", self.decimation())
+        settings.setValue("recorder/time_limit_enabled", self.limit_box.isChecked())
+        settings.setValue("recorder/time_limit", self.limit_value_box.value())
+        settings.setValue("recorder/time_limit_unit", self.limit_unit_box.currentText())
         super().accept()
 
     def sources(self) -> list[int]:
@@ -131,11 +168,23 @@ class RecordDialog(QtWidgets.QDialog):
         """The ratio of the sample rates of the stream and the recording."""
         return self.rate_box.currentData()
 
+    def time_limit(self) -> float | None:
+        """The duration after which to stop, in seconds, or `None` for no limit."""
+        if not self.limit_box.isChecked():
+            return None
+        return self.limit_value_box.value() * self.limit_unit_box.currentData()
+
     def _update(self):
         itemsize = 2 if self.decimation() == 1 else 4  # int16 or float32
         rate = itemsize * len(self.sources()) / (self._sample_period * self.decimation())
-        self.data_rate_label.setText(
-            f"{format_size(rate)}/s ({format_size(3600 * rate)}/h)")
+        limit = self.time_limit()
+        if limit is None:
+            total = f"{format_size(3600 * rate)}/h"
+        else:
+            total = f"{format_size(limit * rate)} in total"
+        self.data_rate_label.setText(f"{format_size(rate)}/s ({total})")
+        self.limit_value_box.setEnabled(limit is not None)
+        self.limit_unit_box.setEnabled(limit is not None)
         self.record_button.setEnabled(bool(self.sources()))
 
 
@@ -221,21 +270,36 @@ class RecordBar(QtWidgets.QWidget):
         if not path:
             return
         settings.setValue("recorder/directory", os.path.dirname(path))
-        self.start_recording(path, sources, self.dialog.decimation())
+        self.start_recording(path, sources, self.dialog.decimation(),
+                             self.dialog.time_limit())
 
-    def start_recording(self, path: str, sources: list[int], decimation: int = 1):
+    def start_recording(self,
+                        path: str,
+                        sources: list[int],
+                        decimation: int = 1,
+                        time_limit: float | None = None):
         """Start recording the given sources (indices) to `path`, decimated by
-        `decimation`."""
+        `decimation`, until stopped or for `time_limit` seconds (see
+        `StreamRecorder`)."""
         try:
-            recorder = StreamRecorder(path, self._parser, sources, self._sample_period,
-                                      self._device, self._settings(), decimation)
+            recorder = StreamRecorder(path,
+                                      self._parser,
+                                      sources,
+                                      self._sample_period,
+                                      self._device,
+                                      self._settings(),
+                                      decimation=decimation,
+                                      time_limit=time_limit)
         except Exception as e:
             logger.exception("Failed to create %s", path)
             QtWidgets.QMessageBox.warning(self, "Recording failed",
                                           f"Failed to create {path}:\n{e}")
             return
-        logger.info("Recording %s at %s to %s", ", ".join(recorder.names),
-                    format_frequency(1 / (self._sample_period * decimation)), path)
+        limit = ""
+        if recorder.time_limit is not None:
+            limit = f" for {format_duration(recorder.time_limit)}"
+        logger.info("Recording %s at %s%s to %s", ", ".join(recorder.names),
+                    format_frequency(1 / (self._sample_period * decimation)), limit, path)
         self._recorder = recorder
         self._stopping = False
         self._summary = None
@@ -280,8 +344,10 @@ class RecordBar(QtWidgets.QWidget):
             return "Finishing…"
         if recorder.last_data is None:
             return "Waiting for stream data…"
-        text = (f"Recording {format_duration(recorder.duration)}, "
-                f"{format_size(recorder.size)}")
+        text = f"Recording {format_duration(recorder.duration)}"
+        if recorder.time_limit is not None:
+            text += f" of {format_duration(recorder.time_limit)}"
+        text += f", {format_size(recorder.size)}"
         if recorder.lost:
             text += f", {100 * recorder.lost / recorder.samples:.3g} % lost"
         silent = time.monotonic() - recorder.last_data

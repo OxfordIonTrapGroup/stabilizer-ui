@@ -64,9 +64,11 @@ and drawing take longer. For long-term averaged spectra, use the spectral densit
 
 *Record…* below the scope records channels of the stream to an HDF5 file. It asks for the
 channels and the sample rate (showing the data rate of the selection: for all four
-channels of `dual_iir` at the full rate, 6.25 MB/s or 22.5 GB per hour), and then for the
-file. While recording, the bar below the scope shows the progress, and *Stop* ends the
-recording, as does closing the window.
+channels of `dual_iir` at the full rate, 6.25 MB/s or 22.5 GB per hour), optionally for a
+time limit (*Stop after*), and then for the file. While recording, the bar below the
+scope shows the progress, and *Stop* ends the recording, as does closing the window. With
+a time limit, the recording stops by itself once it holds that much stream data (rounded
+to whole samples of the recording).
 
 * Each channel is stored as `channels/<name>`, in machine units; multiply by its `scale`
   attribute for its `unit`. For the ADCs, this does not include the AFE gain, which is in

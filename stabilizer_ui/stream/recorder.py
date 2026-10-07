@@ -81,13 +81,17 @@ class StreamRecorder:
                  sample_period: float,
                  device: str = "",
                  settings: dict | None = None,
-                 decimation: int = 1):
+                 decimation: int = 1,
+                 time_limit: float | None = None):
         """
         :param sources: Indices of the stream sources to record.
         :param sample_period: Sample period of the stream.
         :param settings: Snapshot of the settings to store.
         :param decimation: Record at this fraction of the sample rate of the stream (a
             power of two; see `Decimation`).
+        :param time_limit: Stop by itself once this much stream data is recorded, in
+            seconds (rounded to a whole number of samples of the recording, at least
+            one), or `None` to record until stopped.
         """
         self.path = path
         self.sample_period = sample_period
@@ -99,6 +103,12 @@ class StreamRecorder:
             periods = phase_periods(parser)
             self._decimation = Decimation(decimation, [periods[i] for i in sources])
         self._dtype = np.dtype(np.int16 if self._decimation is None else np.float32)
+        #: Number of stream samples after which the recording stops by itself.
+        self._sample_limit: int | None = None
+        if time_limit is not None:
+            period = sample_period * decimation
+            self._sample_limit = max(1, round(time_limit / period)) * decimation
+        self._limit_reached = False
         #: Number of stream samples of each source recorded (including lost ones).
         self.samples = 0
         #: Number of stream samples lost in transmission.
@@ -167,6 +177,14 @@ class StreamRecorder:
         return self.samples * self.sample_period
 
     @property
+    def time_limit(self) -> float | None:
+        """Duration after which the recording stops by itself, in seconds (`None` if
+        it does not)."""
+        if self._sample_limit is None:
+            return None
+        return self._sample_limit * self.sample_period
+
+    @property
     def size(self) -> int:
         """Size of the data recorded, in bytes."""
         return self._recorded * self._dtype.itemsize * len(self._sources)
@@ -212,7 +230,7 @@ class StreamRecorder:
         pending = []
         last_write = time.monotonic()
         try:
-            while self.error is None:
+            while self.error is None and not self._limit_reached:
                 try:
                     frames = self._queue.get(timeout=WRITE_INTERVAL)
                 except queue.Empty:
@@ -300,14 +318,23 @@ class StreamRecorder:
                 data.reshape(len(self._sources), end, batch_size)[:, lost] = 0
                 edges = np.flatnonzero(np.diff(lost, prepend=False, append=False))
                 ranges = edges.reshape(-1, 2) * batch_size
-                self.lost += int(np.diff(ranges).sum())
+            n = end * batch_size
+            if self._sample_limit is not None and self.samples + n >= self._sample_limit:
+                # Leave out what comes after the time limit, and any interruption or
+                # restart of the stream there.
+                n = self._sample_limit - self.samples
+                data, ranges = data[:, :n], np.minimum(ranges, n)
+                ranges = ranges[ranges[:, 1] > ranges[:, 0]]
+                self._limit_reached = self._stopped = True
+                error = None
+            self.lost += int(np.diff(ranges).sum())
             if self._decimation is None:
                 ranges += self.samples
             else:
                 data, ranges = self._decimation.process(data, ranges)
             self._lost.add(ranges)
             self._append(data)
-            self.samples += end * batch_size
+            self.samples += n
             self._next = wrap(self._next + end)
 
         self._processed += sum(len(body) for _, body in frames)
