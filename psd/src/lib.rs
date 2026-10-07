@@ -1,11 +1,12 @@
 //! Python bindings for the online power spectral density estimation of
 //! [stabilizer-stream](https://github.com/quartiq/stabilizer-stream).
 
+mod decimate;
 mod ess;
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use numpy::{PyArray1, PyArray2, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::{buffer::PyBuffer, exceptions::PyValueError, prelude::*, types::PyDict};
 use stabilizer_stream::{AvgOpts, Detrend, MergeOpts};
 
@@ -160,6 +161,97 @@ struct Stage {
     processed: usize,
 }
 
+/// Decimation of several channels by `2**depth` in real time, with the half-band filter
+/// cascade of `idsp` (`idsp::hbf::HBF_TAPS`).
+///
+/// The output is flat up to 0.4 of its sample rate (`idsp::hbf::HBF_PASSBAND`), and what
+/// would alias into that band is suppressed by about 140 dB (the limit of float32). Output
+/// `n` of each channel is the filtered input at sample `n * ratio`, where the input is taken
+/// to be equal to its first sample before it, and to its last sample after it (see
+/// `finish()`).
+///
+/// The methods can be called from several threads; the GIL is released while
+/// processing.
+#[pyclass(frozen)]
+struct Decimator {
+    inner: Mutex<decimate::Decimator>,
+    ratio: usize,
+    half_width: usize,
+}
+
+impl Decimator {
+    fn lock(&self) -> MutexGuard<'_, decimate::Decimator> {
+        self.inner.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+fn output_array(py: Python<'_>, y: Vec<Vec<f32>>) -> PyResult<Bound<'_, PyArray2<f32>>> {
+    let (channels, n) = (y.len(), y.first().map_or(0, Vec::len));
+    PyArray1::from_vec(py, y.concat()).reshape([channels, n])
+}
+
+#[pymethods]
+impl Decimator {
+    #[new]
+    fn new(depth: u32, channels: usize) -> PyResult<Self> {
+        if depth > decimate::MAX_DEPTH {
+            return Err(PyValueError::new_err(format!(
+                "Decimation by more than 2**{} is not supported",
+                decimate::MAX_DEPTH
+            )));
+        }
+        if channels == 0 {
+            return Err(PyValueError::new_err("No channels"));
+        }
+        let inner = decimate::Decimator::new(depth, channels);
+        Ok(Self {
+            ratio: inner.ratio(),
+            half_width: inner.half_width(),
+            inner: Mutex::new(inner),
+        })
+    }
+
+    /// The decimation factor, `2**depth`.
+    #[getter]
+    fn ratio(&self) -> usize {
+        self.ratio
+    }
+
+    /// The number of input samples on either side of sample `n * ratio` that the filter of
+    /// output `n` spans. It is returned once the input up to sample `n * ratio +
+    /// half_width` has been processed.
+    #[getter]
+    fn half_width(&self) -> usize {
+        self.half_width
+    }
+
+    /// Decimate the next input samples, as C-contiguous float32 array (channel, sample),
+    /// returning the output samples that are determined by now, as (channel, sample) array.
+    fn process<'py>(
+        &self,
+        py: Python<'py>,
+        x: PyReadonlyArray2<'py, f32>,
+    ) -> PyResult<Bound<'py, PyArray2<f32>>> {
+        let length = x.shape()[1];
+        let x: Vec<&[f32]> = if length == 0 {
+            vec![&[]; x.shape()[0]]
+        } else {
+            x.as_slice()?.chunks_exact(length).collect()
+        };
+        let y = py
+            .detach(|| self.lock().process(&x))
+            .map_err(PyValueError::new_err)?;
+        output_array(py, y)
+    }
+
+    /// Return the remaining output samples, up to the last one at or before the last input
+    /// sample. The decimator takes no more input afterwards.
+    fn finish<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<f32>>> {
+        let y = py.detach(|| self.lock().finish());
+        output_array(py, y)
+    }
+}
+
 /// The sweep parameters `(rate, state, length, amplitude, sample_period)`.
 fn parse_sweep(
     (rate, state, length, amplitude, sample_period): (i64, i64, usize, f64, f64),
@@ -298,6 +390,8 @@ fn stabilizer_psd(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("FFT_SIZE", FFT_SIZE)?;
     m.add_class::<PsdCascade>()?;
     m.add_class::<Stage>()?;
+    m.add_class::<Decimator>()?;
+    m.add("MAX_DECIMATION_DEPTH", decimate::MAX_DEPTH)?;
     m.add_function(wrap_pyfunction!(sweep_excitation, m)?)?;
     m.add_function(wrap_pyfunction!(analyse_sweep, m)?)?;
     Ok(())

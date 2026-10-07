@@ -23,6 +23,15 @@ def source_scales(parser: Parser) -> np.ndarray:
     return scales[:, 0]
 
 
+def phase_periods(parser: Parser) -> list[float | None]:
+    """For each stream source, the period in machine units if it is a phase (in turns,
+    wrapping around; e.g. the phase offset words of `fnc`), or else `None`."""
+    return [
+        1 / scale if unit == "turns" else None
+        for scale, unit in zip(source_scales(parser), parser.units())
+    ]
+
+
 def to_machine_units(parser: Parser, data: np.ndarray):
     """Convert raw stream data, as (source, sample) array, to machine units (in place)."""
     for i, decoder in enumerate(parser.decoders):

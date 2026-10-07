@@ -13,8 +13,9 @@ from typing import Callable
 from PyQt6 import QtCore, QtGui, QtWidgets
 from stabilizer.stream_parser import Parser
 
+from .decimation import MAX_DEPTH, PASSBAND, available as decimation_available
 from .recorder import StreamRecorder
-from ..utils import format_duration, format_size
+from ..utils import format_duration, format_frequency, format_size
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,8 @@ def _warning(text: str) -> str:
 
 
 class RecordBar(QtWidgets.QWidget):
-    """Records the stream data of the checked sources at the full sample rate to an HDF5
-    file (see `StreamRecorder`)."""
+    """Records the stream data of the checked sources to an HDF5 file, at the full sample
+    rate or decimated (see `StreamRecorder`)."""
 
     def __init__(self, parser: Parser, sample_period: float, parent=None):
         super().__init__(parent)
@@ -63,7 +64,7 @@ class RecordBar(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.record_button = QtWidgets.QPushButton()
         self.record_button.setToolTip(
-            "Record the checked channels of the stream at the full sample rate to an "
+            "Record the checked channels of the stream at the selected sample rate to an "
             "HDF5 file")
         layout.addWidget(self.record_button)
         self.source_boxes = []
@@ -75,6 +76,24 @@ class RecordBar(QtWidgets.QWidget):
             box.toggled.connect(self._selection_changed)
             layout.addWidget(box)
             self.source_boxes.append(box)
+        self.rate_box = QtWidgets.QComboBox()
+        for depth in range(MAX_DEPTH + 1 if decimation_available() else 1):
+            self.rate_box.addItem(format_frequency(1 / (sample_period * (1 << depth))),
+                                  1 << depth)
+        if decimation_available():
+            self.rate_box.setToolTip(
+                "Sample rate of the recording: the full rate of the stream, or lower, "
+                f"low-pass filtered (flat up to {PASSBAND:g} times the rate) and "
+                "decimated by a power of two")
+        else:
+            self.rate_box.setToolTip(
+                "Recording at lower sample rates needs the psd dependency group (see the "
+                "README)")
+        index = self.rate_box.findData(QtCore.QSettings().value(
+            "recorder/decimation", 1, int))
+        self.rate_box.setCurrentIndex(max(index, 0))
+        self.rate_box.currentIndexChanged.connect(self._rate_changed)
+        layout.addWidget(self.rate_box)
         self.status_label = QtWidgets.QLabel()
         self.status_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         # Clip long file names, rather than widening the window.
@@ -122,6 +141,14 @@ class RecordBar(QtWidgets.QWidget):
         self._summary = None
         self._update()
 
+    def _selected_decimation(self) -> int:
+        return self.rate_box.currentData()
+
+    def _rate_changed(self):
+        QtCore.QSettings().setValue("recorder/decimation", self._selected_decimation())
+        self._summary = None
+        self._update()
+
     def _record_clicked(self):
         if self._recorder is None:
             self._start()
@@ -144,19 +171,21 @@ class RecordBar(QtWidgets.QWidget):
         if not path:
             return
         settings.setValue("recorder/directory", os.path.dirname(path))
-        self.start_recording(path, sources)
+        self.start_recording(path, sources, self._selected_decimation())
 
-    def start_recording(self, path: str, sources: list[int]):
-        """Start recording the given sources (indices) to `path`."""
+    def start_recording(self, path: str, sources: list[int], decimation: int = 1):
+        """Start recording the given sources (indices) to `path`, decimated by
+        `decimation`."""
         try:
             recorder = StreamRecorder(path, self._parser, sources, self._sample_period,
-                                      self._device, self._settings())
+                                      self._device, self._settings(), decimation)
         except Exception as e:
             logger.exception("Failed to create %s", path)
             QtWidgets.QMessageBox.warning(self, "Recording failed",
                                           f"Failed to create {path}:\n{e}")
             return
-        logger.info("Recording %s to %s", ", ".join(recorder.names), path)
+        logger.info("Recording %s at %s to %s", ", ".join(recorder.names),
+                    format_frequency(1 / (self._sample_period * decimation)), path)
         self._recorder = recorder
         self._stopping = False
         self._summary = None
@@ -188,6 +217,7 @@ class RecordBar(QtWidgets.QWidget):
                                           and bool(self._selected()))
         for box in self.source_boxes:
             box.setEnabled(not recording)
+        self.rate_box.setEnabled(not recording and decimation_available())
 
         if recording:
             text = self._describe_recording(self._recorder)
@@ -195,7 +225,9 @@ class RecordBar(QtWidgets.QWidget):
         elif self._summary is not None:
             text, path = self._summary
         else:
-            rate = 2 * len(self._selected()) / self._sample_period
+            itemsize = 2 if self._selected_decimation() == 1 else 4  # int16 or float32
+            rate = (itemsize * len(self._selected()) /
+                    (self._sample_period * self._selected_decimation()))
             text = f"{format_size(rate)}/s ({format_size(3600 * rate)}/h)"
             path = None
         self.status_label.setText(text)

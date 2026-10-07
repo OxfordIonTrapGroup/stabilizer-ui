@@ -93,10 +93,21 @@ def format_duration(seconds: float) -> str:
 
 
 def format_size(size: float) -> str:
-    """A size in bytes, in MB or GB (decimal)."""
+    """A size in bytes, in B, kB, MB or GB (decimal)."""
+    if size < 1e3:
+        return f"{size:.0f} B"
+    if size < 1e6:
+        return f"{size / 1e3:.1f} kB"
     if size < 1e9:
         return f"{size / 1e6:.1f} MB"
     return f"{size / 1e9:.2f} GB"
+
+
+def format_frequency(frequency: float) -> str:
+    """A frequency in Hz or kHz, to three significant digits."""
+    if frequency < 1e3:
+        return f"{frequency:.3g} Hz"
+    return f"{frequency / 1e3:.3g} kHz"
 
 
 def fmt_mac(mac: str) -> str:

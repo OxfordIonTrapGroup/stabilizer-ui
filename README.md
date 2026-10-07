@@ -25,7 +25,8 @@ device runs when it connects: from the build metadata the firmware keeps on the 
    from [rustup](https://rustup.rs/); if there is none, maturin downloads one for the build)
    and, on Windows, the MSVC build tools. Where it cannot be built, leave it out with
    `uv sync --no-group psd`, or set `UV_NO_GROUP=psd` in the environment for all uv
-   commands. Everything but the spectral density window works without it.
+   commands. Everything but the spectral density window, the transfer function
+   measurements and recording at lower sample rates works without it.
 3. Run `uv run stabilizer_ui`. It lists the devices connected to the MQTT broker
    (`10.255.6.4:1883` by default; give others with `--broker HOST[:PORT]`, as often as
    needed) with their name, application and firmware version, and opens the UI for the
@@ -60,19 +61,36 @@ and drawing take longer. For long-term averaged spectra, use the spectral densit
 
 ## Recording the stream
 
-The bar below the scope records the checked channels of the stream at the full sample rate
-to an HDF5 file (for all four channels of `dual_iir`, 6.25 MB/s or 22.5 GB per hour; the bar
-shows the rate of the current selection). *Record…* asks for the file, and *Stop* ends the
-recording, as does closing the window.
+The bar below the scope records the checked channels of the stream to an HDF5 file, at the
+selected sample rate (for all four channels of `dual_iir` at the full rate, 6.25 MB/s or
+22.5 GB per hour; the bar shows the rate of the current selection). *Record…* asks for the
+file, and *Stop* ends the recording, as does closing the window.
 
-* Each channel is stored as `channels/<name>`, in machine units (`int16`); multiply by its
-  `scale` attribute for its `unit`. For the ADCs, this does not include the AFE gain, which
-  is in the snapshot of the settings at the start (`settings`, as JSON). The file also has
-  the sample period, and the time of the computer when the first data arrived.
-* Stream data lost in transmission is zero, and listed in `lost` as (first sample, number
-  of samples). If the stream stops for more than 10 s (e.g. while another client has it),
-  or the device restarts, the recording stops, so that each file is one continuous time
-  series.
+* Each channel is stored as `channels/<name>`, in machine units; multiply by its `scale`
+  attribute for its `unit`. For the ADCs, this does not include the AFE gain, which is in
+  the snapshot of the settings at the start (`settings`, as JSON). The file also has the
+  sample period of the recording, the `decimation` (the ratio of the sample rates of the
+  stream and the recording), and the time of the computer when the first data arrived.
+* At the full rate, the channels hold the stream data as it is (`int16`). At lower rates
+  (down to 2<sup>20</sup> times lower, 0.75 Hz for `dual_iir`), the stream data is low-pass
+  filtered and decimated while recording (`float32`), with the half-band filter cascade of
+  [idsp](https://github.com/quartiq/idsp) used by the spectral density window: flat up to
+  0.4 times the sample rate of the recording, with what would alias into that band
+  suppressed by about 140 dB. Sample *i* is the filtered stream data at stream sample
+  *i* × `decimation`, counting from the first one recorded (before which, as after the
+  last, the stream data is taken to be constant). As the filter of a sample spans the
+  stream data up to about 29 samples of the recording on either side, the file lags
+  behind by that much, and the samples up to that far from the first or last stream
+  sample are computed in part from the constant continuation; `extrapolated` lists them
+  (in the same format as `lost`). Their weight falls off quickly: a step just after the
+  end has less than 1 % of its height from the 8th sample from the end on, and less than
+  0.1 % from the 14th. Phases (the phase offset words of `fnc`) are filtered as phasors.
+  Lower rates need the `psd` dependency group (see *Getting started*).
+* Stream data lost in transmission is zero at the full rate, and listed in `lost` as (first
+  sample, number of samples). At lower rates, it is interpolated linearly before filtering,
+  and `lost` lists the samples less than one sample period away from it. If the stream
+  stops for more than 10 s (e.g. while another client has it), or the device restarts, the
+  recording stops, so that each file is one continuous time series.
 * The file is written in SWMR mode, so that it stays readable if the UI quits
   unexpectedly, and can be read while recording:
 

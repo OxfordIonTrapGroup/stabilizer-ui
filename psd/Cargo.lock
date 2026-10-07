@@ -908,6 +908,7 @@ dependencies = [
 name = "stabilizer-psd"
 version = "0.1.0"
 dependencies = [
+ "dsp-process",
  "idsp",
  "num-complex",
  "numpy",

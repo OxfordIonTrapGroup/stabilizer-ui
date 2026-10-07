@@ -9,9 +9,13 @@ from stabilizer import ADC_VOLTS_PER_LSB, DAC_VOLTS_PER_LSB
 from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD as TS
 from stabilizer.stream_parser import AdcDecoder, Parser, StabilizerStream
 
-from stabilizer_ui.stream import recorder as recorder_module
+from stabilizer_ui.stream import decimation, recorder as recorder_module
+from stabilizer_ui.stream.decimation import Decimation
 from stabilizer_ui.stream.decoders import DacDecoder
 from stabilizer_ui.stream.recorder import StreamRecorder
+
+needs_psd = pytest.mark.skipif(not decimation.available(),
+                               reason="needs the stabilizer_psd extension")
 
 BATCH_SIZE = 8
 BATCHES_PER_FRAME = 21
@@ -55,16 +59,42 @@ def expected(raw: np.ndarray, lost_batches=()) -> np.ndarray:
     return data.transpose(1, 0, 2).reshape(N_SOURCES, -1)[SOURCES]
 
 
-def record(path, chunks, settings=None, **kwargs) -> StreamRecorder:
-    """Record the given lists of frames, added one after the other."""
+def decimated(raw: np.ndarray, ratio: int,
+              lost_batches=()) -> tuple[np.ndarray, list, list]:
+    """The recorded sources decimated by `ratio` in one go, and the lost and extrapolated
+    ranges as (first, number)."""
+    lost = np.zeros(len(raw) + 1, bool)
+    lost[list(lost_batches)] = True
+    edges = np.flatnonzero(np.diff(lost, prepend=False))
+    decimation = Decimation(ratio, [None] * len(SOURCES))
+    data, ranges = decimation.process(expected(raw, lost_batches),
+                                      edges.reshape(-1, 2) * BATCH_SIZE)
+    tail, extrapolated = decimation.finish()
+    data = np.concatenate([data, tail], axis=1)
+    n = data.shape[1]
+    lost = [[first, min(stop, n) - first] for first, stop in ranges]
+    if decimation.edge >= n - extrapolated:
+        return data, lost, [[0, n]]
+    return data, lost, [[0, decimation.edge], [n - extrapolated, extrapolated]]
+
+
+def record(path, chunks, settings=None, interval=0.0, **kwargs) -> StreamRecorder:
+    """Record the given lists of frames, added one after the other (`interval` seconds
+    apart)."""
     recorder = StreamRecorder(str(path), make_parser(), SOURCES, TS, "test", settings,
                               **kwargs)
     for chunk in chunks:
         recorder.add(chunk)
+        time.sleep(interval)
     recorder.stop()
     recorder.wait(5)
     assert recorder.finished
     return recorder
+
+
+def read_extrapolated(path) -> list:
+    with h5py.File(path, "r") as f:
+        return f["extrapolated"][()].tolist()
 
 
 def read(path) -> tuple[np.ndarray, np.ndarray, dict, dict]:
@@ -100,6 +130,7 @@ def test_record(tmp_path):
     assert attrs["device"] == "test"
     assert json.loads(attrs["settings"]) == settings
     assert "T" in attrs["start_time"]
+    assert attrs["decimation"] == 1 and read_extrapolated(path) == []
 
 
 def test_lost_reordered_and_duplicate_frames(tmp_path):
@@ -228,3 +259,66 @@ def test_read_while_recording(tmp_path):
     finally:
         recorder.stop()
         recorder.wait(5)
+
+
+@needs_psd
+def test_record_decimated(tmp_path):
+    path = tmp_path / "rec.h5"
+    raw = make_data(BATCHES_PER_FRAME * 40)
+    received = frames(raw)
+    # Frames 3 and 4, and 10 are lost.
+    del received[10]
+    del received[3:5]
+    # In several writes.
+    recorder = record(path, [received[i:i + 6] for i in range(0, len(received), 6)],
+                      interval=0.1,
+                      decimation=16)
+    assert recorder.error is None
+    n = len(raw) * BATCH_SIZE
+    assert recorder.samples == n and recorder.lost == 3 * BATCHES_PER_FRAME * BATCH_SIZE
+    assert recorder.size == 4 * len(SOURCES) * n // 16
+
+    data, lost, attrs, channels = read(path)
+    lost_batches = [
+        *range(3 * BATCHES_PER_FRAME, 5 * BATCHES_PER_FRAME),
+        *range(10 * BATCHES_PER_FRAME, 11 * BATCHES_PER_FRAME)
+    ]
+    expected_data, expected_lost, expected_extrapolated = decimated(raw, 16, lost_batches)
+    assert data.dtype == np.float32
+    np.testing.assert_array_equal(data, expected_data)
+    np.testing.assert_array_equal(lost, expected_lost)
+    assert read_extrapolated(path) == expected_extrapolated
+    # The filter spans 461 stream samples on either side: samples 0 (at 0) to 28 (at 448)
+    # reach before the start, 392 (at 6272) to 419 after the last stream sample (6719).
+    assert expected_extrapolated == [[0, 29], [392, 28]]
+    # Stream samples 504 to 839 are lost, so outputs 31 (at 496) to 53 (at 848), and 1680
+    # to 1847, so 105 (at 1680) to 116 (at 1856).
+    assert lost.tolist() == [[31, 23], [105, 12]]
+    assert attrs["decimation"] == 16 and attrs["sample_period"] == 16 * TS
+    assert channels["ADC0"]["scale"] == ADC_VOLTS_PER_LSB
+
+
+@needs_psd
+def test_lost_at_end_decimated(tmp_path):
+    """Lost ranges end at the last sample written."""
+    path = tmp_path / "rec.h5"
+    raw = make_data(BATCHES_PER_FRAME * 10)
+    received = frames(raw)
+    del received[8]
+    record(path, [received], decimation=1024)
+    data, lost, _, _ = read(path)
+    # 1680 samples: at 0 and 1024; samples 1344 to 1511 are lost.
+    assert data.shape == (2, 2)
+    assert lost.tolist() == [[1, 1]]
+    # Both reach beyond either end.
+    assert read_extrapolated(path) == [[0, 2]]
+    np.testing.assert_array_equal(
+        data,
+        decimated(raw, 1024, range(8 * BATCHES_PER_FRAME, 9 * BATCHES_PER_FRAME))[0])
+
+
+def test_invalid_decimation(tmp_path):
+    path = tmp_path / "rec.h5"
+    with pytest.raises((ValueError, RuntimeError)):
+        StreamRecorder(str(path), make_parser(), SOURCES, TS, decimation=3)
+    assert not path.exists()

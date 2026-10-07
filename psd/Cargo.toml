@@ -14,6 +14,8 @@ crate-type = ["cdylib"]
 # The firmware's sweep oscillator, for reproducing the excitation exactly. Keep the
 # version equal to the one the firmware pins (stabilizer-stream depends on it too).
 idsp = "0.21"
+# The processing traits of idsp (the version it uses).
+dsp-process = "0.2"
 num-complex = "0.4"
 numpy = "0.29"
 pyo3 = { version = "0.29", features = ["abi3-py312"] }

@@ -15,12 +15,14 @@ import numpy as np
 from stabilizer.stream import wrap
 from stabilizer.stream_parser import Parser
 
-from .decoders import source_scales, to_machine_units
+from .decimation import Decimation, PASSBAND
+from .decoders import phase_periods, source_scales, to_machine_units
 
 logger = logging.getLogger(__name__)
 
 FILE_FORMAT = "stabilizer-ui stream recording"
-FILE_VERSION = 1
+#: 2: `decimation`, `extrapolated`.
+FILE_VERSION = 2
 
 #: Interval at which the received data is written to the file, in seconds.
 WRITE_INTERVAL = 0.5
@@ -35,13 +37,26 @@ MAX_GAP = 10.0
 MAX_BACKLOG = 256 << 20
 
 DESCRIPTION = (
-    "Stream data of a Stabilizer at the full sample rate. `channels` holds the recorded "
-    "sources (stream channels) in machine units (two's complement), sampled every "
-    "`sample_period` seconds; multiply by their `scale` for their `unit` (the scale of "
-    "the ADCs does not include the AFE gain, see `settings`). `lost` lists the ranges "
-    "of samples lost in transmission as (first sample, number of samples); they are "
-    "zero. `start_time` is the time of the computer when the first data arrived, and "
-    "`settings` the settings of the device and the UI at the start (topic path to "
+    "Stream data of a Stabilizer. `channels` holds the recorded sources (stream "
+    "channels) in machine units, sampled every `sample_period` seconds; multiply by "
+    "their `scale` for their `unit` (the scale of the ADCs does not include the AFE "
+    "gain, see `settings`). With `decimation` 1, they are the stream data at the full "
+    "sample rate (two's complement), and the samples lost in transmission are zero. "
+    "Otherwise, the stream data was low-pass filtered and decimated by `decimation` "
+    f"while recording (float32): flat up to {PASSBAND:g} times the sample rate, where "
+    "what would alias is suppressed by about 140 dB (the half-band filter cascade of "
+    "idsp). Sample i is the filtered stream data at stream sample i * `decimation`, "
+    "with the stream data taken to be constant before the first and after the last. "
+    "Phases (in turns) are filtered as phasors, and lost data is interpolated linearly. "
+    "`lost` lists the ranges of samples lost in transmission, or when decimated, less "
+    "than one sample period away from lost stream data, as (first sample, number of "
+    "samples). `extrapolated` lists, in the same format, those whose filter reaches "
+    "beyond the first or last stream sample (only when decimated, at most 30 at either "
+    "end): they are computed in part from the stream data taken to be constant there, "
+    "though with a weight which falls off quickly (in the response to a step just "
+    "beyond the end, below 1 % from the 8th sample from the end on, below 0.1 % from "
+    "the 14th). `start_time` is the time of the computer when the first data arrived, "
+    "and `settings` the settings of the device and the UI at the start (topic path to "
     "value, and the firmware version). The file is written in SWMR mode: open it with "
     "`swmr=True` (and call `refresh()` on the datasets) to read it while recording.")
 
@@ -65,18 +80,28 @@ class StreamRecorder:
                  sources: list[int],
                  sample_period: float,
                  device: str = "",
-                 settings: dict | None = None):
+                 settings: dict | None = None,
+                 decimation: int = 1):
         """
         :param sources: Indices of the stream sources to record.
+        :param sample_period: Sample period of the stream.
         :param settings: Snapshot of the settings to store.
+        :param decimation: Record at this fraction of the sample rate of the stream (a
+            power of two; see `Decimation`).
         """
         self.path = path
         self.sample_period = sample_period
+        self.decimation = decimation
         self._parser = parser
         self._sources = sources
-        #: Number of samples of each source recorded (including lost ones).
+        self._decimation = None
+        if decimation != 1:
+            periods = phase_periods(parser)
+            self._decimation = Decimation(decimation, [periods[i] for i in sources])
+        self._dtype = np.dtype(np.int16 if self._decimation is None else np.float32)
+        #: Number of stream samples of each source recorded (including lost ones).
         self.samples = 0
-        #: Number of samples lost in transmission (filled with zeros).
+        #: Number of stream samples lost in transmission.
         self.lost = 0
         #: Why the recording has stopped by itself (if it has).
         self.error: str | None = None
@@ -93,6 +118,8 @@ class StreamRecorder:
         #: Sequence number of the next batch to write, once the first frame is written.
         self._next: int | None = None
         self.batch_size: int | None = None
+        #: Number of samples of each source written to the file.
+        self._recorded = 0
 
         self._file = h5py.File(path, "w", libver=("v110", "latest"))
         try:
@@ -109,7 +136,8 @@ class StreamRecorder:
         f.attrs["version"] = FILE_VERSION
         f.attrs["description"] = DESCRIPTION
         f.attrs["device"] = device
-        f.attrs["sample_period"] = self.sample_period
+        f.attrs["sample_period"] = self.sample_period * self.decimation
+        f.attrs["decimation"] = self.decimation
         f.attrs["settings"] = json.dumps(settings or {})
         names = self._parser.StreamData._fields
         scales = source_scales(self._parser)
@@ -120,16 +148,13 @@ class StreamRecorder:
             dataset = channels.create_dataset(names[i],
                                               shape=(0, ),
                                               maxshape=(None, ),
-                                              dtype=np.int16,
+                                              dtype=self._dtype,
                                               chunks=(CHUNK_LENGTH, ))
             dataset.attrs["scale"] = scales[i]
             dataset.attrs["unit"] = units[i]
             self._datasets.append(dataset)
-        self._lost = f.create_dataset("lost",
-                                      shape=(0, 2),
-                                      maxshape=(None, 2),
-                                      dtype=np.int64,
-                                      chunks=(1024, 2))
+        self._lost = _Ranges(f, "lost")
+        self._extrapolated = _Ranges(f, "extrapolated")
 
     @property
     def names(self) -> list[str]:
@@ -144,7 +169,7 @@ class StreamRecorder:
     @property
     def size(self) -> int:
         """Size of the data recorded, in bytes."""
-        return 2 * self.samples * len(self._sources)
+        return self._recorded * self._dtype.itemsize * len(self._sources)
 
     @property
     def finished(self) -> bool:
@@ -203,6 +228,8 @@ class StreamRecorder:
                     self._fail(f"no stream data for more than {MAX_GAP:g} s")
             if pending:
                 self._write(pending)
+            if self._decimation is not None:
+                self._finish_decimation()
         except Exception as e:
             logger.exception("Failed to write %s", self.path)
             self._fail(f"failed to write the file: {e}")
@@ -222,6 +249,8 @@ class StreamRecorder:
             timespec="microseconds")
         self._file.attrs["batch_size"] = self.batch_size
         self._file.swmr_mode = True
+        if self._decimation is not None:
+            self._extrapolated.add(np.array([[0, self._decimation.edge]]))
 
     def _write(self, frames: list[tuple[tuple, bytes]]):
         """Write frames in the order of their sequence numbers, leaving out data already
@@ -265,25 +294,84 @@ class StreamRecorder:
             to_machine_units(self._parser, data)
             data = data[self._sources]
             lost = ~received
+            # The lost samples, as (first, stop) relative to `data`.
+            ranges = np.empty((0, 2), np.int64)
             if lost.any():
                 data.reshape(len(self._sources), end, batch_size)[:, lost] = 0
                 edges = np.flatnonzero(np.diff(lost, prepend=False, append=False))
-                starts, stops = edges[0::2], edges[1::2]
-                ranges = np.stack(
-                    [self.samples + starts * batch_size, (stops - starts) * batch_size],
-                    axis=1)
-                self._lost.resize((len(self._lost) + len(ranges), 2))
-                self._lost[-len(ranges):] = ranges
-                self._lost.flush()
-                self.lost += int(ranges[:, 1].sum())
-            n = self.samples + end * batch_size
-            for dataset, values in zip(self._datasets, data):
-                dataset.resize((n, ))
-                dataset[self.samples:] = values
-                dataset.flush()
-            self.samples = n
+                ranges = edges.reshape(-1, 2) * batch_size
+                self.lost += int(np.diff(ranges).sum())
+            if self._decimation is None:
+                ranges += self.samples
+            else:
+                data, ranges = self._decimation.process(data, ranges)
+            self._lost.add(ranges)
+            self._append(data)
+            self.samples += end * batch_size
             self._next = wrap(self._next + end)
 
         self._processed += sum(len(body) for _, body in frames)
         if error is not None:
             self._fail(error)
+
+    def _append(self, data: np.ndarray):
+        """Write the next samples, as (source, sample) array."""
+        n = self._recorded + data.shape[1]
+        if n == self._recorded:
+            return
+        for dataset, values in zip(self._datasets, data):
+            dataset.resize((n, ))
+            dataset[self._recorded:] = values
+            dataset.flush()
+        self._recorded = n
+
+    def _finish_decimation(self):
+        """Write the decimated data which depends on the stream data after the last
+        sample."""
+        data, extrapolated = self._decimation.finish()
+        self._append(data)
+        self._extrapolated.add(np.array([[self._recorded - extrapolated,
+                                          self._recorded]]))
+        # Those at the start, and lost data near the end, can reach beyond the end.
+        self._lost.trim(self._recorded)
+        self._extrapolated.trim(self._recorded)
+
+
+class _Ranges:
+    """A dataset of ranges of samples, as (first sample, number of samples), to which
+    ranges are added in order."""
+
+    def __init__(self, group: h5py.Group, name: str):
+        self._dataset = group.create_dataset(name,
+                                             shape=(0, 2),
+                                             maxshape=(None, 2),
+                                             dtype=np.int64,
+                                             chunks=(1024, 2))
+        #: The last range, as (first, stop).
+        self._last: tuple[int, int] | None = None
+
+    def add(self, ranges: np.ndarray):
+        """Add ranges, as array of (first, stop) (merging the first with the last one
+        there if they overlap or touch)."""
+        ranges = ranges[ranges[:, 1] > ranges[:, 0]]
+        if not len(ranges):
+            return
+        rows = np.stack([ranges[:, 0], ranges[:, 1] - ranges[:, 0]], axis=1)
+        n = len(self._dataset)
+        if self._last is not None and ranges[0, 0] <= self._last[1]:
+            first = self._last[0]
+            rows[0] = first, max(ranges[0, 1], self._last[1]) - first
+            n -= 1
+        self._dataset.resize((n + len(rows), 2))
+        self._dataset[n:] = rows
+        self._dataset.flush()
+        first, count = rows[-1]
+        self._last = int(first), int(first + count)
+
+    def trim(self, stop: int):
+        """End the last range at `stop` if it reaches beyond."""
+        if self._last is not None and self._last[1] > stop:
+            first = self._last[0]
+            self._dataset[-1] = first, stop - first
+            self._dataset.flush()
+            self._last = first, stop

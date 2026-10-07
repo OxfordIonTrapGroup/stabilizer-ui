@@ -4,6 +4,8 @@ import numpy as np
 
 #: FFT size of each stage.
 FFT_SIZE: int
+#: Largest `depth` of a `Decimator`.
+MAX_DECIMATION_DEPTH: int
 
 
 def sweep_excitation(sweep: tuple[int, int, int, float, float]) -> np.ndarray:
@@ -108,3 +110,40 @@ class PsdCascade:
         that has at least `min_count` averages. `stages` describes all stages, from the
         lowest frequencies to the highest (the first stage).
         """
+
+
+class Decimator:
+    """Decimation of several channels by `2**depth` in real time, with the half-band filter
+    cascade of `idsp` (`idsp::hbf::HBF_TAPS`).
+
+    The output is flat up to 0.4 of its sample rate (`idsp::hbf::HBF_PASSBAND`), and what
+    would alias into that band is suppressed by about 140 dB (the limit of float32). Output
+    `n` of each channel is the filtered input at sample `n * ratio`, where the input is
+    taken to be equal to its first sample before it, and to its last sample after it (see
+    `finish()`).
+
+    The methods can be called from several threads; the GIL is released while
+    processing.
+    """
+
+    def __init__(self, depth: int, channels: int) -> None:
+        ...
+
+    @property
+    def ratio(self) -> int:
+        """The decimation factor, `2**depth`."""
+
+    @property
+    def half_width(self) -> int:
+        """The number of input samples on either side of sample `n * ratio` that the
+        filter of output `n` spans. It is returned once the input up to sample `n * ratio
+        + half_width` has been processed."""
+
+    def process(self, x: np.ndarray) -> np.ndarray:
+        """Decimate the next input samples, as C-contiguous float32 array (channel,
+        sample), returning the output samples that are determined by now, as (channel,
+        sample) array."""
+
+    def finish(self) -> np.ndarray:
+        """Return the remaining output samples, up to the last one at or before the last
+        input sample. The decimator takes no more input afterwards."""
