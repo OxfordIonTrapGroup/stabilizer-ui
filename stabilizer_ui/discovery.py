@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 from gmqtt import Client as MqttClient, Subscription
 
-from .firmware import Firmware, FirmwareV09
+from .firmware import Firmware, Metadata, by_name, describe, describe_details
 from .mqtt import (DEVICE_NAME_KEY, MiniconfError, MqttInterface, NetworkAddress,
                    UnsupportedFirmware)
 
@@ -27,7 +27,8 @@ TARGETS = {
 #: Time to wait for the retained messages after subscribing, in seconds.
 RETAINED_TIMEOUT = 1.0
 
-#: Time to wait for the device to answer when asking for its firmware, in seconds.
+#: Time to wait for the device to answer when asking for its firmware (if its build
+#: metadata does not tell), in seconds.
 PROBE_TIMEOUT = 2.0
 
 
@@ -42,7 +43,11 @@ class Device:
     alive: Optional[bool] = None
     #: The name the user has given the device (empty if none).
     name: str = ""
+    #: The firmware it runs (or, if it is not connected, ran last), if known.
     firmware: Optional[Firmware] = None
+    #: The build metadata of the firmware, if retained on the broker (by firmware from
+    #: October 2026).
+    metadata: Optional[Metadata] = None
     #: Why the firmware is not known, if it is not.
     error: Optional[str] = None
 
@@ -59,6 +64,20 @@ class Device:
     def target(self) -> Optional[str]:
         """The module of the UI target, or `None` if the application is not supported."""
         return TARGETS.get(self.app)
+
+    @property
+    def firmware_label(self) -> str:
+        """The firmware to show (see `firmware.describe()`), or why it is not known."""
+        if self.firmware is None and (self.metadata is None or not self.metadata.version):
+            if self.target is None:
+                return "–"
+            return f"unknown ({self.error})" if self.error else "unknown"
+        return describe(self.firmware, self.metadata)
+
+    @property
+    def firmware_details(self) -> str:
+        """An explanation of `firmware_label` (see `firmware.describe_details()`)."""
+        return describe_details(self.firmware, self.metadata)
 
     def __str__(self):
         return f"{self.app}/{self.id}"
@@ -78,6 +97,10 @@ async def discover(brokers: list[NetworkAddress],
     Connected devices have an `alive` message, as do those of firmware v0.9 which have
     disconnected (later ones clear it). Devices which only have a name are taken as
     disconnected. A broker which cannot be reached is skipped (and logged).
+
+    The firmware of a device is told by its retained build metadata (`meta`, by
+    firmware from October 2026) if possible; otherwise, connected devices are asked (see
+    `MqttInterface.detect_firmware()`).
     """
     results = await asyncio.gather(*(_discover(broker, match) for broker in brokers),
                                    return_exceptions=True)
@@ -92,17 +115,24 @@ async def discover(brokers: list[NetworkAddress],
 
 async def _discover(broker: NetworkAddress,
                     match: Optional[Callable[[Device], bool]]) -> list[Device]:
-    #: The retained `alive` messages and names, by device prefix.
+    #: The retained `alive` messages, names and build metadata, by device prefix.
     alive = dict[str, bytes]()
     names = dict[str, str]()
+    metadata = dict[str, Metadata]()
     interfaces = dict[str, MqttInterface]()
 
     def handle_message(client, topic, payload, qos, properties):
         parts = topic.split("/")
         prefix, key = "/".join(parts[:4]), "/".join(parts[4:])
-        if properties.get("retain") and key in ("alive", DEVICE_NAME_KEY):
+        if properties.get("retain") and key in ("alive", "meta", DEVICE_NAME_KEY):
             if key == "alive":
                 alive[prefix] = payload
+            elif key == "meta":
+                try:
+                    metadata[prefix] = Metadata.parse(payload)
+                except ValueError:
+                    logger.warning("Failed to parse the metadata of %s: %s", prefix,
+                                   payload)
             else:
                 try:
                     name = json.loads(payload)
@@ -122,13 +152,18 @@ async def _discover(broker: NetworkAddress,
     try:
         client.subscribe([
             Subscription("dt/sinara/+/+/alive"),
+            Subscription("dt/sinara/+/+/meta"),
             Subscription(f"dt/sinara/+/+/{DEVICE_NAME_KEY}")
         ])
         await asyncio.sleep(RETAINED_TIMEOUT)
         devices = []
         for prefix in alive.keys() | names.keys():
             _, _, app, device_id = prefix.split("/")
-            device = Device(broker, app, device_id, name=names.get(prefix, ""))
+            device = Device(broker,
+                            app,
+                            device_id,
+                            name=names.get(prefix, ""),
+                            metadata=metadata.get(prefix))
             payload = alive.get(prefix, b"")
             try:
                 device.alive = bool(payload) and bool(json.loads(payload))
@@ -136,11 +171,14 @@ async def _discover(broker: NetworkAddress,
                 device.alive = True
             if payload == b"0":
                 # Only v0.9 publishes this (when disconnecting).
-                device.firmware = FirmwareV09()
+                device.firmware = by_name("v0.9")
+            elif device.metadata is not None:
+                device.firmware = device.metadata.firmware
             if match is None or match(device):
                 devices.append(device)
         probed = [
-            device for device in devices if device.alive and device.target is not None
+            device for device in devices
+            if device.alive and device.target is not None and device.firmware is None
         ]
         for device in probed:
             interface = MqttInterface(client, device.prefix, timeout=PROBE_TIMEOUT)

@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from stabilizer_ui.firmware import FIRMWARES
+from stabilizer_ui.firmware import FIRMWARES, by_name
 from stabilizer_ui.mqtt import (MiniconfError, MqttInterface, UiMqttBridge, UiMqttConfig,
                                 UnsupportedFirmware)
 
@@ -139,6 +139,44 @@ def test_cancelled_request_is_removed():
         client.reply(0, 'G2')
 
     asyncio.run(run())
+
+
+def test_metadata_follows_the_device():
+    """The build metadata is followed as the device publishes it (retained or not),
+    until someone clears it."""
+
+    class Window:
+
+        def __init__(self):
+            self.metadata = []
+
+        def set_firmware_metadata(self, metadata):
+            self.metadata.append(metadata)
+
+    bridge = UiMqttBridge(Client(), {})
+    window = Window()
+    bridge._root_topic = 'device'
+    bridge._ui = window
+    payload = json.dumps({
+        'firmware_version': 'v0.9.0-221-g43064e14',
+        'panic_info': 'panicked at src/hardware/mod.rs:1:1'
+    }).encode()
+    bridge.handle_message('device/meta', payload, {'retain': False})
+    assert bridge.metadata.firmware is by_name('v0.9')
+    assert bridge.panicked
+    assert window.metadata == [bridge.metadata]
+
+    bridge.handle_message('device/meta', b'Truncated', {'retain': True})
+    assert bridge.metadata.firmware is by_name('v0.9')
+
+    bridge.handle_message('device/meta', b'', {'retain': False})
+    assert bridge.metadata is None
+    assert window.metadata[-1] is None
+
+    bridge.handle_message('device/meta', b'{"firmware_version": "v0.11.0"}',
+                          {'retain': True})
+    assert bridge.metadata.firmware is by_name('v0.11')
+    assert not bridge.panicked
 
 
 @pytest.fixture(scope='module')

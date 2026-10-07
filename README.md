@@ -15,7 +15,8 @@ upstream quartiq/stabilizer, which uses the miniconf-mqtt v0.20 settings protoco
 `master` before the merge, v0.9 with miniconf 0.9), except for what it does not have: the
 run mode (which it only has for both channels together) and the signal source needed for
 transfer function measurements. These are greyed out. The UI finds out which version a
-device runs when it connects.
+device runs when it connects: from the build metadata the firmware keeps on the broker
+(firmware built since October 2026), or else by asking the device.
 
 ## Getting started
 1. Clone this repository and `cd` into it in the terminal. Install [uv](https://docs.astral.sh/uv/).

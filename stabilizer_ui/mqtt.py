@@ -11,7 +11,7 @@ from typing import NamedTuple, List, Callable, Any, Dict, Optional
 from PyQt6 import QtWidgets
 from gmqtt import Client as MqttClient, Subscription
 
-from .firmware import CURRENT, FIRMWARES, Firmware
+from .firmware import CURRENT, FIRMWARES, Firmware, Metadata
 
 logger = logging.getLogger(__name__)
 
@@ -133,9 +133,15 @@ class MqttInterface:
         except (ValueError, KeyError, TypeError):
             raise MiniconfError(key, f"Not a value: {message!r}") from None
 
-    async def detect_firmware(self) -> Firmware:
-        """Find out which firmware the device runs (by getting a setting which only one
-        version has at its place), and use it for further requests."""
+    async def detect_firmware(self, metadata: Optional[Metadata] = None) -> Firmware:
+        """Find out which firmware the device runs, and use it for further requests: from
+        the version in its build metadata (`metadata`) if that tells, otherwise by
+        getting a setting which only one version has at its place."""
+        firmware = metadata.firmware if metadata is not None else None
+        if firmware is not None:
+            self.firmware = firmware
+            logger.info("Stabilizer firmware %s (%s)", firmware, metadata)
+            return firmware
         for firmware in FIRMWARES:
             self.firmware = firmware
             try:
@@ -409,7 +415,8 @@ class UiMqttBridge:
       requests of other clients to `on_settings_request`, for the owner to read the
       setting back. Both get the key of the setting in the current firmware (see the
       `firmware` of the `MqttInterface`).
-    * `alive`, `meta`: the device status.
+    * `alive`, `meta`: the device status, and the build metadata of its firmware
+      (`metadata`).
 
     Showing a value from the broker in the widgets does not queue it for writing.
     """
@@ -418,6 +425,9 @@ class UiMqttBridge:
         self.client = client
         self.configs = configs
         self.panicked = False
+        #: The build metadata of the device's firmware, if seen since subscribing (see
+        #: `Metadata`).
+        self.metadata: Optional[Metadata] = None
         self._root_topic = None
         self._ui = None
         self._interface: Optional[MqttInterface] = None
@@ -513,21 +523,27 @@ class UiMqttBridge:
         self.on_alive(is_alive, retained)
 
     def _handle_meta(self, payload: bytes):
-        # Published (not retained) once each time the device connects to the broker.
+        # Published each time the device connects to the broker (retained since October
+        # 2026, so that it also tells what a disconnected device ran last).
+        if not payload:
+            # Cleared by someone.
+            self.metadata = None
+            self._ui.set_firmware_metadata(None)
+            return
         try:
-            meta = json.loads(payload)
+            metadata = Metadata.parse(payload)
         except ValueError:
             logger.warning("Failed to parse device metadata: %s", payload)
             return
-        logger.info("Stabilizer firmware %s (%s, hardware %s)",
-                    meta.get("firmware_version"), meta.get("profile"),
-                    meta.get("hardware_version"))
-        panic_info = meta.get("panic_info", "None")
-        has_panicked = panic_info != "None"
-        self.panicked = has_panicked
-        if has_panicked:
+        self.metadata = metadata
+        logger.info("Stabilizer firmware %s (%s, hardware %s)", metadata,
+                    metadata.values.get("profile"),
+                    metadata.values.get("hardware_version"))
+        panic_info = metadata.panic_info
+        self.panicked = panic_info is not None
+        if panic_info is not None:
             logger.error("Stabilizer had panicked, but has restarted: %s", panic_info)
-        self._ui.update_panic_status(has_panicked, panic_info)
+        self._ui.set_firmware_metadata(metadata)
 
     def _handle_settings_message(self, topic: str, payload: bytes, properties: dict,
                                  retained: bool):
@@ -662,6 +678,8 @@ class UiMqttBridge:
         self._ui = ui
         self._interface = interface
         self._alive_seen = False
+        self.metadata = None
+        ui.set_firmware_metadata(None)
         self._ui_retained.clear()
         self._ui_legacy.clear()
         interface.subscribe()

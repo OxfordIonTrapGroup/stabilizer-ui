@@ -10,7 +10,7 @@ from typing import Optional, TYPE_CHECKING
 from .iir.filters import settings_coefficients
 
 if TYPE_CHECKING:
-    from .firmware import Firmware
+    from .firmware import Firmware, Metadata
     from .stream.thread import StreamThread
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,9 @@ class AbstractUiWindow(QMainWindow):
         self._settings_enabled = False
         #: The firmware of the device, once known (see `set_firmware()`).
         self.firmware: Optional[Firmware] = None
+        #: The build metadata of its firmware, if the device has published it (see
+        #: `set_firmware_metadata()`).
+        self.firmware_metadata: Optional[Metadata] = None
 
         # Shown in the status bar while the stream is not directed to this client
         self.stream_status_label = QLabel()
@@ -161,7 +164,8 @@ class AbstractUiWindow(QMainWindow):
 
     def settings_snapshot(self) -> dict:
         """The current settings (by topic) the device has, and the version of its
-        firmware (`firmware`), to store with recorded data."""
+        firmware (`firmware`, the layout, and `firmware_metadata`, what the device has
+        published about the build), to store with recorded data."""
         firmware = self.firmware
         snapshot = {
             key: cfg.read_handler(cfg.widgets)
@@ -170,12 +174,22 @@ class AbstractUiWindow(QMainWindow):
         }
         if firmware is not None:
             snapshot["firmware"] = firmware.name
+        if self.firmware_metadata is not None:
+            snapshot["firmware_metadata"] = self.firmware_metadata.values
         return snapshot
 
     def _setStyleSheet(self):
         stylesheet_str = ";".join(
             [f"{key}: {value}" for key, value in self.stylesheet.items()])
         self.setStyleSheet(stylesheet_str)
+
+    def set_firmware_metadata(self, metadata: Optional[Metadata]):
+        """Called with the build metadata of the firmware each time the device publishes
+        it (`None` when it is cleared, or not known after reconnecting to the broker), to
+        report a panic of the device."""
+        self.firmware_metadata = metadata
+        if metadata is not None:
+            self.update_panic_status(metadata.panic_info is not None, metadata.panic_info)
 
     def update_panic_status(self, has_panicked: bool, value: Optional[str]):
         if not has_panicked:
@@ -192,8 +206,10 @@ class AbstractUiWindow(QMainWindow):
             self._offlineMessageBox.open()
         self._set_hardware_live_styling(is_alive)
 
-    def update_comm_status(self, is_nominal: bool, message: str):
+    def update_comm_status(self, is_nominal: bool, message: str, details: str = ""):
+        """Show the state of the connection (`details` as tooltip)."""
         self.comm_status_label.setText(message)
+        self.comm_status_label.setToolTip(details)
         if is_nominal:
             self._commErrorMessageBox.hide()
             self._offlineMessageBox.hide()

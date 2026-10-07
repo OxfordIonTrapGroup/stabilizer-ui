@@ -8,7 +8,7 @@ from gmqtt import Message as MqttMessage
 from PyQt6.QtWidgets import QWidget
 
 from .ui import AbstractUiWindow
-from .firmware import CURRENT, Firmware
+from .firmware import CURRENT, Firmware, describe, describe_details
 from .mqtt import (DEVICE_NAME_KEY, MiniconfError, MqttInterface, NetworkAddress,
                    UiMqttBridge, UiMqttConfig, set_will, values_match)
 from .iir.filters import settings_coefficients
@@ -54,9 +54,9 @@ class AbstractStabilizerInterface:
     * The stream can only go to one client. The last client to start takes it, and the
       others take it back once nobody receives it.
 
-    The firmware of the device is detected each time it connects (see
-    `MqttInterface.detect_firmware()`). The widgets of the settings it does not have
-    are disabled.
+    The firmware of the device is detected each time it connects, from the build
+    metadata it publishes if possible (see `MqttInterface.detect_firmware()`). The
+    widgets of the settings it does not have are disabled.
     """
 
     def __init__(self, sample_period: float, app_root: TopicTree):
@@ -259,7 +259,7 @@ class AbstractStabilizerInterface:
                            will_delay_interval=3)
 
     async def _detect_firmware(self):
-        firmware = await self._interface.detect_firmware()
+        firmware = await self._interface.detect_firmware(self._bridge.metadata)
         if firmware is not self._will_firmware:
             # Clear the stream target retained in the layout of the earlier firmware:
             # it might be ours, which the will no longer resets.
@@ -325,8 +325,10 @@ class AbstractStabilizerInterface:
             # Everything shown is now what the device has.
             self._syncing = False
             self._ui.set_settings_enabled(True)
-            self._ui.update_comm_status(
-                True, f"Connected to Stabilizer (firmware {self._firmware})")
+            firmware = describe(self._firmware, bridge.metadata)
+            self._ui.update_comm_status(True,
+                                        f"Connected to Stabilizer (firmware {firmware})",
+                                        describe_details(self._firmware, bridge.metadata))
         else:
             return False
         return True

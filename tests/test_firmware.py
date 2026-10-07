@@ -4,7 +4,8 @@ import json
 
 import pytest
 
-from stabilizer_ui.firmware import CURRENT, FirmwareV09, by_name
+from stabilizer_ui.firmware import (CURRENT, VERSION_NOT_PUBLISHED, FirmwareV09, Metadata,
+                                    by_name, describe, describe_details)
 from stabilizer_ui.mqtt import MiniconfError, MqttInterface, UnsupportedFirmware
 
 V09 = FirmwareV09()
@@ -142,5 +143,120 @@ def test_detect_unknown():
         with pytest.raises(UnsupportedFirmware):
             await interface.detect_firmware()
         assert interface.firmware is CURRENT
+
+    asyncio.run(run())
+
+
+def metadata(version, **values):
+    """The metadata as the device publishes it, for firmware `version`."""
+    return Metadata.parse(
+        json.dumps({
+            "firmware_version": version,
+            "rust_version": "rustc 1.98.0",
+            "profile": "release",
+            "git_dirty": False,
+            "features": "",
+            "panic_info": "None",
+            "hardware_version": "Rev1_3"
+        } | values).encode())
+
+
+@pytest.mark.parametrize(
+    "version, expected",
+    [
+        ("v0.11.0-py-337-g693ca709", "v0.11"),
+        ("v0.11.0", "v0.11"),
+        ("v0.12.0-3-g0123abcd", "v0.11"),
+        ("v0.9.0-221-g43064e14", "v0.9"),
+        # Upstream, and the old `l674` lock firmware (miniconf 0.5).
+        ("v0.10.0", None),
+        ("v0.7.0-44-g8a7391ba", None),
+        # Without a tag before the commit, or without git.
+        ("693ca709", None),
+        ("Unspecified", None),
+    ])
+def test_metadata_firmware(version, expected):
+    firmware = metadata(version).firmware
+    assert (firmware and firmware.name) == expected
+    if firmware is not None:
+        assert firmware is by_name(expected)
+
+
+def test_metadata_values():
+    meta = metadata("v0.11.0-py-337-g693ca709")
+    assert str(meta) == "v0.11.0-py-337-g693ca709"
+    assert meta.panic_info is None
+    assert meta.values["hardware_version"] == "Rev1_3"
+
+    meta = metadata("v0.11.0-py-337-g693ca709",
+                    git_dirty=True,
+                    panic_info="panicked at src/bin/dual-iir.rs:1:1")
+    assert str(meta) == "v0.11.0-py-337-g693ca709-dirty"
+    assert meta.panic_info == "panicked at src/bin/dual-iir.rs:1:1"
+    assert meta.firmware is CURRENT
+
+    # What the device publishes if the metadata does not fit its buffer.
+    meta = Metadata.parse(b'{"message":"Truncated: See USB terminal"}')
+    assert meta.version == ""
+    assert meta.firmware is None
+
+    for payload in [b"", b"OK", b'"v0.11.0"', b"[1]"]:
+        with pytest.raises(ValueError):
+            Metadata.parse(payload)
+
+
+def test_describe():
+    v09 = by_name("v0.9")
+    assert describe(CURRENT, metadata("v0.11.0-py-337-g693ca709")) == \
+        "v0.11.0-py-337-g693ca709"
+    assert describe(v09, metadata("v0.9.0-221-g43064e14", git_dirty=True)) == \
+        "v0.9.0-221-g43064e14-dirty"
+    # The version does not tell the layout: it was found by asking the device.
+    assert describe(CURRENT, metadata("Unspecified")) == "Unspecified (v0.11-ish)"
+    assert describe(None, metadata("v0.10.0")) == "v0.10.0"
+    # Only the layout is known, not the release.
+    assert describe(v09, None) == "v0.9-ish"
+    assert describe(CURRENT, Metadata.parse(b'{"message":"Truncated"}')) == "v0.11-ish"
+    assert describe(None, None) == "unknown"
+
+
+def test_describe_details():
+    """Only a firmware without metadata needs explaining (restarting the device tells)."""
+    assert describe_details(CURRENT, None) == VERSION_NOT_PUBLISHED
+    assert describe_details(CURRENT, metadata("v0.11.0-py-337-g693ca709")) == ""
+    assert describe_details(CURRENT, metadata("Unspecified")) == ""
+    assert describe_details(None, None) == ""
+
+
+@pytest.mark.parametrize("version, expected", [
+    ("v0.11.0-py-337-g693ca709", "v0.11"),
+    ("v0.9.0-221-g43064e14", "v0.9"),
+])
+def test_detect_from_metadata(version, expected):
+    """A version the metadata tells needs no request."""
+
+    async def run():
+        device = Device({})
+        interface = MqttInterface(device, "device", 1)
+        interface.subscribe()
+        firmware = await interface.detect_firmware(metadata(version))
+        assert firmware is by_name(expected)
+        assert interface.firmware is firmware
+        assert device.requests == []
+
+    asyncio.run(run())
+
+
+def test_detect_unknown_metadata():
+    """Otherwise the device is asked."""
+
+    async def run():
+        device = Device({"settings/stream_target": {"ip": [0, 0, 0, 0], "port": 0}})
+        interface = MqttInterface(device, "device", 1)
+        interface.subscribe()
+        firmware = await interface.detect_firmware(metadata("Unspecified"))
+        assert firmware is by_name("v0.9")
+        assert [topic for topic, _ in device.requests
+                ] == ["settings/stream", "settings/stream_target"]
 
     asyncio.run(run())

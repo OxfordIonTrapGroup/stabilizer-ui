@@ -1,7 +1,8 @@
 """Opens the UI for a Stabilizer, found by asking MQTT brokers which devices there are.
 
 The application (the UI target) and the firmware version of a device are found out from
-what it publishes and answers, so there is no need for a device database.
+what it publishes (and, for firmware which does not retain its build metadata, answers),
+so there is no need for a device database.
 """
 import argparse
 import asyncio
@@ -72,7 +73,7 @@ def run_ui(loop: QEventLoop,
 
     :param name: The name of the device (empty if it has none). The window follows the
         name retained on the broker, and the user can change it.
-    :param firmware: The firmware the device is expected to run (it is asked anyway).
+    :param firmware: The firmware the device is expected to run (found out again anyway).
     :param args: The parsed command line arguments (including those of the target, see
         `target_module()`), if any.
     """
@@ -274,19 +275,16 @@ class DeviceDialog(QtWidgets.QDialog):
         self.table.clearSelection()
         self.table.setRowCount(len(self._shown))
         for row, device in enumerate(self._shown):
-            if device.target is None:
-                firmware = "–"
-            elif device.firmware is None:
-                firmware = f"unknown ({device.error})" if device.error else "unknown"
-            else:
-                firmware = device.firmware.name
             status = {True: "connected", False: "disconnected", None: "?"}[device.alive]
             for column, text in enumerate([
                     device.name, device.id,
-                    device.app if device.target else f"{device.app} (no UI)", firmware,
-                    status, f"{device.broker.get_ip()}:{device.broker.port}"
+                    device.app if device.target else f"{device.app} (no UI)",
+                    device.firmware_label, status,
+                    f"{device.broker.get_ip()}:{device.broker.port}"
             ]):
                 item = QtWidgets.QTableWidgetItem(text)
+                if column == self.COLUMNS.index("Firmware"):
+                    item.setToolTip(device.firmware_details)
                 if device.target is None:
                     item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEnabled)
                 self.table.setItem(row, column, item)
@@ -397,10 +395,10 @@ def main():
 
     if args.list:
         for device in asyncio.run(discover(brokers)):
-            firmware = device.firmware or device.error or "?"
             status = {True: "connected", False: "disconnected", None: "?"}[device.alive]
-            print(f"{device.name or '-'}\t{device.id}\t{device.app}\t{firmware}\t"
-                  f"{status}\t{device.broker.get_ip()}:{device.broker.port}")
+            print(f"{device.name or '-'}\t{device.id}\t{device.app}\t"
+                  f"{device.firmware_label}\t{status}\t"
+                  f"{device.broker.get_ip()}:{device.broker.port}")
         return
 
     app = create_application()
