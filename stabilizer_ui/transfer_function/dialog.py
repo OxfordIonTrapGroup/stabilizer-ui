@@ -978,31 +978,36 @@ class TransferFunctionWindow(QtWidgets.QDialog):
 
 
 class TransferFunctionMixin:
-    """Adds the transfer function window to the main window of a `dual-iir`-like target.
+    """Adds a button for the transfer function window to the main window of a
+    `dual-iir`-like target (below the scope).
 
     Expects the `channels` of the window to be `AbstractChannelSettings`, whose
     `controller_sos()` gives the designed response the measured controller is compared
     to.
     """
 
-    def _add_transfer_function_action(self):
-        """Add the (initially disabled) action to the Tools menu."""
+    def _add_transfer_function_button(self):
+        """Add the (initially disabled) button."""
         self._sweep_runner = None
         self._transfer_function_window = None
-        self.transferFunctionAction = self.tools_menu().addAction("&Transfer function…")
-        self.transferFunctionAction.setShortcut("Ctrl+T")
-        self.transferFunctionAction.setEnabled(False)
+        button = self.add_tool_button(
+            "Transfer function…", "Ctrl+T",
+            "Measure transfer functions with swept sines from the signal source of the "
+            "device")
+        self.transferFunctionButton = button
+        self._transfer_function_tooltip = button.toolTip()
+        button.setEnabled(False)
         if not ess.available():
             # The analysis is in the `stabilizer_dsp` extension (`dsp/`), which is
             # optional; without it, the measurements are not offered.
-            self.transferFunctionAction.setText(
-                "Transfer function (needs the stabilizer-dsp package, see dsp/)")
-        self.transferFunctionAction.triggered.connect(self.show_transfer_function)
+            button.setToolTip("Transfer function measurements need the stabilizer-dsp "
+                              "package (see dsp/)")
+        button.clicked.connect(self.show_transfer_function)
 
     def set_sweep_runner(self, runner: SweepRunner):
         """Enable transfer function measurements using the given `SweepRunner`."""
         self._sweep_runner = runner
-        self.transferFunctionAction.setEnabled(ess.available())
+        self.transferFunctionButton.setEnabled(ess.available())
 
     def set_device_name(self, name: str):
         super().set_device_name(name)
@@ -1017,10 +1022,11 @@ class TransferFunctionMixin:
             return
         # The measurements need the swept-sine source.
         available = firmware.has("settings/trigger")
-        action = self.transferFunctionAction
-        action.setEnabled(available and self._sweep_runner is not None)
-        unavailable = f"Transfer function (not available in firmware {firmware})"
-        action.setText("&Transfer function…" if available else unavailable)
+        button = self.transferFunctionButton
+        button.setEnabled(available and self._sweep_runner is not None)
+        button.setToolTip(self._transfer_function_tooltip if available else
+                          f"Transfer function measurements are not available in "
+                          f"firmware {firmware}, which has no signal source")
 
     def show_transfer_function(self):
         if self._transfer_function_window is None:

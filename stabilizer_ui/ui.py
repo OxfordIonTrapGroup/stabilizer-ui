@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
-from PyQt6.QtWidgets import (QMainWindow, QDialog, QMenu, QMessageBox, QLabel,
-                             QPushButton)
-from PyQt6.QtGui import QPalette
+from PyQt6.QtWidgets import QMainWindow, QDialog, QMessageBox, QLabel, QPushButton
+from PyQt6.QtGui import QKeySequence, QPalette, QShortcut
 from typing import Optional, TYPE_CHECKING
 
 from .iir.filters import settings_coefficients
@@ -34,7 +33,6 @@ class AbstractUiWindow(QMainWindow):
         self._title: Optional[str] = None
         self._connection_is_nominal = True
         self.stylesheet = {}
-        self._tools_menu = None
         #: The map from topic to widgets, set by `set_mqtt_configs()`.
         self._settings_map = {}
         self._stream_thread = None
@@ -126,11 +124,20 @@ class AbstractUiWindow(QMainWindow):
             title += " [OFFLINE]"
         self.setWindowTitle(title)
 
-    def tools_menu(self) -> QMenu:
-        """The Tools menu (added on first use)."""
-        if self._tools_menu is None:
-            self._tools_menu = self.menuBar().addMenu("&Tools")
-        return self._tools_menu
+    def add_tool_button(self, text: str, shortcut: str, tooltip: str) -> QPushButton:
+        """Add a button (e.g. opening the window of a tool) below the scope, next to the
+        recording controls.
+
+        :param shortcut: Clicks the button anywhere in the window, also where the scope
+            is hidden (e.g. in another tab); mentioned in the tooltip.
+        """
+        button = QPushButton(text)
+        sequence = QKeySequence(shortcut)
+        native = sequence.toString(QKeySequence.SequenceFormat.NativeText)
+        button.setToolTip(f"{tooltip} ({native})")
+        QShortcut(sequence, self).activated.connect(button.click)
+        self.fftScopeWidget.add_tool_button(button)
+        return button
 
     def set_stream_thread(self, stream_thread: StreamThread, device: str):
         """Enable the tools using the stream data, fed by the given `StreamThread`."""
@@ -222,7 +229,6 @@ class AbstractUiWindow(QMainWindow):
         self._settings_enabled = enabled
         for widget in self.settings_widgets():
             widget.setEnabled(enabled)
-        self.menuBar().setEnabled(enabled)
         self.streamTakeOverButton.setEnabled(enabled)
         for child in self.findChildren(QDialog):
             child.setEnabled(enabled)

@@ -174,6 +174,11 @@ class FftScope(QtWidgets.QWidget):
         self.record_bar = RecordBar(parser, sample_period)
         self.layout().addWidget(self.record_bar)
 
+    def add_tool_button(self, button: QtWidgets.QPushButton):
+        """Add a button to the right of the recording controls (in the layout of the
+        `record_bar`, so that the buttons line up)."""
+        self.record_bar.layout().addWidget(button)
+
     @property
     def config(self) -> ScopeConfig:
         """The current configuration (read by the stream thread)."""

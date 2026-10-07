@@ -44,9 +44,105 @@ def _warning(text: str) -> str:
     return f"<span style='color: darkorange'>{text}</span>"
 
 
+class RecordDialog(QtWidgets.QDialog):
+    """Asks which sources of the stream to record, and at which sample rate (the full rate
+    of the stream, or lower, decimated), showing the data rate of the selection.
+
+    The choice is remembered (in the `QSettings`) when the dialog is accepted, and shown
+    again the next time it is opened (`load()`).
+    """
+
+    def __init__(self, parser: Parser, sample_period: float, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Record stream")
+        self._names = parser.StreamData._fields
+        self._sample_period = sample_period
+        layout = QtWidgets.QFormLayout(self)
+        layout.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetFixedSize)
+
+        sources = QtWidgets.QHBoxLayout()
+        self.source_boxes = []
+        for name in self._names:
+            box = QtWidgets.QCheckBox(name)
+            box.toggled.connect(self._update)
+            sources.addWidget(box)
+            self.source_boxes.append(box)
+        sources.addStretch()
+        layout.addRow("Channels:", sources)
+
+        self.rate_box = QtWidgets.QComboBox()
+        for depth in range(MAX_DEPTH + 1 if decimation_available() else 1):
+            self.rate_box.addItem(format_frequency(1 / (sample_period * (1 << depth))),
+                                  1 << depth)
+        if decimation_available():
+            self.rate_box.setToolTip(
+                "Sample rate of the recording: the full rate of the stream, or lower, "
+                f"low-pass filtered (flat up to {PASSBAND:g} times the rate) and "
+                "decimated by a power of two")
+        else:
+            self.rate_box.setEnabled(False)
+            self.rate_box.setToolTip(
+                "Recording at lower sample rates needs the dsp dependency group (see the "
+                "README)")
+        self.rate_box.currentIndexChanged.connect(self._update)
+        layout.addRow("Sample rate:", self.rate_box)
+
+        self.data_rate_label = QtWidgets.QLabel()
+        layout.addRow("Data rate:", self.data_rate_label)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+        self.record_button = buttons.addButton(
+            "Record…", QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)
+        self.record_button.setToolTip("Choose the file to record to, and start")
+        self.record_button.setDefault(True)
+        # Otherwise, it would become the default when it has the focus (which it has
+        # first on macOS, where check boxes take none by default).
+        buttons.button(
+            QtWidgets.QDialogButtonBox.StandardButton.Cancel).setAutoDefault(False)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+        self.load()
+
+    def load(self):
+        """Show the choice remembered from the last recording (of any window)."""
+        settings = QtCore.QSettings()
+        selected = settings.value("recorder/sources", ",".join(self._names),
+                                  str).split(",")
+        for name, box in zip(self._names, self.source_boxes):
+            box.setChecked(name in selected)
+        index = self.rate_box.findData(settings.value("recorder/decimation", 1, int))
+        self.rate_box.setCurrentIndex(max(index, 0))
+        self._update()
+
+    def accept(self):
+        settings = QtCore.QSettings()
+        settings.setValue("recorder/sources",
+                          ",".join(self._names[i] for i in self.sources()))
+        settings.setValue("recorder/decimation", self.decimation())
+        super().accept()
+
+    def sources(self) -> list[int]:
+        """The indices of the sources selected."""
+        return [i for i, box in enumerate(self.source_boxes) if box.isChecked()]
+
+    def decimation(self) -> int:
+        """The ratio of the sample rates of the stream and the recording."""
+        return self.rate_box.currentData()
+
+    def _update(self):
+        itemsize = 2 if self.decimation() == 1 else 4  # int16 or float32
+        rate = itemsize * len(self.sources()) / (self._sample_period * self.decimation())
+        self.data_rate_label.setText(
+            f"{format_size(rate)}/s ({format_size(3600 * rate)}/h)")
+        self.record_button.setEnabled(bool(self.sources()))
+
+
 class RecordBar(QtWidgets.QWidget):
-    """Records the stream data of the checked sources to an HDF5 file, at the full sample
-    rate or decimated (see `StreamRecorder`)."""
+    """Records the stream data to an HDF5 file, at the full sample rate or decimated (see
+    `StreamRecorder`): *Record…* asks for the sources and the sample rate (`dialog`), and
+    then for the file; while recording, the bar shows the progress."""
 
     def __init__(self, parser: Parser, sample_period: float, parent=None):
         super().__init__(parent)
@@ -64,42 +160,18 @@ class RecordBar(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.record_button = QtWidgets.QPushButton()
         self.record_button.setToolTip(
-            "Record the checked channels of the stream at the selected sample rate to an "
-            "HDF5 file")
+            "Record channels of the stream to an HDF5 file, at the full sample rate or "
+            "lower")
         layout.addWidget(self.record_button)
-        self.source_boxes = []
-        selected = self._load_selection()
-        for name in parser.StreamData._fields:
-            box = QtWidgets.QCheckBox(name)
-            box.setToolTip(f"Record {name}")
-            box.setChecked(name in selected)
-            box.toggled.connect(self._selection_changed)
-            layout.addWidget(box)
-            self.source_boxes.append(box)
-        self.rate_box = QtWidgets.QComboBox()
-        for depth in range(MAX_DEPTH + 1 if decimation_available() else 1):
-            self.rate_box.addItem(format_frequency(1 / (sample_period * (1 << depth))),
-                                  1 << depth)
-        if decimation_available():
-            self.rate_box.setToolTip(
-                "Sample rate of the recording: the full rate of the stream, or lower, "
-                f"low-pass filtered (flat up to {PASSBAND:g} times the rate) and "
-                "decimated by a power of two")
-        else:
-            self.rate_box.setToolTip(
-                "Recording at lower sample rates needs the dsp dependency group (see the "
-                "README)")
-        index = self.rate_box.findData(QtCore.QSettings().value(
-            "recorder/decimation", 1, int))
-        self.rate_box.setCurrentIndex(max(index, 0))
-        self.rate_box.currentIndexChanged.connect(self._rate_changed)
-        layout.addWidget(self.rate_box)
         self.status_label = QtWidgets.QLabel()
         self.status_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         # Clip long file names, rather than widening the window.
         self.status_label.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored,
                                         QtWidgets.QSizePolicy.Policy.Preferred)
         layout.addWidget(self.status_label, 1)
+
+        self.dialog = RecordDialog(parser, sample_period, self)
+        self.dialog.accepted.connect(self._start)
 
         self._timer = QtCore.QTimer(self)
         self._timer.setInterval(UPDATE_INTERVAL)
@@ -126,39 +198,17 @@ class RecordBar(QtWidgets.QWidget):
         """The current recording."""
         return self._recorder
 
-    def _selected(self) -> list[int]:
-        return [i for i, box in enumerate(self.source_boxes) if box.isChecked()]
-
-    def _load_selection(self) -> list[str]:
-        names = self._parser.StreamData._fields
-        value = QtCore.QSettings().value("recorder/sources", ",".join(names), str)
-        return value.split(",")
-
-    def _selection_changed(self):
-        names = self._parser.StreamData._fields
-        QtCore.QSettings().setValue("recorder/sources",
-                                    ",".join(names[i] for i in self._selected()))
-        self._summary = None
-        self._update()
-
-    def _selected_decimation(self) -> int:
-        return self.rate_box.currentData()
-
-    def _rate_changed(self):
-        QtCore.QSettings().setValue("recorder/decimation", self._selected_decimation())
-        self._summary = None
-        self._update()
-
     def _record_clicked(self):
         if self._recorder is None:
-            self._start()
+            self.dialog.load()
+            self.dialog.open()
         elif not self._stopping:
             self._stopping = True
             self._stream_thread.stop_recording()
             self._update()
 
     def _start(self):
-        sources = self._selected()
+        sources = self.dialog.sources()
         if not sources or self._stream_thread is None:
             return
         settings = QtCore.QSettings()
@@ -171,7 +221,7 @@ class RecordBar(QtWidgets.QWidget):
         if not path:
             return
         settings.setValue("recorder/directory", os.path.dirname(path))
-        self.start_recording(path, sources, self._selected_decimation())
+        self.start_recording(path, sources, self.dialog.decimation())
 
     def start_recording(self, path: str, sources: list[int], decimation: int = 1):
         """Start recording the given sources (indices) to `path`, decimated by
@@ -213,11 +263,7 @@ class RecordBar(QtWidgets.QWidget):
         else:
             self.record_button.setText("Record…")
             self.record_button.setIcon(_record_icon())
-            self.record_button.setEnabled(self._stream_thread is not None
-                                          and bool(self._selected()))
-        for box in self.source_boxes:
-            box.setEnabled(not recording)
-        self.rate_box.setEnabled(not recording and decimation_available())
+            self.record_button.setEnabled(self._stream_thread is not None)
 
         if recording:
             text = self._describe_recording(self._recorder)
@@ -225,11 +271,7 @@ class RecordBar(QtWidgets.QWidget):
         elif self._summary is not None:
             text, path = self._summary
         else:
-            itemsize = 2 if self._selected_decimation() == 1 else 4  # int16 or float32
-            rate = (itemsize * len(self._selected()) /
-                    (self._sample_period * self._selected_decimation()))
-            text = f"{format_size(rate)}/s ({format_size(3600 * rate)}/h)"
-            path = None
+            text, path = "", None
         self.status_label.setText(text)
         self.status_label.setToolTip(path or "")
 

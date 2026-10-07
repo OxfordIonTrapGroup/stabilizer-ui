@@ -8,21 +8,24 @@ logger = logging.getLogger(__name__)
 
 
 class SpectralDensityMixin:
-    """Adds the spectral density window to the Tools menu of a main window."""
+    """Adds a button for the spectral density window to a main window (below the
+    scope)."""
 
-    def _add_spectral_density_action(self):
-        """Add the (initially disabled) action to the Tools menu."""
+    def _add_spectral_density_button(self):
+        """Add the (initially disabled) button."""
         self._stream_message = None
         self._spectral_density_window = None
-        self.spectralDensityAction = self.tools_menu().addAction("&Spectral density…")
-        self.spectralDensityAction.setShortcut("Ctrl+D")
-        self.spectralDensityAction.setEnabled(False)
-        self.spectralDensityAction.triggered.connect(self.show_spectral_density)
+        self.spectralDensityButton = self.add_tool_button(
+            "Spectral density…", "Ctrl+D",
+            "Estimate the spectral density of the stream data, averaged while the window "
+            "is open")
+        self.spectralDensityButton.setEnabled(False)
+        self.spectralDensityButton.clicked.connect(self.show_spectral_density)
 
     def set_stream_thread(self, stream_thread, device: str):
         """Also enable the spectral density window."""
         super().set_stream_thread(stream_thread, device)
-        self.spectralDensityAction.setEnabled(True)
+        self.spectralDensityButton.setEnabled(True)
 
     def set_device_name(self, name: str):
         super().set_device_name(name)

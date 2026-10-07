@@ -184,8 +184,8 @@ class UiWindow(TransferFunctionMixin, SpectralDensityMixin, AbstractUiWindow):
         self.resize(*DEFAULT_WINDOW_SIZE)
         splitter.setSizes([DEFAULT_WINDOW_SIZE[0] // 2, DEFAULT_WINDOW_SIZE[0] // 2])
 
-        self._add_transfer_function_action()
-        self._add_spectral_density_action()
+        self._add_transfer_function_button()
+        self._add_spectral_density_button()
 
     def lock_mode_buttons(self) -> list:
         """The lock mode radio buttons, in the order of `LOCK_MODES`."""

@@ -165,7 +165,7 @@ class UiWindow(SpectralDensityMixin, AbstractUiWindow):
 
         self.resize(*DEFAULT_WINDOW_SIZE)
 
-        self._add_spectral_density_action()
+        self._add_spectral_density_button()
 
     def update_stream(self, payload):
         self.fftScopeWidget.update(payload)
