@@ -3,8 +3,8 @@ import numpy as np
 import pytest
 from stabilizer import DEFAULT_DUAL_IIR_SAMPLE_PERIOD as TS
 
-# The extension (`psd/`) is optional.
-pytest.importorskip("stabilizer_psd")
+# The extension (`dsp/`) is optional.
+pytest.importorskip("stabilizer_dsp")
 
 from stabilizer_ui.spectral_density.estimate import (  # noqa: E402
     Estimate, Spectrum, load_csv, save_csv)

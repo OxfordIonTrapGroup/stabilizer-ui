@@ -9,8 +9,8 @@ they can be separated by windowing. For the start frequency we use an integer nu
 cycles per harmonic delay ("synchronized" swept sine, Novák et al., JAES 63, 786 (2015)),
 which gives the harmonic impulse responses a well-defined phase.
 
-The analysis itself (`analyse()`) is implemented in Rust in the `stabilizer_psd`
-extension (`psd/src/ess.rs`, `stabilizer_psd.analyse_sweep()`), as it is heavy. The
+The analysis itself (`analyse()`) is implemented in Rust in the `stabilizer_dsp`
+extension (`dsp/src/ess.rs`, `stabilizer_dsp.analyse_sweep()`), as it is heavy. The
 extension also reproduces the excitation exactly (`Sweep.excitation()`), with the
 firmware's own oscillator. This module holds the sweep design, the settings and result
 types, and the quantities derived from the responses.
@@ -27,9 +27,9 @@ import numpy as np
 import stabilizer
 
 try:
-    import stabilizer_psd as _psd
+    import stabilizer_dsp as _dsp
 except ImportError:  # The extension is optional (it needs a Rust toolchain to build).
-    _psd = None
+    _dsp = None
 
 #: Fixed-point scale of the firmware sweep rate (`1 + rate / 2^32` is the per-sample
 #: frequency growth factor) and of the frequency state (`state / 2^64` is the frequency
@@ -50,7 +50,7 @@ MAX_AMPLITUDE = float(DAC_FULL_SCALE)
 DAC_VOLTS_PER_LSB = stabilizer.DAC_VOLTS_PER_LSB
 
 #: Width of the raised-cosine tapers at either end of the analysis band, in octaves (as
-#: in `psd/src/ess.rs`). No results are reported for these regions.
+#: in `dsp/src/ess.rs`). No results are reported for these regions.
 BAND_EDGE_TAPER = 1 / 12
 
 
@@ -59,9 +59,9 @@ class AnalysisError(Exception):
 
 
 def _extension():
-    if _psd is None:
-        raise ImportError("The analysis needs the stabilizer-psd package (in psd/)")
-    return _psd
+    if _dsp is None:
+        raise ImportError("The analysis needs the stabilizer-dsp package (in dsp/)")
+    return _dsp
 
 
 @dataclass(frozen=True)
@@ -251,8 +251,8 @@ class Analysis:
 
 
 def available() -> bool:
-    """Whether `analyse()` is available, i.e. the `stabilizer_psd` extension is."""
-    return _psd is not None
+    """Whether `analyse()` is available, i.e. the `stabilizer_dsp` extension is."""
+    return _dsp is not None
 
 
 def _format_frequency(f: float) -> str:
@@ -268,7 +268,7 @@ def analyse(runs: list[np.ndarray],
             gaps: list[np.ndarray] | None = None,
             memory: int = 2 << 30) -> Analysis:
     """Estimate the responses of all channels to the sweep, averaged over several runs
-    (`stabilizer_psd.analyse_sweep()`, see `psd/src/ess.rs` for the method).
+    (`stabilizer_dsp.analyse_sweep()`, see `dsp/src/ess.rs` for the method).
 
     :param runs: For each run, the captured data of all channels, (n_channels, length),
         in volts.

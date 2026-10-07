@@ -993,10 +993,10 @@ class TransferFunctionMixin:
         self.transferFunctionAction.setShortcut("Ctrl+T")
         self.transferFunctionAction.setEnabled(False)
         if not ess.available():
-            # The analysis is in the `stabilizer_psd` extension (`psd/`), which is
+            # The analysis is in the `stabilizer_dsp` extension (`dsp/`), which is
             # optional; without it, the measurements are not offered.
             self.transferFunctionAction.setText(
-                "Transfer function (needs the stabilizer-psd package, see psd/)")
+                "Transfer function (needs the stabilizer-dsp package, see dsp/)")
         self.transferFunctionAction.triggered.connect(self.show_transfer_function)
 
     def set_sweep_runner(self, runner: SweepRunner):

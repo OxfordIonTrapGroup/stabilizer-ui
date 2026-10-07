@@ -874,9 +874,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "stabilizer-psd"
+name = "stabilizer-dsp"
 version = "0.1.0"
-source = { directory = "psd" }
+source = { directory = "dsp" }
 
 [[package]]
 name = "stabilizer-ui"
@@ -904,8 +904,8 @@ dev = [
     { name = "toml" },
     { name = "yapf" },
 ]
-psd = [
-    { name = "stabilizer-psd" },
+dsp = [
+    { name = "stabilizer-dsp" },
 ]
 
 [package.metadata]
@@ -930,7 +930,7 @@ dev = [
     { name = "toml", specifier = ">=0.10.2,<0.11" },
     { name = "yapf", specifier = "==0.43.0" },
 ]
-psd = [{ name = "stabilizer-psd", directory = "psd" }]
+dsp = [{ name = "stabilizer-dsp", directory = "dsp" }]
 
 [[package]]
 name = "toml"

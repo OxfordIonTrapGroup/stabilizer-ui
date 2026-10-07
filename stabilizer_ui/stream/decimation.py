@@ -1,6 +1,6 @@
 """Decimating the stream data by powers of two while recording it (`StreamRecorder`).
 
-The filtering is done by `stabilizer_psd.Decimator`, the half-band filter cascade of idsp.
+The filtering is done by `stabilizer_dsp.Decimator`, the half-band filter cascade of idsp.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 
 try:
-    from stabilizer_psd import Decimator
+    from stabilizer_dsp import Decimator
 except ImportError:  # The extension is optional (it needs a Rust toolchain to build).
     Decimator = None
 
@@ -20,7 +20,7 @@ PASSBAND = 0.4
 
 
 def available() -> bool:
-    """Whether decimation is available, i.e. the `stabilizer_psd` extension is."""
+    """Whether decimation is available, i.e. the `stabilizer_dsp` extension is."""
     return Decimator is not None
 
 
@@ -47,7 +47,7 @@ class Decimation:
         if ratio < 1 or ratio != 1 << depth:
             raise ValueError(f"Decimation by {ratio}, which is not a power of two")
         if Decimator is None:
-            raise RuntimeError("Decimation needs the stabilizer_psd extension (the psd "
+            raise RuntimeError("Decimation needs the stabilizer_dsp extension (the dsp "
                                "dependency group)")
         self.ratio = ratio
         self._periods = periods

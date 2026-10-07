@@ -35,10 +35,11 @@ dev = [
     "flake8==7.1.1",
     "pytest>=8",
 ]
-# The spectral density window (the extension in `psd/`, which needs a Rust toolchain to
-# build). Installed by default; leave it out with `uv sync --no-group psd`, or for all uv
-# commands by setting `UV_NO_GROUP=psd`.
-psd = ["stabilizer-psd"]
+# The signal processing extension in `dsp/` (for the spectral density window, the transfer
+# function measurements and recording at lower sample rates), which needs a Rust toolchain
+# to build. Installed by default; leave it out with `uv sync --no-group dsp`, or for all
+# uv commands by setting `UV_NO_GROUP=dsp`.
+dsp = ["stabilizer-dsp"]
 
 [tool.uv]
 default-groups = "all"
@@ -46,7 +47,7 @@ default-groups = "all"
 [tool.uv.sources]
 sipyco = { git = "https://github.com/m-labs/sipyco.git" }
 stabilizer = { git = "https://github.com/OxfordIonTrapGroup/stabilizer.git", subdirectory = "py", branch = "next" }
-stabilizer-psd = { path = "psd" }
+stabilizer-dsp = { path = "dsp" }
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]

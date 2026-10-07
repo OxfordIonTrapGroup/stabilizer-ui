@@ -15,7 +15,7 @@ from stabilizer_ui.stream.decoders import DacDecoder
 from stabilizer_ui.stream.recorder import StreamRecorder
 
 needs_psd = pytest.mark.skipif(not decimation.available(),
-                               reason="needs the stabilizer_psd extension")
+                               reason="needs the stabilizer_dsp extension")
 
 BATCH_SIZE = 8
 BATCHES_PER_FRAME = 21

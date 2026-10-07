@@ -10,7 +10,7 @@ import re
 import numpy as np
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui, QtWidgets
-from stabilizer_psd import FFT_SIZE
+from stabilizer_dsp import FFT_SIZE
 
 from .estimate import DETREND_METHODS, Estimate, Spectrum, load_csv, save_csv
 from ..plot import (COLOURS, FrequencyAxis, GraphicsLayoutWidget, LogAxis,

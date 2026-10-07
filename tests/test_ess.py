@@ -69,9 +69,9 @@ def make_runs(sweep,
     return runs
 
 
-#: The analysis is in the `stabilizer_psd` extension (`psd/`), which is optional.
+#: The analysis is in the `stabilizer_dsp` extension (`dsp/`), which is optional.
 needs_analysis = pytest.mark.skipif(not ess.available(),
-                                    reason="needs the stabilizer_psd extension")
+                                    reason="needs the stabilizer_dsp extension")
 
 
 def analyse(sweep, runs, ir_window=None, gaps=None, **kwargs):

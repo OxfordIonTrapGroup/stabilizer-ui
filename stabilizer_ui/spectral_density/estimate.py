@@ -1,5 +1,5 @@
 """Long-term power spectral density estimates of the stream data, with the online
-estimation of stabilizer-stream (through the `stabilizer_psd` bindings in `psd/`)."""
+estimation of stabilizer-stream (through the `stabilizer_dsp` bindings in `dsp/`)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from stabilizer_psd import PsdCascade, Stage
+from stabilizer_dsp import PsdCascade, Stage
 
 #: Detrending methods for the segments of the estimate (value, label).
 DETREND_METHODS = [("mean", "Mean"), ("midpoint", "Midpoint"), ("span", "Span"),

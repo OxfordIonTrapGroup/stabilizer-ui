@@ -87,7 +87,7 @@ class RecordBar(QtWidgets.QWidget):
                 "decimated by a power of two")
         else:
             self.rate_box.setToolTip(
-                "Recording at lower sample rates needs the psd dependency group (see the "
+                "Recording at lower sample rates needs the dsp dependency group (see the "
                 "README)")
         index = self.rate_box.findData(QtCore.QSettings().value(
             "recorder/decimation", 1, int))

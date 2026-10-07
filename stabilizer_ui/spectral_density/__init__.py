@@ -32,15 +32,15 @@ class SpectralDensityMixin:
     def show_spectral_density(self):
         if self._spectral_density_window is None:
             try:
-                # Needs the `stabilizer_psd` extension (`psd/`), which is optional.
+                # Needs the `stabilizer_dsp` extension (`dsp/`), which is optional.
                 from .dialog import SpectralDensityWindow
             except ImportError as e:
                 logger.warning("Spectral density window not available: %s", e)
                 QMessageBox.warning(
                     self, "Spectral density not available",
-                    "The spectral density window needs the stabilizer-psd package (in "
-                    "psd/), which is built with a Rust toolchain. Install Rust, and run "
-                    "`uv sync` (with the `psd` dependency group, as by default).\n\n"
+                    "The spectral density window needs the stabilizer-dsp package (in "
+                    "dsp/), which is built with a Rust toolchain. Install Rust, and run "
+                    "`uv sync` (with the `dsp` dependency group, as by default).\n\n"
                     f"{e}")
                 return
             self._spectral_density_window = SpectralDensityWindow(

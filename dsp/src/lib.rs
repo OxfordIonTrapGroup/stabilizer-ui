@@ -1,5 +1,7 @@
-//! Python bindings for the online power spectral density estimation of
-//! [stabilizer-stream](https://github.com/quartiq/stabilizer-stream).
+//! Signal processing for stabilizer-ui, as a Python extension: the online power spectral
+//! density estimation of [stabilizer-stream](https://github.com/quartiq/stabilizer-stream),
+//! the decimation of the stream data for recording (`decimate`), and the transfer function
+//! analysis of swept-sine measurements (`ess`).
 
 mod decimate;
 mod ess;
@@ -386,7 +388,7 @@ fn analyse_sweep<'py>(
 }
 
 #[pymodule]
-fn stabilizer_psd(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn stabilizer_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("FFT_SIZE", FFT_SIZE)?;
     m.add_class::<PsdCascade>()?;
     m.add_class::<Stage>()?;

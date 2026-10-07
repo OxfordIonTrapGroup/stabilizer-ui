@@ -1,13 +1,13 @@
 [package]
-name = "stabilizer-psd"
+name = "stabilizer-dsp"
 version = "0.1.0"
 edition = "2021"
-description = "Python bindings for the online PSD estimation of stabilizer-stream"
+description = "Signal processing for stabilizer-ui: PSD estimation, decimation and transfer function analysis"
 license = "GPL-3.0-or-later"
 publish = false
 
 [lib]
-name = "stabilizer_psd"
+name = "stabilizer_dsp"
 crate-type = ["cdylib"]
 
 [dependencies]

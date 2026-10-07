@@ -1,7 +1,7 @@
 [project]
-name = "stabilizer-psd"
+name = "stabilizer-dsp"
 version = "0.1.0"
-description = "Python bindings for the online PSD estimation of stabilizer-stream"
+description = "Signal processing for stabilizer-ui: PSD estimation, decimation and transfer function analysis"
 requires-python = ">=3.12"
 license = "GPL-3.0-or-later"
 
@@ -16,5 +16,5 @@ cache-keys = [
     { file = "Cargo.toml" },
     { file = "Cargo.lock" },
     { file = "src/**/*.rs" },
-    { file = "stabilizer_psd.pyi" },
+    { file = "stabilizer_dsp.pyi" },
 ]

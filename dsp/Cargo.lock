@@ -905,7 +905,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "stabilizer-psd"
+name = "stabilizer-dsp"
 version = "0.1.0"
 dependencies = [
  "dsp-process",

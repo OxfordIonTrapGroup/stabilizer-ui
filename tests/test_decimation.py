@@ -1,4 +1,4 @@
-"""Decimating the stream data by powers of two (`stabilizer_psd.Decimator`)."""
+"""Decimating the stream data by powers of two (`stabilizer_dsp.Decimator`)."""
 import numpy as np
 import pytest
 from stabilizer.stream_parser import AdcDecoder, Parser, PhaseOffsetDecoder
@@ -6,12 +6,12 @@ from stabilizer.stream_parser import AdcDecoder, Parser, PhaseOffsetDecoder
 from stabilizer_ui.stream.decimation import Decimation
 from stabilizer_ui.stream.decoders import DacDecoder, phase_periods
 
-psd = pytest.importorskip("stabilizer_psd")
+dsp = pytest.importorskip("stabilizer_dsp")
 
 
 def decimate(depth: int, x: np.ndarray, chunk: int | None = None) -> np.ndarray:
     """Decimate the (channel, sample) array `x`, passed in chunks of `chunk` samples."""
-    decimator = psd.Decimator(depth, len(x))
+    decimator = dsp.Decimator(depth, len(x))
     chunk = chunk or x.shape[1]
     y = [
         decimator.process(np.ascontiguousarray(x[:, i:i + chunk], np.float32))
@@ -29,7 +29,7 @@ def test_alignment(depth):
     x = np.arange(n)[None] * (1e-3 / ratio)
     y = decimate(depth, x, 5000)
     assert y.shape == (1, -(-n // ratio))
-    margin = -(-psd.Decimator(depth, 1).half_width // ratio)
+    margin = -(-dsp.Decimator(depth, 1).half_width // ratio)
     inner = np.arange(margin, y.shape[1] - margin)
     np.testing.assert_allclose(y[0, inner], inner * 1e-3, atol=1e-6)
 
@@ -71,10 +71,10 @@ def test_response(depth):
 
 def test_invalid():
     with pytest.raises(ValueError):
-        psd.Decimator(psd.MAX_DECIMATION_DEPTH + 1, 1)
+        dsp.Decimator(dsp.MAX_DECIMATION_DEPTH + 1, 1)
     with pytest.raises(ValueError):
-        psd.Decimator(2, 0)
-    decimator = psd.Decimator(2, 2)
+        dsp.Decimator(2, 0)
+    decimator = dsp.Decimator(2, 2)
     with pytest.raises(ValueError):
         decimator.process(np.zeros((3, 10), np.float32))
     assert decimator.process(np.zeros((2, 0), np.float32)).shape == (2, 0)

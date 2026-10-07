@@ -20,11 +20,11 @@ device runs when it connects: from the build metadata the firmware keeps on the 
 
 ## Getting started
 1. Clone this repository and `cd` into it in the terminal. Install [uv](https://docs.astral.sh/uv/).
-2. Run `uv sync` to create the Python environment. This also builds the extension for the
-   spectral density window (`psd/`, see below), which needs a Rust toolchain (≥ 1.88, e.g.
+2. Run `uv sync` to create the Python environment. This also builds the signal processing
+   extension (`dsp/`, see *Development*), which needs a Rust toolchain (≥ 1.88, e.g.
    from [rustup](https://rustup.rs/); if there is none, maturin downloads one for the build)
    and, on Windows, the MSVC build tools. Where it cannot be built, leave it out with
-   `uv sync --no-group psd`, or set `UV_NO_GROUP=psd` in the environment for all uv
+   `uv sync --no-group dsp`, or set `UV_NO_GROUP=dsp` in the environment for all uv
    commands. Everything but the spectral density window, the transfer function
    measurements and recording at lower sample rates works without it.
 3. Run `uv run stabilizer_ui`. It lists the devices connected to the MQTT broker
@@ -85,7 +85,7 @@ file, and *Stop* ends the recording, as does closing the window.
   (in the same format as `lost`). Their weight falls off quickly: a step just after the
   end has less than 1 % of its height from the 8th sample from the end on, and less than
   0.1 % from the 14th. Phases (the phase offset words of `fnc`) are filtered as phasors.
-  Lower rates need the `psd` dependency group (see *Getting started*).
+  Lower rates need the `dsp` dependency group (see *Getting started*).
 * Stream data lost in transmission is zero at the full rate, and listed in `lost` as (first
   sample, number of samples). At lower rates, it is interpolated linearly before filtering,
   and `lost` lists the samples less than one sample period away from it. If the stream
@@ -111,7 +111,7 @@ continues as long as the stream does.
 density of each signal of the stream while it is open (shown as amplitude spectral
 density). It uses the online estimation of
 [stabilizer-stream](https://github.com/quartiq/stabilizer-stream) (through the Python
-bindings in `psd/`): each stage of a cascade averages the spectra of 512-sample segments,
+bindings in `dsp/`): each stage of a cascade averages the spectra of 512-sample segments,
 and decimates the signal by 8 for the next stage, so that the spectrum extends to lower
 frequencies the longer it runs, with roughly constant relative resolution.
 
@@ -124,7 +124,7 @@ frequencies the longer it runs, with roughly constant relative resolution.
 * *Store* keeps the current estimates for comparison. Traces can be renamed, saved as CSV
   and loaded again.
 
-Lost stream data is left out of the estimate (and reported). The window needs the `psd`
+Lost stream data is left out of the estimate (and reported). The window needs the `dsp`
 dependency group (see *Getting started*).
 
 ## Several clients
@@ -271,7 +271,7 @@ source is disabled again after each measurement.
 ## Development
 * `uv run poe fmt` formats the code, `uv run poe lint` runs flake8, and `uv run poe test`
   runs the tests.
-* `psd/` is a separate package (`stabilizer-psd`, built with maturin) in the `psd`
+* `dsp/` is a separate package (`stabilizer-dsp`, built with maturin) in the `dsp`
   dependency group, which `uv sync` installs by default and rebuilds when its sources
   change. It depends on the `portable-lib` branch of the
   OxfordIonTrapGroup fork of stabilizer-stream, which fixes the build of the library on
